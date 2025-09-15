@@ -1,0 +1,1 @@
+node scripts/import-prices.js data/data.csv data/prices.csv data/bfs_prices.csv

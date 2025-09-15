@@ -1,0 +1,252 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* === Dark + turquoise theme ================================================= */
+
+:root{
+  --bg-900:#0a0f1a;     /* page background (darker than your screenshot) */
+  --bg-800:#0e1624;     /* cards */
+  --bg-750:#111c2d;     /* rows alt */
+  --bg-700:#13243a;     /* row hover */
+  --border:#1f344f;
+  --text-100:#e6f1ff;   /* main text */
+  --text-300:#a9c1d9;   /* muted */
+  --turq-300:#59d2c8;   /* soft turquoise */
+  --turq-400:#2fb7ad;   /* accent (not too saturated) */
+  --turq-500:#21a399;   /* stronger accent for focus */
+  --shadow: 0 10px 25px rgba(0,0,0,.35);
+  --dropdown-bg: #0f172a;   /* menu background */
+  --dropdown-fg: #e2f1ee;   /* item text */
+  --dropdown-active: #155e75;/* highlighted/selected item */
+  --dropdown-border: #1f2a44;
+  --ring-color: var(--accent, #3eead8);  /* turquoise */
+  --ring-size: 2px;                      /* thickness */
+  --ring-gap: 2px;                       /* space from element edge */
+  --ring-speed: 2.2s;                    /* rotation duration */
+}
+
+html, body {
+  background: var(--bg-900);
+  color: var(--text-100);
+}
+
+/* Card / panel */
+.ew-card{
+  background: var(--bg-800);
+  border:1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+/* Section titles */
+.ew-title{
+  margin: 0 0 12px;
+  font-weight: 700;
+  letter-spacing:.2px;
+}
+.ew-title span{
+  color: var(--turq-300);
+}
+
+/* Grid table */
+.ew-grid{
+  display: grid;
+  grid-template-columns: var(--cols);
+  gap: 10px;
+  align-items: center;
+}
+
+/* Header row */
+.ew-head{
+  background: linear-gradient(180deg, rgba(47,183,173,.15), transparent 70%);
+  border-bottom:1px solid var(--border);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  color: var(--turq-300);
+}
+
+/* Data rows */
+.ew-rows{
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ew-row{
+  padding: 10px;
+  border-bottom:1px solid var(--border);
+  background: var(--bg-800);
+}
+.ew-row:nth-child(even){ background: var(--bg-750); }
+.ew-row:hover{ background: var(--bg-700); }
+
+/* Right-aligned utility */
+.ew-right{ text-align:right; }
+
+/* Inputs / selects / buttons on dark */
+.ew-input, .ew-select{
+  width: 100%;
+  padding: 8px 10px;
+  background: #0b1524;
+  color: var(--text-100);
+  border:1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+}
+.ew-input:focus, .ew-select:focus{
+  border-color: var(--turq-400);
+  box-shadow: 0 0 0 3px rgba(47,183,173,.18);
+}
+
+.ew-btn{
+  padding: 8px 12px;
+  border-radius: 10px;
+  border:1px solid var(--border);
+  background: linear-gradient(180deg,#102036,#0f1b2e);
+  color: var(--text-100);
+  cursor: pointer;
+}
+.ew-btn:hover{
+  border-color: var(--turq-400);
+  color: white;
+}
+.ew-btn--turq{
+  background: linear-gradient(180deg, #143a40, #113237);
+  border-color: #1b4f56;
+}
+.ew-subtle{ color: var(--text-300); font-size: 12px; }
+
+/* Money / chip highlight */
+.ew-money{ font-variant-numeric: tabular-nums; }
+.ew-chip{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  background: rgba(47,183,173,.14);
+  color: var(--turq-300);
+  border:1px solid rgba(47,183,173,.25);
+  font-size:12px;
+}
+
+@media (max-width: 980px){
+  .ew-grid[style*="--cols"]{ grid-template-columns: 1fr !important; }
+}
+
+select {
+  background-color: var(--surface-2);
+  color: var(--text-1);
+  border: 1px solid var(--dropdown-border);
+}
+
+/* The popup list items */
+select option {
+  background-color: var(--dropdown-bg);
+  color: var(--dropdown-fg);
+}
+
+/* The highlighted/selected row in the list */
+select option:checked,
+select option:hover {
+  background-color: var(--dropdown-active);
+  color: white;
+}
+
+/* Focus ring for better visibility */
+select:focus {
+  outline: 2px solid var(--brand-6);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.25);
+}
+
+/* Apply to any element with .focus-anim (inputs/selects) */
+.focus-anim {
+  position: relative;
+  outline: none;
+  z-index: 0; /* ensure pseudo stays above background */
+  border-radius: 10px; /* match your UI rounding */
+}
+
+/* The animated border “segment” */
+.focus-anim:focus-visible::after,
+.focus-anim:focus::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--ring-gap) * -1);
+  border-radius: inherit;
+  padding: var(--ring-size);
+  background:
+    conic-gradient(from var(--ring-angle, 0deg),
+      transparent 0 330deg,
+      color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg);
+  /* hollow center so only the ring shows */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  animation: ring-spin var(--ring-speed) linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Subtle glow while focused */
+.focus-anim:focus-visible,
+.focus-anim:focus {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ring-color) 35%, #000 65%),
+              0 0 14px -2px color-mix(in oklab, var(--ring-color) 60%, #000 40%);
+}
+
+/* Spin the segment around the border */
+@keyframes ring-spin {
+  to { --ring-angle: 360deg; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .focus-anim:focus-visible::after,
+  .focus-anim:focus::after {
+    animation: none;
+    background:
+      conic-gradient(from 0deg,
+        transparent 0 330deg,
+        color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg);
+  }
+}
+
+/* animated ring for fields that don't play nice with :focus (e.g., <select>) */
+.focus-anim-wrap {
+  position: relative;
+  border-radius: 10px;              /* match your select radius */
+  isolation: isolate;               /* keep the ring on top */
+}
+
+.focus-anim-wrap:focus-within {
+  box-shadow:
+    0 0 0 2px rgba(48, 221, 216, 0.9),
+    0 0 0 6px rgba(48, 221, 216, 0.22);
+  transition: box-shadow 120ms ease;
+}
+
+/* optional subtle orbit sweep while focused */
+.focus-anim-wrap:focus-within::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    conic-gradient(
+      from var(--orbit, 0deg),
+      rgba(48,221,216,.0) 0deg,
+      rgba(48,221,216,.35) 60deg,
+      rgba(48,221,216,.0) 120deg
+    );
+  animation: orbit 1.6s linear infinite;
+  opacity: .9;
+  mix-blend-mode: screen; /* pretty on dark bg */
+}
+
+@keyframes orbit {
+  to { --orbit: 360deg; }
+}
