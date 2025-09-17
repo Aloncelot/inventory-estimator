@@ -3,27 +3,39 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { listVendors, listFamilies, listSizes } from '@/lib/catalog';
+import SearchableSelect from '@/components/SearchableSelect';
+
+// Normalize a string for case-insensitive, space-insensitive comparisons
+const norm = (s = '') => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export default function ItemPicker({
   onSelect,
   compact = false,
-  defaultVendor = '', // e.g. "Gillies & Prittie"
+  // Preferred default vendor label; you can add a defaultVendorId prop later if needed
+  defaultVendor = 'Gillies & Prittie Warehouse',
+  defaultFamilyLabel,   // e.g., "SPF#2" (optional)
+  defaultSizeLabel,     // e.g., 2x6"-12' (optional)
 }) {
+  // Data
   const [vendors, setVendors] = useState([]);
-  const [vendorId, setVendorId] = useState('');
+  const [families, setFamilies] = useState([]); // [{ slug, label }]
+  const [sizes, setSizes]       = useState([]); // [{ id, sizeSlug, sizeLabel, unit, ... }]
 
-  const [families, setFamilies] = useState([]);        // [{slug,label}]
+  // Selection
+  const [vendorId, setVendorId]     = useState('');
   const [familySlug, setFamilySlug] = useState('');
+  const [sizeId, setSizeId]         = useState('');
 
-  const [sizes, setSizes] = useState([]);              // [{id,sizeSlug,sizeLabel,unit,...}]
-  const [sizeId, setSizeId] = useState('');
+  // Loading flags
+  const [loadingFamilies, setLoadingFamilies] = useState(false);
+  const [loadingSizes, setLoadingSizes]       = useState(false);
 
-  // ---- one-time auto-select guards -------------------------------------
+  // One-time auto-select guards
   const didAutoVendor = useRef(false);
-  const didAutoFamilyForVendor = useRef(''); // remember vendor we auto-picked family for
-  const didAutoSizeForFamily = useRef('');   // remember family we auto-picked size for
+  const didAutoFamilyForVendor = useRef(''); // remembers vendorId we auto-picked a family for
+  const didAutoSizeForFamily   = useRef(''); // remembers vendorId::familySlug we auto-picked a size for
 
-  // Load vendors once
+  // 1) Load vendors once (on mount)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -34,166 +46,186 @@ export default function ItemPicker({
     return () => { alive = false; };
   }, []);
 
-  // Auto-pick default vendor ONCE when vendors arrive
+  // 2) Auto-pick default vendor once when vendors arrive
   useEffect(() => {
     if (didAutoVendor.current) return;
     if (!vendors.length || vendorId) return;
 
-    if (defaultVendor) {
-      const needle = defaultVendor.toLowerCase();
-      const match = vendors.find(v =>
-        v.displayName?.toLowerCase().includes(needle)
-      );
-      if (match) {
-        didAutoVendor.current = true;
-        setVendorId(match.id);
-        return;
-      }
-    }
+    const want = norm(defaultVendor);
+    const pick =
+      // loose token match for "Gillies & Prittie"
+      vendors.find(v => {
+        const n = norm(v.displayName || v.id);
+        return n.includes('gillies') && n.includes('prittie');
+      })
+      // contains normalized defaultVendor label
+      || vendors.find(v => norm(v.displayName || '').includes(want))
+      // known slug fallback
+      || vendors.find(v => v.id === 'gillies_prittie_warehouse')
+      // fallback: first vendor
+      || vendors[0];
 
-    // fallback to first vendor once
     didAutoVendor.current = true;
-    setVendorId(vendors[0]?.id || '');
+    setVendorId(pick?.id || '');
   }, [vendors, vendorId, defaultVendor]);
 
-  // When vendor changes → reset family/size, load families
+  // 3) When vendor changes → reset family/size, load families, auto-pick one
   useEffect(() => {
     let alive = true;
-    // reset family/size (but avoid useless sets)
+
+    // Reset dependent selections and data
+    const hadSelection = !!(familySlug || sizeId);
     setFamilySlug(prev => (prev ? '' : prev));
     setSizeId(prev => (prev ? '' : prev));
     setFamilies([]);
     setSizes([]);
+    if (hadSelection && onSelect) onSelect(null); // notify parent that selection is cleared
 
     if (!vendorId) return;
 
     (async () => {
+      setLoadingFamilies(true);
       const fs = await listFamilies(vendorId);
       if (!alive) return;
       setFamilies(fs || []);
+      setLoadingFamilies(false);
 
-      // Auto-pick first family only once per vendor
+      // Auto-pick a family once per vendor
       if (didAutoFamilyForVendor.current !== vendorId && fs?.length) {
+        let fam = null;
+
+        if (defaultFamilyLabel) {
+          const want = norm(defaultFamilyLabel);
+          fam = fs.find(f => norm(f.label) === want) || fs.find(f => norm(f.label).includes(want));
+        }
+        // Prefer SPF#2 if present
+        if (!fam) {
+          fam = fs.find(f => {
+            const n = norm(f.label);
+            return n.includes('spf') && (n.includes('#2') || n.includes(' 2'));
+          });
+        }
+        // Fallback: first family
+        if (!fam) fam = fs[0];
+
         didAutoFamilyForVendor.current = vendorId;
-        setFamilySlug(fs[0].slug);
+        setFamilySlug(fam.slug);
       }
     })();
 
     return () => { alive = false; };
-  }, [vendorId]);
+  }, [vendorId]); // keep deps minimal by design
 
-  // When family changes → reset size, load sizes
+  // 4) When family changes → reset size, load sizes, auto-pick one
   useEffect(() => {
     let alive = true;
+
+    const hadSize = !!sizeId;
     setSizeId(prev => (prev ? '' : prev));
     setSizes([]);
+    if (hadSize && onSelect) onSelect(null);
 
     if (!vendorId || !familySlug) return;
 
     (async () => {
+      setLoadingSizes(true);
       const ss = await listSizes(vendorId, familySlug);
       if (!alive) return;
       setSizes(ss || []);
+      setLoadingSizes(false);
 
-      // Auto-pick first size only once per family (per current vendor)
+      // Auto-pick a size once per vendor+family
       const famKey = `${vendorId}::${familySlug}`;
       if (didAutoSizeForFamily.current !== famKey && ss?.length) {
+        let size = null;
+
+        if (defaultSizeLabel) {
+          const want = norm(defaultSizeLabel);
+          size = ss.find(s => norm(s.sizeLabel) === want) || ss.find(s => norm(s.sizeLabel).includes(want));
+        }
+        if (!size) size = ss[0];
+
         didAutoSizeForFamily.current = famKey;
-        setSizeId(ss[0].id);
+        setSizeId(size.id);
       }
     })();
 
     return () => { alive = false; };
-  }, [vendorId, familySlug]);
+  }, [vendorId, familySlug, defaultSizeLabel]);
 
-  // Build the selected object
+  // Build selected object for parent consumers
   const selected = useMemo(() => {
     if (!vendorId || !familySlug || !sizeId) return null;
     const fam = families.find(f => f.slug === familySlug);
     const itm = sizes.find(s => s.id === sizeId);
     if (!fam || !itm) return null;
-
     return {
       vendorId,
       vendorName: (vendors.find(v => v.id === vendorId)?.displayName) || vendorId,
       family: fam.slug,
       familyLabel: fam.label,
-      item: itm, // contains unit, supplierPrice, markupPct, priceWithMarkup, raw, etc.
+      item: itm, // includes unit, supplierPrice, markupPct, priceWithMarkup, raw, etc.
     };
   }, [vendorId, familySlug, sizeId, vendors, families, sizes]);
 
-  // Notify parent ONLY when a *complete* selection exists
+  // Notify parent only when a complete selection exists
   useEffect(() => {
     if (onSelect && selected) onSelect(selected);
-    // do NOT include onSelect in deps to avoid identity changes causing re-run
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
-  // ----- UI --------------------------------------------------------------
+  // ---- UI pieces (searchable) ------------------------------------------
+  const VendorSelect = (
+    <SearchableSelect
+      ariaLabel="Vendor"
+      value={vendorId}
+      onChange={setVendorId}
+      options={vendors.map(v => ({ value: v.id, label: v.displayName }))}
+      placeholder="Select vendor…"
+      disabled={!vendors.length}
+    />
+  );
+
+  const FamilySelect = (
+    <SearchableSelect
+      ariaLabel="Family"
+      value={familySlug}
+      onChange={setFamilySlug}
+      options={families.map(f => ({ value: f.slug, label: f.label }))}
+      placeholder={loadingFamilies ? 'Loading families…' : 'Family…'}
+      disabled={!families.length || loadingFamilies}
+      loading={loadingFamilies}
+    />
+  );
+
+  const SizeSelect = (
+    <SearchableSelect
+      ariaLabel="Size"
+      value={sizeId}
+      onChange={setSizeId}
+      options={sizes.map(s => ({ value: s.id, label: s.sizeLabel }))}
+      placeholder={loadingSizes ? 'Loading sizes…' : 'Size…'}
+      disabled={!sizes.length || loadingSizes}
+      loading={loadingSizes}
+    />
+  );
+
+  // Layouts
   if (compact) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-        <select className='ew-select focus-anim'
-          value={vendorId}
-          onChange={e => setVendorId(e.target.value)}
-          style={{ padding: 6 }}
-        >
-          {!vendorId && <option value="">Select vendor…</option>}
-          {vendors.map(v => (
-            <option key={v.id} value={v.id}>{v.displayName}</option>
-          ))}
-        </select>
-
-        <select className='ew-select focus-anim'
-          value={familySlug}
-          onChange={e => setFamilySlug(e.target.value)}
-          disabled={!families.length}
-          style={{ padding: 6 }}
-        >
-          {!familySlug && <option value="">Family…</option>}
-          {families.map(f => (
-            <option key={f.slug} value={f.slug}>{f.label}</option>
-          ))}
-        </select>
-
-        <select className='ew-select focus-anim'
-          value={sizeId}
-          onChange={e => setSizeId(e.target.value)}
-          disabled={!sizes.length}
-          style={{ padding: 6 }}
-        >
-          {!sizeId && <option value="">Size…</option>}
-          {sizes.map(s => (
-            <option key={s.id} value={s.id}>
-              {s.sizeLabel}
-            </option>
-          ))}
-        </select>
+        {VendorSelect}
+        {FamilySelect}
+        {SizeSelect}
       </div>
     );
   }
 
-  // non-compact layout (if you ever need it)
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      <select value={vendorId} onChange={e => setVendorId(e.target.value)} style={{ padding: 6 }}>
-        {!vendorId && <option value="">Select vendor…</option>}
-        {vendors.map(v => (
-          <option key={v.id} value={v.id}>{v.displayName}</option>
-        ))}
-      </select>
-      <select value={familySlug} onChange={e => setFamilySlug(e.target.value)} disabled={!families.length} style={{ padding: 6 }}>
-        {!familySlug && <option value="">Family…</option>}
-        {families.map(f => (
-          <option key={f.slug} value={f.slug}>{f.label}</option>
-        ))}
-      </select>
-      <select value={sizeId} onChange={e => setSizeId(e.target.value)} disabled={!sizes.length} style={{ padding: 6 }}>
-        {!sizeId && <option value="">Size…</option>}
-        {sizes.map(s => (
-          <option key={s.id} value={s.id}>{s.sizeLabel}</option>
-        ))}
-      </select>
+      {VendorSelect}
+      {FamilySelect}
+      {SizeSelect}
     </div>
   );
 }

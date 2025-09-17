@@ -64,7 +64,7 @@ const studsRaw    = (lengthLF, spacingIn=16, studMult=1) => {
   return studsAlong * Math.max(1, Number(studMult||1));
 };
 const blockingRaw = (lengthLF, heightFt, boardLenFT) => {
-  const rows = Math.floor(Number(heightFt||0)/4);
+  const rows = Math.ceil(Number((heightFt||0)/4)-1);
   const perRow = Number(lengthLF||0)/Math.max(1,Number(boardLenFT||0));
   return perRow * rows;
 };
@@ -79,16 +79,16 @@ const getSize   = (selLike) => deref(selLike)?.sizeDisplay || deref(selLike)?.si
 const getFamily = (selLike) => deref(selLike)?.raw?.familyDisplay || deref(selLike)?.familyDisplay || deref(selLike)?.raw?.family || selLike?.familyLabel || '';
 
 // ── component ────────────────────────────────────────────────────────────
-export default function ExteriorWallGroup() {
+export default function ExteriorWallGroup({ title = 'Exterior walls — preset', onRemove }) {
   // shared inputs
-  const [lengthLF, setLengthLF] = useState(680);
+  const [lengthLF, setLengthLF] = useState(100);
   const [heightFt, setHeightFt] = useState(12);
   const [studSpacingIn, setStudSpacingIn] = useState(16);
   const [studMultiplier, setStudMultiplier] = useState(1);
 
   // per-row waste defaults (editable per row)
   const [waste, setWaste] = useState({
-    bottomPlate: 5, topPlate: 5, studs: 5, blocking: 5, sheathing: 20
+    bottomPlate: 10, topPlate: 10, studs: 60, blocking: 10, sheathing: 20
   });
 
   // selections
@@ -217,20 +217,22 @@ export default function ExteriorWallGroup() {
 
   return (
     <div className="ew-card">
-      <h2 className="ew-title"><span>Exterior walls</span> — preset</h2>
-    <div style={{ padding: 16, border: '1px solid #e5e7eb', borderRadius: 12 }}>
-      <h2 style={{ marginTop: 0 }}>Exterior walls — preset</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <h2 className="ew-h2" style={{ margin: 0 }}>{title}</h2>
+        {onRemove && <button className="ew-btn" onClick={onRemove}>Remove section</button>}
+      </div>
+    <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12 }}>      
 
       {/* Shared inputs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(160px,1fr))', gap:12, marginBottom:12 }}>
         <label>Length (LF)
-          <input className="ew-input focus-anim" type="number" value={lengthLF} onChange={e=>setLengthLF(e.target.value)} style={{ width:'100%', padding:6 }} />
+          <input className="ew-input focus-anim" type="number" inputMode='decimal' value={lengthLF} onChange={e=>setLengthLF(e.target.value)} style={{ width:'100%', padding:6 }} />
         </label>
         <label>Height (ft)
-          <input className="ew-input focus-anim" type="number" value={heightFt} onChange={e=>setHeightFt(e.target.value)} style={{ width:'100%', padding:6 }} />
+          <input className="ew-input focus-anim" type="number" inputMode='decimal' value={heightFt} onChange={e=>setHeightFt(e.target.value)} style={{ width:'100%', padding:6 }} />
         </label>
         <label>Stud spacing (in)
-          <input className="ew-input focus-anim" type="number" value={studSpacingIn} onChange={e=>setStudSpacingIn(e.target.value)} style={{ width:'100%', padding:6 }} />
+          <input className="ew-input focus-anim" type="number" inputMode='decimal' value={studSpacingIn} onChange={e=>setStudSpacingIn(e.target.value)} style={{ width:'100%', padding:6 }} />
         </label>
         <label>Studs per location
           
@@ -263,7 +265,14 @@ export default function ExteriorWallGroup() {
         {baseRows.map(row => (         
             <div key={row.key} className="ew-grid ew-row" style={{ '--cols': gridCols }}>
             <div>{row.label}</div>
-            <div><ItemPicker onSelect={setPick(row.key)} compact defaultVendor="Gillies & Prittie" /></div>
+            <div><ItemPicker onSelect={setPick(row.key)} 
+            compact 
+            defaultVendorId="gillies_prittie_warehouse" 
+            defaultFamilySlug="spf2" 
+            defaultFamilyLabel="SPF#2" 
+            />
+            
+            </div>
             <div className='ew-right focus-anim'>{row.qtyRawDisplay}</div>
             <div className='ew-right'>
               <input className='ew-input focus-anim'
@@ -297,7 +306,12 @@ export default function ExteriorWallGroup() {
             </div>
 
             <div>
-              <ItemPicker onSelect={item => updateExtra(r.id, { item })} compact defaultVendor="Gillies & Prittie" />
+              <ItemPicker onSelect={item => updateExtra(r.id, { item })} 
+              compact 
+              defaultVendorId="gillies_prittie_warehouse" 
+              defaultFamilySlug="spf2" 
+              defaultFamilyLabel="SPF#2" 
+              />
 
               {/* Header inputs */}
               {r.type==='Header' && (
@@ -410,8 +424,8 @@ export default function ExteriorWallGroup() {
 
       {/* Add extra row & total */}
       <div style={{ marginTop:12, display:'flex', gap:8, alignItems:'center' }}>
-        <button onClick={()=>addExtra('Header')} style={{ padding:'8px 12px' }}>+ Header</button>
-        <button onClick={()=>addExtra('Post')} style={{ padding:'8px 12px' }}>+ Post</button>
+        <button onClick={()=>addExtra('Header')} style={{ padding:'8px 12px' }}>➕ Header</button>
+        <button onClick={()=>addExtra('Post')} style={{ padding:'8px 12px' }}>➕ Post</button>
         <div style={{ marginLeft:'auto', fontWeight:700 }}>
           Group subtotal: {fmt(groupSubtotal)}
         </div>
