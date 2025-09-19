@@ -12,11 +12,12 @@ export default function InteriorWalls() {
 
     
     <div className="ew-stack">
-      {groups.map((g, i) => (
+      {groups.map((g, idx) => (
         <InteriorWallGroup
           key={g.id}
-          title={`Interior walls — section ${i + 1}`}
-          onRemove={groups.length > 1 ? () => removeGroup(g.id) : undefined}
+          persistKey={`interior-${g.id ?? idx}`}
+          title={g.title}
+          onRemove={() => removeGroup(g.id)}
         />
       ))}
 

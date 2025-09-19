@@ -85,13 +85,13 @@ html, body {
 
 /* Rows */
 .ew-rows{
-  border-radius: 10px;
-  overflow: hidden;
+  border-radius: 10px; 
 }
 .ew-row{
   padding: 10px;
   border-bottom:1px solid var(--border);
   background: var(--bg-800);
+  overflow: visible;
 }
 .ew-row:nth-child(even){ background: var(--bg-750); }
 .ew-row:hover{ background: var(--bg-700); }
@@ -103,6 +103,7 @@ html, body {
 .ew-hint { font-size:12px; color: var(--text-300); margin-top:4px; }
 .ew-footer { display:flex; align-items:center; gap:8px; margin-top:12px; }
 .ew-total { margin-left:auto; font-weight:700; }
+.ew-right { text-align: right; }
 
 /* === Inputs / selects / buttons ======================================== */
 .ew-input, .ew-select{
@@ -263,7 +264,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 input[type="number"] { -moz-appearance: textfield; }
 
 /* === SearchableSelect (combobox) ======================================= */
-.combo { position: relative; }
+.combo { position: relative; z-index: 1;}
 .combo-input { padding-right: 28px; } /* room for caret */
 .combo-caret{
   position:absolute; top:50%; right:10px;
@@ -274,7 +275,12 @@ input[type="number"] { -moz-appearance: textfield; }
   transform: translateY(-50%);
   pointer-events:none;
 }
-
+.combo[aria-expanded="true"] {
+  z-index: 1000000;             /* higher than any sibling */
+}
+.combo[aria-expanded="true"] .combo-list {
+  z-index: 1000001;
+}
 /* Dropdown menu uses the same theme vars as native <select> */
 .combo-list{
   position:absolute; inset:auto 0 auto 0; margin-top:4px;
@@ -283,7 +289,7 @@ input[type="number"] { -moz-appearance: textfield; }
   border: 1px solid var(--dropdown-border);
   border-radius:8px;
   max-height:240px; overflow:auto;
-  z-index:40;
+  z-index:9999;
   box-shadow: 0 8px 30px rgba(0,0,0,.08);
 }
 .combo-option{

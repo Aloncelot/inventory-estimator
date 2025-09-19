@@ -14,11 +14,12 @@ export default function ExteriorWalls() {
 
   return (
     <div className="ew-stack">
-      {groups.map((g, i) => (
+      {groups.map((g, idx) => (
         <ExteriorWallGroup
           key={g.id}
-          title={`Exterior walls — section ${i + 1}`}
-          onRemove={groups.length > 1 ? () => removeGroup(g.id) : undefined}
+          persistKey={`exterior-${g.id ?? idx}`}
+          title={g.title}
+          onRemove={() => removeGroup(g.id)}
         />
       ))}
 
