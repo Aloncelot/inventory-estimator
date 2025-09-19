@@ -4,6 +4,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import ItemPicker from '@/components/ItemPicker';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
+import {
+  calcPlates, calcStuds, calcBlocking, calcSheathing,
+  calcHeader, calcPost, calcHeadersInfill,
+} from '@/domain/calculators';
+import { parseBoardLengthFt } from '@/domain/lib/parsing';
+import { isLVL, isVersaColumn, isLumberFamily, isInfillFamily } from '@/domain/lib/families';
 
 /* ──────────────────────────────────────────────────────────────────────────
    Helpers (kept in sync with Interior)
@@ -12,27 +18,27 @@ import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const fmt = n => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : '—');
 
-/** Parse trailing feet at end of size labels like `2x6"-16'` → 16 */
-function parseBoardLengthFt(sizeLabel) {
-  const s = String(sizeLabel || '').trim();
-  let num = '';
-  for (let i = s.length - 1; i >= 0; i--) {
-    const ch = s[i];
-    if (ch >= '0' && ch <= '9') { num = ch + num; continue; }
-    if (num) break;
-  }
-  return num ? Number(num) : null;
-}
+// /** Parse trailing feet at end of size labels like `2x6"-16'` → 16 */
+// function parseBoardLengthFt(sizeLabel) {
+//   const s = String(sizeLabel || '').trim();
+//   let num = '';
+//   for (let i = s.length - 1; i >= 0; i--) {
+//     const ch = s[i];
+//     if (ch >= '0' && ch <= '9') { num = ch + num; continue; }
+//     if (num) break;
+//   }
+//   return num ? Number(num) : null;
+// }
 
 /** Unit price resolver that tolerates both compact/raw items */
-function unitPriceFrom(item) {
-  if (!item) return 0;
-  const supplier = item.supplierPrice ?? item.raw?.basePrice ?? item.raw?.supplierPrice ?? null;
-  const markup   = item.markupPct     ?? item.raw?.markupPct     ?? null;
-  if (supplier != null && markup != null) return Number(supplier) * (1 + Number(markup)/100);
-  const peg = item.priceWithMarkup ?? item.raw?.priceWithMarkup ?? null;
-  return Number(peg || 0);
-}
+// function unitPriceFrom(item) {
+//   if (!item) return 0;
+//   const supplier = item.supplierPrice ?? item.raw?.basePrice ?? item.raw?.supplierPrice ?? null;
+//   const markup   = item.markupPct     ?? item.raw?.markupPct     ?? null;
+//   if (supplier != null && markup != null) return Number(supplier) * (1 + Number(markup)/100);
+//   const peg = item.priceWithMarkup ?? item.raw?.priceWithMarkup ?? null;
+//   return Number(peg || 0);
+// }
 
 /** Comment preview (first N words with ellipsis) */
 const wordsPreview = (s = '', maxWords = 8) => {
@@ -41,43 +47,45 @@ const wordsPreview = (s = '', maxWords = 8) => {
   return parts.length > maxWords ? `${preview}…` : preview || '';
 };
 
-const norm = (s='') => String(s).toLowerCase().replace(/[^a-z0-9# ]+/g,'').trim();
-const isSPF_PT_SYP = f => {
-  const x = norm(f);
-  return x.includes('spf#2') || x.includes('spf2') ||
-         x.includes('syp#2') || x.includes('syp2') || x.includes('spy#2') || x.includes('spy2') ||
-         x === 'pt' || x.includes('treated');
-};
-const isLVL = f => norm(f).includes('lvl');
-const isVersaColumn = f => norm(f).includes('versa');
-const isLumberFamily = f =>
-  isSPF_PT_SYP(f) || norm(f).includes('frt') || norm(f).includes('douglas fir') ||
-  norm(f).includes('hem fir') || norm(f).includes('hemfir');
+// const norm = (s='') => String(s).toLowerCase().replace(/[^a-z0-9# ]+/g,'').trim();
+// const isSPF_PT_SYP = f => {
+//   const x = norm(f);
+//   return x.includes('spf#2') || x.includes('spf2') ||
+//          x.includes('syp#2') || x.includes('syp2') || x.includes('spy#2') || x.includes('spy2') ||
+//          x === 'pt' || x.includes('treated');
+// };
+// const isLVL = f => norm(f).includes('lvl');
+// const isVersaColumn = f => norm(f).includes('versa');
+// const isLumberFamily = f =>
+//   isSPF_PT_SYP(f) || norm(f).includes('frt') || norm(f).includes('douglas fir') ||
+//   norm(f).includes('hem fir') || norm(f).includes('hemfir');
 
-const isInfillFamily = f => {
-  const x = norm(f);
-  return (
-    x.includes('spf#2') || x.includes('spf2') ||
-    x === 'pt' || x.includes('treated') ||
-    x.includes('hem fir') || x.includes('hemfir') ||
-    x.includes('syp#2') || x.includes('syp2') ||
-    x.includes('syp#1') || x.includes('syp1') ||
-    x.includes('frt')
-  );
-};
+// const isInfillFamily = f => {
+//   const x = norm(f);
+//   return (
+//     x.includes('spf#2') || x.includes('spf2') ||
+//     x === 'pt' || x.includes('treated') ||
+//     x.includes('hem fir') || x.includes('hemfir') ||
+//     x.includes('syp#2') || x.includes('syp2') ||
+//     x.includes('syp#1') || x.includes('syp1') ||
+//     x.includes('frt')
+//   );
+// };
 
-const platesRaw   = (lengthLF, boardLenFT) => Number(lengthLF||0)/Math.max(1, Number(boardLenFT||0));
-const studsRaw    = (lengthLF, spacingIn=16, studMult=1) => {
-  const studsAlong = Math.floor((Number(lengthLF||0)*12)/Math.max(1,Number(spacingIn||16))) + 1; // include end stud
-  return studsAlong * Math.max(1, Number(studMult||1));
-};
-const blockingRaw = (lengthLF, heightFt, boardLenFT) => {
-  const rows = Math.ceil(Number((heightFt||0)/4)-1); // every 4 ft
-  const perRow = Number(lengthLF||0)/Math.max(1,Number(boardLenFT||0));
-  return perRow * rows;
-};
-const sheathingRaw= (lengthLF, heightFt) => (Number(lengthLF||0)*Number(heightFt||0))/32;
-const applyWaste  = (qty, wastePct) => Math.ceil(Number(qty||0) * (1 + Number(wastePct||0)/100));
+// const platesRaw   = (lengthLF, boardLenFT) => Number(lengthLF||0)/Math.max(1, Number(boardLenFT||0));
+// const studsRaw    = (lengthLF, spacingIn=16, studMult=1) => {
+//   const studsAlong = Math.floor((Number(lengthLF||0)*12)/Math.max(1,Number(spacingIn||16))) + 1; // include end stud
+//   return studsAlong * Math.max(1, Number(studMult||1));
+// };
+// const blockingRaw = (lengthLF, heightFt, boardLenFT) => {
+//   const rows = Math.ceil(Number((heightFt||0)/4)-1); // every 4 ft
+//   const perRow = Number(lengthLF||0)/Math.max(1,Number(boardLenFT||0));
+//   return perRow * rows;
+// };
+// const sheathingRaw= (lengthLF, heightFt) => (Number(lengthLF||0)*Number(heightFt||0))/32;
+// const applyWaste  = (qty, wastePct) => Math.ceil(Number(qty||0) * (1 + Number(wastePct||0)/100));
+// use res.qtyRaw, res.qtyFinal, res.unitPrice, res.subtotal, res.unit
+
 
 const deref = x => (x && x.item ? deref(x.item) : x);
 const getItem   = selLike => deref(selLike);
@@ -124,21 +132,127 @@ export default function ExteriorWallGroup({
 
   /* Build base rows */
   const baseRows = useMemo(() => {
-    const defs = [
-      { key:'bottomPlate', label:'Bottom plate', unit:getUnit(sel.bottomPlate), qtyRaw:platesRaw(lengthLF, bottomLen), item:getItem(sel.bottomPlate) },
-      { key:'topPlate',    label:'Top plate',    unit:getUnit(sel.topPlate),    qtyRaw:platesRaw(lengthLF, topLen),    item:getItem(sel.topPlate) },
-      { key:'studs',       label:'Studs',        unit:getUnit(sel.studs),       qtyRaw:studsRaw(lengthLF, studSpacingIn, studMultiplier), item:getItem(sel.studs) },
-      { key:'blocking',    label:'Blocking',     unit:getUnit(sel.blocking),    qtyRaw:blockingRaw(lengthLF, heightFt, blockLen), item:getItem(sel.blocking) },
-      { key:'sheathing',   label:'Sheathing', unit:getUnit(sel.sheathing) || 'sheet', qtyRaw:sheathingRaw(lengthLF, heightFt), item:getItem(sel.sheathing) },
-    ];
-    return defs.map(d => {
-      const wastePct = Number(waste[d.key] ?? 0);
-      const qtyFinal = applyWaste(d.qtyRaw, wastePct);
-      const unitPrice = unitPriceFrom(d.item);
-      const subtotal = Number(unitPrice * qtyFinal) || 0;
-      return { ...d, wastePct, qtyFinal, unitPrice, subtotal, qtyRaw: d.qtyRaw };
-    });
-  }, [sel, waste, lengthLF, heightFt, studSpacingIn, studMultiplier, bottomLen, topLen, blockLen]);
+    const rows = [];
+
+    // Bottom plate
+    {
+      const res = calcPlates({
+        lengthLF,
+        boardLenFt: bottomLen,
+        wastePct: waste.bottomPlate ?? 0,
+        item: getItem(sel.bottomPlate),
+        unit: getUnit(sel.bottomPlate),
+      });
+      rows.push({
+        key: 'bottomPlate',
+        label: 'Bottom plate',
+        item: getItem(sel.bottomPlate),
+        unit: res.unit,
+        qtyRaw: res.qtyRaw,
+        qtyFinal: res.qtyFinal,
+        unitPrice: res.unitPrice,
+        subtotal: res.subtotal,
+        wastePct: waste.bottomPlate ?? 0,
+      });
+    }
+
+    // Top plate
+    {
+      const res = calcPlates({
+        lengthLF,
+        boardLenFt: topLen,
+        wastePct: waste.topPlate ?? 0,
+        item: getItem(sel.topPlate),
+        unit: getUnit(sel.topPlate),
+      });
+      rows.push({
+        key: 'topPlate',
+        label: 'Top plate',
+        item: getItem(sel.topPlate),
+        unit: res.unit,
+        qtyRaw: res.qtyRaw,
+        qtyFinal: res.qtyFinal,
+        unitPrice: res.unitPrice,
+        subtotal: res.subtotal,
+        wastePct: waste.topPlate ?? 0,
+      });
+    }
+
+    // Studs
+    {
+      const res = calcStuds({
+        lengthLF,
+        spacingIn: studSpacingIn,
+        multiplier: studMultiplier,
+        wastePct: waste.studs ?? 0,
+        item: getItem(sel.studs),
+        unit: getUnit(sel.studs),
+      });
+      rows.push({
+        key: 'studs',
+        label: 'Studs',
+        item: getItem(sel.studs),
+        unit: res.unit,
+        qtyRaw: res.qtyRaw,
+        qtyFinal: res.qtyFinal,
+        unitPrice: res.unitPrice,
+        subtotal: res.subtotal,
+        wastePct: waste.studs ?? 0,
+      });
+    }
+
+    // Blocking (always on Exterior)
+    {
+      const res = calcBlocking({
+        lengthLF,
+        heightFt,
+        boardLenFt: blockLen,
+        wastePct: waste.blocking ?? 0,
+        item: getItem(sel.blocking),
+        unit: getUnit(sel.blocking),
+      });
+      rows.push({
+        key: 'blocking',
+        label: 'Blocking',
+        item: getItem(sel.blocking),
+        unit: res.unit,
+        qtyRaw: res.qtyRaw,
+        qtyFinal: res.qtyFinal,
+        unitPrice: res.unitPrice,
+        subtotal: res.subtotal,
+        wastePct: waste.blocking ?? 0,
+      });
+    }
+
+    // Sheathing (always on Exterior)
+    {
+      const res = calcSheathing({
+        lengthLF,
+        heightFt,
+        wastePct: waste.sheathing ?? 0,
+        item: getItem(sel.sheathing),
+        unit: getUnit(sel.sheathing) || 'sheet',
+      });
+      rows.push({
+        key: 'sheathing',
+        label: 'Sheathing (4x8)',
+        item: getItem(sel.sheathing),
+        unit: res.unit,
+        qtyRaw: res.qtyRaw,
+        qtyFinal: res.qtyFinal,
+        unitPrice: res.unitPrice,
+        subtotal: res.subtotal,
+        wastePct: waste.sheathing ?? 0,
+      });
+    }
+
+    return rows;
+  }, [
+    sel, waste,
+    lengthLF, heightFt, studSpacingIn, studMultiplier,
+    bottomLen, topLen, blockLen
+  ]);
+
 
   /* Extras (Header/Post + auto Headers infill) */
   const [extras, setExtras] = useState([]);
@@ -163,60 +277,55 @@ export default function ExteriorWallGroup({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(extras.map(r => ({ t:r.type, f:getFamily(r), lf:r.inputs.headerLF||0 })))]);
 
-  const computedExtras = useMemo(() => {
-    const headerLFPool = extras
-      .filter(r => r.type==='Header' && isInfillFamily(getFamily(r)))
-      .reduce((s,r) => s + Number(r.inputs.headerLF || 0), 0);
+const computedExtras = useMemo(() => {
+  // Pool for Headers infill (sum of qualifying lumber Header LF)
+  const headerLFPool = extras
+    .filter(r => r.type === 'Header' && isInfillFamily(getFamily(r)))
+    .reduce((s, r) => s + Number(r?.inputs?.headerLF || 0), 0);
 
-    return extras.map(r => {
-      const fam = getFamily(r);
-      const sizeLabel = getSize(r);
-      const boardLenFt = parseBoardLengthFt(sizeLabel) ?? 0;
+  return extras.map(r => {
+    const fam = getFamily(r);
+    const boardLenFt = parseBoardLengthFt(getSize(r)) ?? 0;
 
-      let qtyRaw = 0;
-      let unit = getUnit(r) || 'pcs';
+    if (r.type === 'Header') {
+      const res = calcHeader({
+        isLVL: isLVL(fam),
+        headerLF: Number(r?.inputs?.headerLF || 0),
+        lvlPieces: Number(r?.inputs?.lvlPieces || 0),
+        lvlLength: Number(r?.inputs?.lvlLength || 0),
+        boardLenFt,
+        wastePct: r.wastePct ?? 5,
+        item: getItem(r),
+      });
+      return { ...r, unit: res.unit, qtyRaw: res.qtyRaw, qtyFinal: res.qtyFinal, unitPrice: res.unitPrice, subtotal: res.subtotal, boardLenFt };
+    }
 
-      if (r.type==='Header') {
-        if (isLVL(fam)) {
-          const lf = Number(r.inputs.lvlLength || 0);
-          const pcs = Number(r.inputs.lvlPieces || 0);
-          qtyRaw = lf * pcs; // LF
-          unit = 'lf';
-        } else {
-          const lf = Number(r.inputs.headerLF || 0);
-          qtyRaw = boardLenFt ? (lf / boardLenFt) : 0; // pcs
-          unit = 'pcs';
-        }
-      }
+    if (r.type === 'Post') {
+      const res = calcPost({
+        isLinearLF: isLVL(fam) || isVersaColumn(fam),
+        pieces: Number(r?.inputs?.pieces || 0),
+        heightFt: Number(r?.inputs?.heightFt ?? heightFt),
+        piecesPerPost: Number(r?.inputs?.piecesPerPost || 0),
+        numPosts: Number(r?.inputs?.numPosts || 0),
+        wastePct: r.wastePct ?? 5,
+        item: getItem(r),
+      });
+      return { ...r, unit: res.unit, qtyRaw: res.qtyRaw, qtyFinal: res.qtyFinal, unitPrice: res.unitPrice, subtotal: res.subtotal, boardLenFt };
+    }
 
-      if (r.type==='Post') {
-        if (isLVL(fam) || isVersaColumn(fam)) {
-          const pieces = Number(r.inputs.pieces || 0);
-          const hft    = Number(r.inputs.heightFt ?? heightFt);
-          qtyRaw = pieces * hft; // LF
-          unit = 'lf';
-        } else if (isLumberFamily(fam)) {
-          const ppp = Number(r.inputs.piecesPerPost || 0);
-          const posts= Number(r.inputs.numPosts || 0);
-          qtyRaw = ppp * posts; // pcs
-          unit = 'pcs';
-        } else {
-          qtyRaw = Number(r.inputs.qty || 0);
-        }
-      }
+    if (r.type === 'Headers infill') {
+      const res = calcHeadersInfill({
+        headerLFPool,
+        wastePct: r.wastePct ?? 5,
+        item: getItem(r),
+      });
+      return { ...r, unit: res.unit, qtyRaw: res.qtyRaw, qtyFinal: res.qtyFinal, unitPrice: res.unitPrice, subtotal: res.subtotal, boardLenFt: null };
+    }
 
-      if (r.type === 'Headers infill') {
-        qtyRaw = (headerLFPool / 3 / 32) * 2;
-        unit = 'sheet';
-      }
-
-      const qtyFinal  = applyWaste(qtyRaw, r.wastePct ?? 5);
-      const unitPrice = unitPriceFrom(getItem(r));
-      const subtotal  = Number(unitPrice * qtyFinal) || 0;
-
-      return { ...r, unit, qtyRaw, qtyFinal, unitPrice, subtotal, boardLenFt };
-    });
-  }, [extras, heightFt]);
+    // Unknown extra type — pass through
+    return r;
+  });
+}, [extras, heightFt]);
 
   const groupSubtotal = useMemo(() => {
     const b = baseRows.reduce((s,r)=> s + (r.subtotal||0), 0);
@@ -294,16 +403,13 @@ export default function ExteriorWallGroup({
                   <div>{row.label}</div>
 
                   {/* ItemPicker */}
-                  <div>
                     <ItemPicker
                       compact
                       onSelect={setPick(row.key)}
-                      defaultVendor="gillies_prittie_warehouse"
-                      defaultFamily="SPF#2"
-                      defaultFamilyLabel="SPF#2"
-                      defaultFamilySlug="spf2"
+                      defaultVendor="Gillies & Prittie Warehouse"
+                      
                     />
-                  </div>
+
 
                   {/* Qty raw (rounded up visually) */}
                   <div className="ew-right">{Math.ceil(row.qtyRaw)}</div>
@@ -386,7 +492,7 @@ export default function ExteriorWallGroup({
 
         {/* Extras rows (with Notes) */}
         <div className="ew-rows">
-          {computedExtras.map(r => {
+          {computedExtras.map((ex) => {
             const noteKey = `extra:${r.id}`;
             const n = getNote(noteKey);
 
@@ -408,11 +514,9 @@ export default function ExteriorWallGroup({
                   <div>
                     <ItemPicker
                       compact
-                      onSelect={item => updateExtra(r.id, { item })}
-                      defaultVendor="gillies_prittie_warehouse"
-                      defaultFamily="SPF#2"
-                      defaultFamilyLabel="SPF#2"
-                      defaultFamilySlug="spf2"
+                      onSelect={(item) => updateExtra(r.id, { item })}
+                      defaultVendor="Gillies & Prittie Warehouse"
+                      
                     />
 
                     {/* Header params */}
