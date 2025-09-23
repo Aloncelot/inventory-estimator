@@ -43,6 +43,7 @@ const getFamily = selLike => deref(selLike)?.raw?.familyDisplay || deref(selLike
    ────────────────────────────────────────────────────────────────────────── */
 
 export default function InteriorWallGroup({
+  onStatsChange,
   title = 'Interior walls',
   onRemove,
   persistKey = 'interior-0',
@@ -209,6 +210,17 @@ export default function InteriorWallGroup({
     bottomLen, topLen, blockLen
   ]);
 
+  /* ── Emit live stats for wrapper/page (for Loose materials auto-aggregation) ── */
+  const rowByKey = useMemo(
+    () => Object.fromEntries((baseRows || []).map(r => [r.key, r])),
+    [baseRows]
+  );
+  const platePieces =
+    (rowByKey.bottomPlate?.qtyFinal ?? 0) +
+    (rowByKey.topPlate?.qtyFinal ?? 0);
+  const ptLF = Number(lengthLF || 0);
+  const wallKind = String(series).includes('2x6') ? 'int-2x6' : 'int-2x4';
+
   /* Extras (Header/Post + auto Headers infill) */
   const [extras, setExtras] = useState([]);
   const seq = useRef(1);
@@ -288,6 +300,17 @@ export default function InteriorWallGroup({
     return b + x;
   }, [baseRows, computedExtras]);
 
+    useEffect(() => {
+    onStatsChange?.({
+      id: persistKey,
+      kind: wallKind,
+      lengthLF: Number(lengthLF || 0),
+      platePieces,
+      ptLF: Number(lengthLF||0),
+      groupSubtotal,
+    });
+  }, [persistKey, wallKind, lengthLF, platePieces, ptLF, groupSubtotal]);
+
   /* ────────────────────────────────────────────────────────────────────────
      Render
      ──────────────────────────────────────────────────────────────────────── */
@@ -315,14 +338,32 @@ export default function InteriorWallGroup({
         {onRemove && <button className="ew-btn" onClick={onRemove}>Remove section</button>}
       </div>
 
-      {/* Collapsed summary OR full content */}
-      {collapsed ? (
-        <div style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 10, marginTop: 8 }}>
-          <div style={{ fontWeight: 700, color: '#f18d5b' }}>
-            Subtotal: {fmt(groupSubtotal)}
-          </div>
+      {/* Collapsed summary (stay mounted) */}
+      <div
+        style={{
+          display: collapsed ? 'block' : 'none',
+          padding: 12,
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          marginTop: 8
+        }}
+        aria-hidden={!collapsed}
+      >
+        <div style={{ fontWeight: 700, color: '#f18d5b' }}>
+          Subtotal: {fmt(groupSubtotal)}
         </div>
-      ) : (
+      </div>
+
+      {/* Full content (stay mounted) */}
+      <div
+        style={{
+          display: collapsed ? 'none' : 'block',
+          padding: 16,
+          border: '1px solid var(--border)',
+          borderRadius: 12
+        }}
+        aria-hidden={collapsed}
+      >
         <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12 }}>
           {/* Controls row 1 */}
           <div className="controls4" style={{ marginBottom: 8 }}>
@@ -433,7 +474,10 @@ export default function InteriorWallGroup({
                         compact
                         onSelect={setPick(row.key)}
                         defaultVendor="Gillies & Prittie Warehouse"
-                        defaultFamilyLabel="SPF#2"
+                        defaultFamilyLabel={
+                          row.key==='sheathing' ? 'CDX SE' :
+                          row.key==='bottomPlate' ? 'PT' : 'SPF#2'
+                        }
                       />
                     </div>
 
@@ -516,11 +560,10 @@ export default function InteriorWallGroup({
           {/* Extras header */}
           <h3 className="ew-h3" style={{ marginTop: 12, marginBottom: 6 }}>Extras</h3>
 
-          {/* Extras rows (mirror exterior, use `ex`) */}
+          {/* Extras rows */}
           <div className="ew-rows">
             {computedExtras.map(ex => {
               const noteKey = `extra:${ex.id}`;
-              const n = getNote(noteKey);
 
               return (
                 <Fragment key={ex.id}>
@@ -547,14 +590,16 @@ export default function InteriorWallGroup({
                       {/* Header params */}
                       {ex.type==='Header' && (
                         isLVL(getFamily(ex)) ? (
-                          <div className="ew-inline" style={{ marginTop:6 }}>
-                            <label>Pieces
+                          <div className="ew-inline" style={{ marginTop:6, alignItems:'end' }}>
+                            <label style={{ minWidth:120 }}>
+                              <span className="ew-subtle">Pieces</span>
                               <input className="ew-input focus-anim" type="number"
                                 value={ex.inputs?.lvlPieces || ''}
                                 onChange={e=>updateExtra(ex.id,{ inputs:{...ex.inputs, lvlPieces:Number(e.target.value)} })}
                               />
                             </label>
-                            <label>Length (lf)
+                            <label style={{ minWidth:140 }}>
+                              <span className="ew-subtle">Length (lf)</span>
                               <input className="ew-input focus-anim" type="number"
                                 value={ex.inputs?.lvlLength || ''}
                                 onChange={e=>updateExtra(ex.id,{ inputs:{...ex.inputs, lvlLength:Number(e.target.value)} })}
@@ -562,8 +607,9 @@ export default function InteriorWallGroup({
                             </label>
                           </div>
                         ) : (
-                          <div className="ew-inline" style={{ marginTop:6 }}>
-                            <label>Total header LF
+                          <div className="ew-inline" style={{ marginTop:6, alignItems:'end' }}>
+                            <label style={{ minWidth:160 }}>
+                              <span className="ew-subtle">Total header LF</span>
                               <input className="ew-input focus-anim" type="number"
                                 value={ex.inputs?.headerLF || ''}
                                 onChange={e=>updateExtra(ex.id,{ inputs:{...ex.inputs, headerLF:Number(e.target.value)} })}
@@ -577,14 +623,16 @@ export default function InteriorWallGroup({
                       {/* Post params */}
                       {ex.type==='Post' && (
                         (isLVL(getFamily(ex)) || isVersaColumn(getFamily(ex))) ? (
-                          <div className="ew-inline" style={{ marginTop:6 }}>
-                            <label>Pieces
+                          <div className="ew-inline" style={{ marginTop:6, alignItems:'end' }}>
+                            <label style={{ minWidth:120 }}>
+                              <span className="ew-subtle">Pieces</span>
                               <input className="ew-input focus-anim" type="number"
                                 value={ex.inputs?.pieces || ''}
                                 onChange={e=>updateExtra(ex.id,{ inputs:{...ex.inputs, pieces:Number(e.target.value)} })}
                               />
                             </label>
-                            <label>Height (ft)
+                            <label style={{ minWidth:140 }}>
+                              <span className="ew-subtle">Height (ft)</span>
                               <input className="ew-input focus-anim" type="number"
                                 value={ex.inputs?.heightFt ?? heightFt}
                                 onChange={e=>updateExtra(ex.id,{ inputs:{...ex.inputs, heightFt:Number(e.target.value)} })}
@@ -592,14 +640,16 @@ export default function InteriorWallGroup({
                             </label>
                           </div>
                         ) : isLumberFamily(getFamily(ex)) ? (
-                          <div className="ew-inline" style={{ marginTop:6 }}>
-                            <label>Pieces per post
+                          <div className="ew-inline" style={{ marginTop:6, alignItems:'end' }}>
+                            <label style={{ minWidth:160 }}>
+                              <span className="ew-subtle">Pieces per post</span>
                               <input className="ew-input focus-anim" type="number"
                                 value={ex.inputs?.piecesPerPost || ''}
                                 onChange={e=>updateExtra(ex.id,{ inputs:{...ex.inputs, piecesPerPost:Number(e.target.value)} })}
                               />
                             </label>
-                            <label>Posts (#)
+                            <label style={{ minWidth:140 }}>
+                              <span className="ew-subtle">Posts (#)</span>
                               <input className="ew-input focus-anim" type="number"
                                 value={ex.inputs?.numPosts || ''}
                                 onChange={e=>updateExtra(ex.id,{ inputs:{...ex.inputs, numPosts:Number(e.target.value)} })}
@@ -686,7 +736,7 @@ export default function InteriorWallGroup({
             <div className="ew-total">Group subtotal: {fmt(groupSubtotal)}</div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
