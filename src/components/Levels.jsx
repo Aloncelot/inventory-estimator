@@ -6,6 +6,8 @@ import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import ExteriorWalls from '@/components/ExteriorWalls';
 import InteriorWalls from '@/components/InteriorWalls';
 import LoosePanelMaterials from '@/components/LoosePanelMaterials';
+export { default } from './Level';
+
 
 function genLevelId() {
   return 'lvl-' + Math.random().toString(36).slice(2, 8);
@@ -139,24 +141,8 @@ export default function Levels() {
 
             {/* Level body (stays mounted) */}
             <div style={{ display: lv.collapsed ? 'none' : 'block' }}>
-              <ExteriorWalls
-                title={`${lv.name} — Exterior walls`}
-                storageKeyPrefix={`inv:v1:${lv.id}:ex:sections`}
-                onTotalsChange={(t) => {
-                  // t: { extLengthSum, extZipSheetsSum, extPlatePieces, extPTLFSum, extMoneySum }
-                  upsert(lv.id, 'exterior', t);
-                }}
-              />
-
-              <InteriorWalls
-                title={`${lv.name} — Interior walls`}
-                storageKeyPrefix={`inv:v1:${lv.id}:int:sections`}
-                onTotalsChange={(t) => {
-                  // t: { int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, intMoneySum }
-                  upsert(lv.id, 'interior', t);
-                }}
-              />
-
+              <ExteriorWalls levelId={id} onTotalsChange={handleExtTotals} title={`${name} — Exterior walls`} />
+              <InteriorWalls levelId={id} onTotalsChange={handleIntTotals} title={`${name} — Interior walls`} />
               <LoosePanelMaterials
                 title={`${lv.name} — Loose materials — Wall Panels`}
                 persistKey={`loose:${lv.id}`}

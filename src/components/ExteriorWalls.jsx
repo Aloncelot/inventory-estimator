@@ -4,17 +4,14 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import ExteriorWallGroup from '@/components/ExteriorWallGroup';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
+import { sum } from 'firebase/firestore';
 
 function genId() {
   return 'ex-' + Math.random().toString(36).slice(2, 8) + '-' + Date.now().toString(36);
 }
 
-export default function ExteriorWalls({
-  onTotalsChange,                              // (totals) => void
-  title = 'Exterior walls',
-  storageKeyPrefix = 'inv:v1:ex:sections',     // <— namespaced by level
-}) {
-  const [sections, setSections] = useLocalStorageJson(storageKeyPrefix, [
+export default function ExteriorWalls({ onTotalsChange, title = 'Exterior walls', levelId = 'default' }) {
+  const [sections, setSections] = useLocalStorageJson(`inv:v1:ex:sections:${levelId}`, [
     { id: genId() },
   ]);
 
@@ -49,7 +46,8 @@ export default function ExteriorWalls({
     const extPlatePieces  = arr.reduce((sum, s) => sum + (Number(s.platePieces)    || 0), 0);
     const extPTLFSum      = arr.reduce((sum, s) => sum + (Number(s.ptLF)           || 0), 0);
     const extMoneySum     = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
-    return { extLengthSum, extZipSheetsSum, extPlatePieces, extPTLFSum, extMoneySum };
+    const panelsSubtotal  = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
+    return { extLengthSum, extZipSheetsSum, extPlatePieces, extPTLFSum, extMoneySum, panelsSubtotal };
   }, [statsById]);
 
   useEffect(() => { onTotalsChange?.(totals); }, [totals, onTotalsChange]);

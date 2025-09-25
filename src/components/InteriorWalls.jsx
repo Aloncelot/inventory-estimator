@@ -1,84 +1,80 @@
 // src/components/InteriorWalls.jsx
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
-import InteriorWallGroup from './InteriorWallGroup';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import InteriorWallGroup from '@/components/InteriorWallGroup';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 
-function genId() {
-  return 'int-' + Math.random().toString(36).slice(2, 8) + '-' + Date.now().toString(36);
-}
+const genId = () => 'int-' + Math.random().toString(36).slice(2, 9);
 
 export default function InteriorWalls({
-  onTotalsChange,
   title = 'Interior walls',
-  storageKeyPrefix = 'inv:v1:int:sections',   // <— namespaced by level
+  levelId = 'default',               // <-- important for per-level storage
+  onTotalsChange,                    // ({ int2x6LF, int2x4LF, intPlatePieces, intPTLFSum }) => void
 }) {
-  const [sections, setSections] = useLocalStorageJson(storageKeyPrefix, [
-    { id: genId() },
-  ]);
+  // One persisted list of sections per level
+  const [sections, setSections] = useLocalStorageJson(
+    `inv:v1:int:sections:${levelId}`,
+    [{ id: genId() }]
+  );
 
-  const [statsById, setStatsById] = useState({}); // { [id]: { id, kind, lengthLF, platePieces, ptLF, groupSubtotal } }
+  // Stats reported by each section
+  const [stats, setStats] = useState({}); // { [id]: { kind, lengthLF, platePieces, ptLF } }
 
-  const addSection = () => setSections(prev => [...prev, { id: genId() }]);
-  const removeSection = (id) => {
-    setSections(prev => prev.filter(s => s.id !== id));
-    setStatsById(prev => { const c = { ...prev }; delete c[id]; return c; });
-  };
-
-  const handleStatsChange = useCallback((s) => {
-    if (!s || !s.id) return;
-    setStatsById(prev => {
-      const p = prev[s.id];
-      if (p &&
-          p.lengthLF === s.lengthLF &&
-          p.platePieces === s.platePieces &&
-          p.ptLF === s.ptLF &&
-          p.kind === s.kind &&
-          p.groupSubtotal === s.groupSubtotal) {
-        return prev;
-      }
-      return { ...prev, [s.id]: s };
-    });
+  const updateStats = useCallback((id, s) => {
+    setStats(prev => ({ ...prev, [id]: s }));
   }, []);
 
-  const totals = useMemo(() => {
-    const arr = Object.values(statsById);
-    const int2x6LF       = arr.filter(s => s?.kind === 'int-2x6').reduce((sum, s) => sum + (Number(s.lengthLF) || 0), 0);
-    const int2x4LF       = arr.filter(s => s?.kind === 'int-2x4').reduce((sum, s) => sum + (Number(s.lengthLF) || 0), 0);
-    const intPlatePieces = arr.reduce((sum, s) => sum + (Number(s.platePieces) || 0), 0);
-    const intPTLFSum     = arr.reduce((sum, s) => sum + (Number(s.ptLF) || 0), 0);
-    const intMoneySum    = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal) || 0), 0);
-    return { int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, intMoneySum };
-  }, [statsById]);
+  const addSection = useCallback(() => {
+    setSections(prev => [...prev, { id: genId() }]);
+  }, [setSections]);
 
-  useEffect(() => { onTotalsChange?.(totals); }, [totals, onTotalsChange]);
+  const removeSection = useCallback((id) => {
+    setSections(prev => prev.filter(s => s.id !== id));
+    setStats(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+  }, [setSections]);
+
+  // Roll-up totals across all interior sections for this level
+  const totals = useMemo(() => {
+    const arr = Object.values(stats);
+    const int2x6LF = arr
+      .filter(s => s?.kind === 'int-2x6')
+      .reduce((a, b) => a + (Number(b?.lengthLF) || 0), 0);
+    const int2x4LF = arr
+      .filter(s => s?.kind === 'int-2x4')
+      .reduce((a, b) => a + (Number(b?.lengthLF) || 0), 0);
+    const intPlatePieces = arr.reduce((a, b) => a + (Number(b?.platePieces)   || 0), 0);
+    const intPTLFSum     = arr.reduce((a, b) => a + (Number(b?.ptLF)          || 0), 0);
+    const panelsSubtotal = arr.reduce((a, b) => a + (Number(b?.groupSubtotal) || 0), 0)
+    return { int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, panelsSubtotal };
+  }, [stats]);
+
+  // Emit to parent (Level.jsx)
+  useEffect(() => {
+    onTotalsChange?.(totals);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totals]);
 
   return (
-    <section className="ew-stack">
-      <div className="ew-card" style={{ display:'flex', alignItems:'center', gap:12, justifyContent:'space-between' }}>
-        <h2 className="ew-h2" style={{ margin: 0 }}>{title}</h2>
+    <div className="ew-stack">
+      <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>
         <button className="ew-btn ew-btn--turq" onClick={addSection}>+ Add interior wall section</button>
       </div>
 
-      {sections.length === 0 && (
-        <div className="ew-card">
-          <div className="ew-subtle">No interior wall sections yet.</div>
-          <div style={{ marginTop: 8 }}>
-            <button className="ew-btn ew-btn--turq" onClick={addSection}>+ Add interior wall section</button>
-          </div>
-        </div>
-      )}
-
-      {sections.map((sec, idx) => (
+      {sections.map((sec, i) => (
         <InteriorWallGroup
           key={sec.id}
-          persistKey={`interior:${sec.id}`}
-          title={`Interior walls — section ${idx + 1}`}
+          title={`${title} — Section ${i + 1}`}
+          persistKey={`int:${levelId}:${sec.id}`}             // keep notes/selections per-level & per-section
           onRemove={() => removeSection(sec.id)}
-          onStatsChange={handleStatsChange}
+          onStatsChange={(s) => updateStats(sec.id, s)}       // section → wrapper
         />
       ))}
-    </section>
+    </div>
   );
 }

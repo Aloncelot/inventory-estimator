@@ -1,17 +1,20 @@
 // src/components/LoosePanelMaterials.jsx
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, useEffect } from 'react';
+import { parseBoardLengthFt } from '@/domain/lib/parsing';
 import ItemPicker from '@/components/ItemPicker';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 
 import {
-  calcPlates,
-  calcSheathing,
-  calcTape,
-  calcBoxes,
+  // exterior
+  looseExtBottomPlates, looseExtTopPlates, loosePanelBandSheathing,
+  looseExtraSheathing, looseZipTapeFromSheets, looseOpeningsBlocking, looseSecondBottomPlate,
+  // interior
+  looseInt2x6PTPlates, looseInt2x6Plates, looseInt2x4PTPlates, looseInt2x4Plates, looseCabinetBlocking,
+  // general
+  looseConcreteNails, looseSheathingNails, looseFramingNails, looseTempBracing,
 } from '@/domain/calculators';
-import { parseBoardLengthFt } from '@/domain/lib/parsing';
 
 const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const fmt = n => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : '—');
@@ -44,6 +47,7 @@ export default function LoosePanelMaterials({
   ptLFTotal,
   platePiecesTotal,
   onTotalChange,
+  onSubtotalChange,
 }) {
   // Collapsible
   const [collapsed, setCollapsed] = useState(false);
@@ -130,51 +134,66 @@ export default function LoosePanelMaterials({
 
     // PT Bottom Plates – Loose
     {
-      const res = calcPlates({
-        lengthLF: effectiveExtLF,
-        boardLenFt: lenBottomPT,
-        wastePct: 10,
-        item: getItem(sel.extBottomPT),
-        unit: getUnit(sel.extBottomPT),
+      const res = looseExtBottomPlates({ 
+        lengthLF: effectiveExtLF, 
+        boardLenFt: lenBottomPT, 
+        item: getItem(sel.extBottomPT), 
+        unit: getUnit(sel.extBottomPT) 
       });
-      out.push({ key: 'extBottomPT', label: 'PT Bottom Plates – Loose', ...res, item: getItem(sel.extBottomPT), wastePct: 10 });
+      out.push({ 
+        key: 'extBottomPT', 
+        label: 'PT Bottom Plates – Loose', ...res, 
+        item: getItem(sel.extBottomPT), 
+        wastePct: 10 
+      });
     }
 
     // Top Plates – Loose
     {
-      const res = calcPlates({
-        lengthLF: effectiveExtLF,
-        boardLenFt: lenTopPlate,
-        wastePct: 10,
-        item: getItem(sel.extTopPlate),
-        unit: getUnit(sel.extTopPlate),
+      const res = looseExtTopPlates({ 
+        lengthLF: effectiveExtLF, 
+        boardLenFt: lenTopPlate, item: getItem(sel.extTopPlate), 
+        unit: getUnit(sel.extTopPlate) 
       });
-      out.push({ key: 'extTopPlate', label: 'Top Plates – Loose', ...res, item: getItem(sel.extTopPlate), wastePct: 10 });
+      out.push({ 
+        key: 'extTopPlate', 
+        label: 'Top Plates – Loose', ...res, 
+        item: getItem(sel.extTopPlate), 
+        wastePct: 10 
+      });
     }
 
     // Panel band sheathing (ZIP family by default)
     {
-      const res = calcSheathing({
-        lengthLF: Number(extInputs.panelBandLF || 0),
-        heightFt: Number(extInputs.panelBandHeightFt || 0),
-        wastePct: 10,
-        item: getItem(sel.panelBandSheathing),
-        unit: getUnit(sel.panelBandSheathing) || 'sheet',
+      const res = loosePanelBandSheathing({ 
+        panelBandLF: Number(extInputs.panelBandLF||0), 
+        bandHeightFt: Number(extInputs.panelBandHeightFt||0), 
+        item: getItem(sel.panelBandSheathing), 
+        unit: getUnit(sel.panelBandSheathing)||'sheet' 
       });
-      out.push({ key: 'panelBandSheathing', label: 'Panel band sheathing', ...res, item: getItem(sel.panelBandSheathing), wastePct: 10 });
+      out.push({ 
+        key: 'panelBandSheathing', 
+        label: 'Panel band sheathing', ...res, 
+        item: getItem(sel.panelBandSheathing), 
+        wastePct: 10 
+      });
     }
 
     // Extra sheathing (optional)
     if (include.extraSheathing) {
       // Treat as an extra layer across exterior length × band height (tweak if needed later)
-      const res = calcSheathing({
-        lengthLF: effectiveExtLF,
-        heightFt: Number(extInputs.panelBandHeightFt || 4),
-        wastePct: 10,
-        item: getItem(sel.extraSheathing),
-        unit: getUnit(sel.extraSheathing) || 'sheet',
+      const res = looseExtraSheathing({ 
+        extLengthLF: effectiveExtLF, 
+        bandHeightFt: Number(extInputs.panelBandHeightFt||4), 
+        item: getItem(sel.extraSheathing), 
+        unit: getUnit(sel.extraSheathing)||'sheet' 
       });
-      out.push({ key: 'extraSheathing', label: 'Extra sheathing (optional)', ...res, item: getItem(sel.extraSheathing), wastePct: 10 });
+      out.push({ 
+        key: 'extraSheathing', 
+        label: 'Extra sheathing (optional)', ...res, 
+        item: getItem(sel.extraSheathing), 
+        wastePct: 10 
+      });
     }
 
     // Tape – ZIP system
@@ -182,41 +201,54 @@ export default function LoosePanelMaterials({
       const panelBandSheets = out.find(r => r.key === 'panelBandSheathing')?.qtyFinal || 0;
       const extraSheets     = include.extraSheathing ? (out.find(r => r.key === 'extraSheathing')?.qtyFinal || 0) : 0;
       const extZipSheets    = Number(extZipSheetsFinal || 0);
-      const totalZipSheets  = extZipSheets + panelBandSheets + extraSheets;
-      const seamLF          = totalZipSheets * Number(extInputs.lfPerZipSheet || 0);
+      const totalSheets     = extZipSheets + panelBandSheets + extraSheets;
+      const seamLF          = totalSheets * Number(extInputs.lfPerZipSheet || 0);
 
-      const res = calcTape({
-        seamLF,
-        rollLenFt: Number(extInputs.tapeRollLenFt || 75),
-        wastePct: 5,
-        item: getItem(sel.zipTape),
-        unit: getUnit(sel.zipTape) || 'roll',
+      const res = looseZipTapeFromSheets({ 
+        totalSheets, 
+        lfPerSheet: Number(extInputs.lfPerZipSheet||0), 
+        rollLenFt: Number(extInputs.tapeRollLenFt||75), 
+        item: getItem(sel.zipTape), 
+        unit: getUnit(sel.zipTape)||'roll' 
       });
-      out.push({ key: 'zipTape', label: 'Tape – ZIP system', ...res, item: getItem(sel.zipTape), wastePct: 5 });
+      out.push({ 
+        key: 'zipTape', 
+        label: 'Tape – ZIP system', ...res, 
+        item: getItem(sel.zipTape), 
+        wastePct: 5 
+      });
     }
 
     // Blocking at openings (LF ÷ board length)
     {
-      const res = calcPlates({
-        lengthLF: Number(extInputs.openingsBlockingLF || 0),
-        boardLenFt: lenOpeningBlk,
-        wastePct: 10,
-        item: getItem(sel.openingsBlocking),
-        unit: getUnit(sel.openingsBlocking),
+      const res = looseOpeningsBlocking({ 
+        openingsLF: Number(extInputs.openingsBlockingLF||0), 
+        boardLenFt: lenOpeningBlk, 
+        item: getItem(sel.openingsBlocking), 
+        unit: getUnit(sel.openingsBlocking) 
       });
-      out.push({ key: 'openingsBlocking', label: 'Blocking at openings', ...res, item: getItem(sel.openingsBlocking), wastePct: 10 });
+      out.push({ 
+        key: 'openingsBlocking', 
+        label: 'Blocking at openings', ...res, 
+        item: getItem(sel.openingsBlocking), 
+        wastePct: 10 
+      });
     }
 
     // Second bottom plate (optional)
     if (include.secondBottom) {
-      const res = calcPlates({
-        lengthLF: effectiveExtLF,
-        boardLenFt: lenSecondBottom,
-        wastePct: 10,
-        item: getItem(sel.secondBottom),
-        unit: getUnit(sel.secondBottom),
+      const res = looseSecondBottomPlate({ 
+        lengthLF: effectiveExtLF, 
+        boardLenFt: lenSecondBottom, 
+        item: getItem(sel.secondBottom), 
+        unit: getUnit(sel.secondBottom) 
       });
-      out.push({ key: 'secondBottom', label: 'Second bottom plate (optional)', ...res, item: getItem(sel.secondBottom), wastePct: 10 });
+      out.push({ 
+        key: 'secondBottom', 
+        label: 'Second bottom plate (optional)', ...res, 
+        item: getItem(sel.secondBottom), 
+        wastePct: 10 
+      });
     }
 
     return out;
@@ -233,61 +265,75 @@ export default function LoosePanelMaterials({
 
     // Interior 2×6 — PT Plates – Loose
     {
-      const res = calcPlates({
-        lengthLF: effectiveInt2x6LF,
-        boardLenFt: lenInt2x6PT,
-        wastePct: 10,
-        item: getItem(sel.int2x6PT),
-        unit: getUnit(sel.int2x6PT),
+      const res = looseInt2x6PTPlates({ 
+        lengthLF: effectiveInt2x6LF, 
+        boardLenFt: lenInt2x6PT, 
+        item: getItem(sel.int2x6PT), 
+        unit: getUnit(sel.int2x6PT) 
       });
-      out.push({ key: 'int2x6PT', label: 'Interior 2×6 — PT Plates – Loose', ...res, item: getItem(sel.int2x6PT), wastePct: 10 });
+      out.push({ 
+        key: 'int2x6PT', 
+        label: 'Interior 2×6 — PT Plates – Loose', ...res, 
+        item: getItem(sel.int2x6PT), 
+        wastePct: 10 
+      });
     }
 
     // Interior 2×6 — Plates – Loose
     {
-      const res = calcPlates({
-        lengthLF: effectiveInt2x6LF,
-        boardLenFt: lenInt2x6Pl,
-        wastePct: 10,
-        item: getItem(sel.int2x6Plate),
-        unit: getUnit(sel.int2x6Plate),
+      const res = looseInt2x6Plates({ 
+        lengthLF: effectiveInt2x6LF, 
+        boardLenFt: lenInt2x6Pl, 
+        item: getItem(sel.int2x6Plate), 
+        unit: getUnit(sel.int2x6Plate) 
       });
-      out.push({ key: 'int2x6Plate', label: 'Interior 2×6 — Plates – Loose', ...res, item: getItem(sel.int2x6Plate), wastePct: 10 });
+      out.push({ 
+        key: 'int2x6Plate', 
+        label: 'Interior 2×6 — Plates – Loose', ...res, 
+        item: getItem(sel.int2x6Plate), 
+        wastePct: 10 
+      });
     }
 
     // Interior 2×4 — PT Plates – Loose
     {
-      const res = calcPlates({
-        lengthLF: effectiveInt2x4LF,
-        boardLenFt: lenInt2x4PT,
-        wastePct: 10,
-        item: getItem(sel.int2x4PT),
-        unit: getUnit(sel.int2x4PT),
+      const res = looseInt2x4PTPlates({ 
+        lengthLF: effectiveInt2x4LF, 
+        boardLenFt: lenInt2x4PT, 
+        item: getItem(sel.int2x4PT), 
+        unit: getUnit(sel.int2x4PT) 
       });
-      out.push({ key: 'int2x4PT', label: 'Interior 2×4 — PT Plates – Loose', ...res, item: getItem(sel.int2x4PT), wastePct: 10 });
+      out.push({ 
+        key: 'int2x4PT', 
+        label: 'Interior 2×4 — PT Plates – Loose', ...res, 
+        item: getItem(sel.int2x4PT), 
+        wastePct: 10 
+      });
     }
 
     // Interior 2×4 — Plates – Loose
     {
-      const res = calcPlates({
-        lengthLF: effectiveInt2x4LF,
-        boardLenFt: lenInt2x4Pl,
-        wastePct: 10,
-        item: getItem(sel.int2x4Plate),
-        unit: getUnit(sel.int2x4Plate),
+      const res = looseInt2x4Plates({ 
+        lengthLF: effectiveInt2x4LF, 
+        boardLenFt: lenInt2x4Pl, 
+        item: getItem(sel.int2x4Plate), 
+        unit: getUnit(sel.int2x4Plate) 
       });
-      out.push({ key: 'int2x4Plate', label: 'Interior 2×4 — Plates – Loose', ...res, item: getItem(sel.int2x4Plate), wastePct: 10 });
+      out.push({ 
+        key: 'int2x4Plate', 
+        label: 'Interior 2×4 — Plates – Loose', ...res, 
+        item: getItem(sel.int2x4Plate), 
+        wastePct: 10 
+      });
     }
 
-    // Walls (general) — Blocking for Bathroom & Kitchen (ALWAYS INCLUDED)
+    // Walls (general) — Blocking for Bathroom & Kitchen
     {
       const blkLen = parseBoardLengthFt(getSize(sel.intCabinetBlocking)) || 8;
-      const res = calcPlates({
-        lengthLF: Number(intInputs.blockingLF || 0),
-        boardLenFt: blkLen,
-        wastePct: 10,
-        item: getItem(sel.intCabinetBlocking),
-        unit: getUnit(sel.intCabinetBlocking),
+      const res = looseCabinetBlocking({ 
+        blockingLF: Number(intInputs.blockingLF||0), 
+        boardLenFt: blkLen, item: getItem(sel.intCabinetBlocking), 
+        unit: getUnit(sel.intCabinetBlocking) 
       });
       out.push({
         key: 'intCabinetBlocking',
@@ -320,13 +366,10 @@ export default function LoosePanelMaterials({
 
     // Concrete nails (Fastener Plus, Drive Pins with Washers (HD), 3"-100s)
     {
-      const nailsCount = ptLFTotal * 25; // nails
-      const res = calcBoxes({
-        count: nailsCount,
-        perBox: 100,
-        wastePct: 50,
-        item: getItem(sel.nailsConcrete),
-        unit: getUnit(sel.nailsConcrete) || 'box',
+      const res = looseConcreteNails({ 
+        ptLF: ptLFTotal, 
+        item: getItem(sel.nailsConcrete), 
+        unit: getUnit(sel.nailsConcrete) || 'box' 
       });
       out.push({
         key: 'nailsConcrete',
@@ -339,13 +382,10 @@ export default function LoosePanelMaterials({
 
     // Sheathing nails (Concord, Bright Ring Coil, 8D-2-3/8x.113-2.7M)
     {
-      const nailsCount = sheetsInThisSection * 80;
-      const res = calcBoxes({
-        count: nailsCount,
-        perBox: 2700,
-        wastePct: 50,
-        item: getItem(sel.nailsSheathing),
-        unit: getUnit(sel.nailsSheathing) || 'box',
+      const res = looseSheathingNails({ 
+        sheetsCount: sheetsInThisSection, 
+        item: getItem(sel.nailsSheathing), 
+        unit: getUnit(sel.nailsSheathing) || 'box' 
       });
       out.push({
         key: 'nailsSheathing',
@@ -358,13 +398,10 @@ export default function LoosePanelMaterials({
 
     // Framing nails (G&P Warehouse, Bright Common Coil, 12D-3-1/4x.120-2.5M)
     {
-      const nailsCount = wallsLFTotal * 20;
-      const res = calcBoxes({
-        count: nailsCount,
-        perBox: 2500,
-        wastePct: 50,
-        item: getItem(sel.nailsFraming),
-        unit: getUnit(sel.nailsFraming) || 'box',
+      const res = looseFramingNails({ 
+        wallLF: wallsLFTotal, 
+        item: getItem(sel.nailsFraming), 
+        unit: getUnit(sel.nailsFraming) || 'box' 
       });
       out.push({
         key: 'nailsFraming',
@@ -378,13 +415,10 @@ export default function LoosePanelMaterials({
     // Temporary Bracing (G&P, SPF#2, 2x4"-16')
     {
       // Treat as boards of 16': lengthLF = (platePiecesTotal * 3 * 16), boardLen = 16 → qtyRaw = platePiecesTotal * 3
-      const pieces = Number(platePiecesTotal ?? generalInputs.platePiecesTotal ?? 0) * 3;
-      const res = calcPlates({
-        lengthLF: pieces * 16,
-        boardLenFt: 16,
-        wastePct: 10,
-        item: getItem(sel.tempBracing),
-        unit: getUnit(sel.tempBracing),
+      const res = looseTempBracing({ 
+        platePiecesTotal: Number(platePiecesTotal ?? generalInputs.platePiecesTotal ?? 0), 
+        item: getItem(sel.tempBracing), 
+        unit: getUnit(sel.tempBracing) 
       });
       out.push({
         key: 'tempBracing',
@@ -411,6 +445,16 @@ export default function LoosePanelMaterials({
 
   const gridCols =
     'minmax(220px,1.3fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 1.6fr 0.8fr';
+
+  // Notify parent (Level) with Loose-materials subtotal
+  useEffect(() => {
+    if (typeof onSubtotalChange === 'function') {
+      onSubtotalChange({ subtotal: Number(sectionSubtotal) || 0 });
+    }
+    if (typeof onTotalChange === 'function'){
+      onTotalChange(Number(sectionSubtotal) || 0);
+    }
+  }, [sectionSubtotal, onSubtotalChange, onTotalChange]);
 
   return (
     <div className="ew-card">

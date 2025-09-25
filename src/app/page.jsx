@@ -1,26 +1,58 @@
+// src/app/page.jsx
 'use client';
 
-import { useState, useMemo } from 'react';
-import Levels from '@/components/Levels';
+import { useCallback } from 'react';
+import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
+import Sidebar from '@/components/Sidebar';
+import WallPanelsView from '@/components/WallPanelsView';
 
 export default function Home() {
-const [extTotals, setExtTotals] = useState({ extLengthSum: 0, extZipSheetsSum: 0, extPlatePieces: 0, extPTLFSum: 0 });
-const [intTotals, setIntTotals] = useState({ int2x6LF: 0, int2x4LF: 0, intPlatePieces: 0, intPTLFSum: 0 });
+  const [ui, setUi] = useLocalStorageJson('inv:v1:ui', {
+    collapsed: false,
+    active: 'wallpanels',
+  });
+  const { collapsed, active } = ui;
 
-const combined = useMemo(() => {
-  return {
-    extLengthLF: extTotals.extLengthSum,
-    extZipSheetsFinal: extTotals.extZipSheetsSum,
-    int2x6LF: intTotals.int2x6LF,
-    int2x4LF: intTotals.int2x4LF,
-    platePiecesTotal: (extTotals.extPlatePieces || 0) + (intTotals.intPlatePieces || 0),
-    ptLFTotal: (extTotals.extPTLFSum || 0) + (intTotals.intPTLFSum || 0),
-  };
-}, [extTotals, intTotals]);
+  const setActive = useCallback((key) => {
+    setUi(prev => ({ ...prev, active: key }));
+  }, [setUi]);
+
+  const setCollapsed = useCallback((val) => {
+    setUi(prev => ({ ...prev, collapsed: !!val }));
+  }, [setUi]);
 
   return (
-    <main style={{ padding: 24 }}>
-     <Levels/>
-    </main>
+    <div className={`app-shell ${collapsed ? 'sb-collapsed' : ''}`}>
+      <Sidebar
+        active={active}
+        collapsed={collapsed}
+        onChange={setActive}
+        onCollapsedChange={setCollapsed}
+      />
+      <main className="app-main">
+        {active === 'wallpanels' ? (
+          <WallPanelsView />
+        ) : (
+          <div className="app-content">
+            <div className="ew-card">
+              <h2 className="ew-h2" style={{ marginTop: 0 }}>
+                {({
+                  auth:'Login / Logout',
+                  project:'Project',
+                  trusses:'Trusses',
+                  loose:'Loose Material',
+                  labor:'Labor',
+                  summary:'Summary',
+                  takeoff:'Takeoff list',
+                  quote:'Quote (QuickBooks)',
+                  export:'Export',
+                })[active] || 'Section'}
+              </h2>
+              <div className="ew-subtle">Coming soon — for now, use <span className="ew-chip">Wall Panels</span>.</div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

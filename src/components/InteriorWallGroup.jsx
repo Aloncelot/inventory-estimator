@@ -18,10 +18,6 @@ import {
 import { parseBoardLengthFt } from '@/domain/lib/parsing';
 import { isLVL, isVersaColumn, isLumberFamily, isInfillFamily } from '@/domain/lib/families';
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Helpers (mirrors exterior)
-   ────────────────────────────────────────────────────────────────────────── */
-
 const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const fmt = n => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : '—');
 
