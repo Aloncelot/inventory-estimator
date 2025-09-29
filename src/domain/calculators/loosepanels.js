@@ -77,12 +77,12 @@ export function looseCabinetBlocking({ blockingLF, boardLenFt, item, unit, waste
 // ───────────────────── General (nails/bracing) ─────────────────────
 
 export function looseConcreteNails({
-  ptLF, // total LF of PT lumber
+  ptLFAll, // total LF of PT lumber
   nailsPerLF = 25,
   perBox = 100,
   item, unit = 'box', wastePct = 50,
 }) {
-  const count = Number(ptLF || 0) * Number(nailsPerLF || 0);
+  const count = Number(ptLFAll || 0) * Number(nailsPerLF || 0);
   const res = calcBoxes({ count, perBox, item, unit, wastePct });
   return { ...res, wastePct };
 }

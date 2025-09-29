@@ -419,25 +419,6 @@ input[type="number"] { -moz-appearance: textfield; }
 /* keep our combobox list on top */
 .combo-list { z-index: 2000; }
 
-/* Sidebar */
-.app-sidebar {
-  position: sticky;
-  top: 0;
-  align-self: start;
-  height: 100dvh;
-  background: var(--bg-800);
-  border-right: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  z-index: 90; /* below combo-list (2000) */
-}
-
-.app-sidebar.collapsed {
-  width: 70px;
-  grid-template-columns: 70px;
-}
-
 .side-top {
   display: flex;
   align-items: center;
@@ -472,11 +453,22 @@ input[type="number"] { -moz-appearance: textfield; }
 .side-item.active { background: rgba(47,183,173,.14); border-color: rgba(47,183,173,.25); }
 .side-item.disabled { opacity: .55; cursor: not-allowed; }
 
-.app-sidebar.collapsed .side-item { grid-template-columns: 1fr; justify-items: center; }
-.app-sidebar.collapsed .side-label { display: none; }
 .side-ico { width: 20px; text-align: center; }
 
 .side-foot {
   padding: 10px;
   border-top: 1px solid var(--border);
 }
+
+.card { padding: 12px; background:#0c2b33; border-radius:12px; color:#e9f6f8; margin-top:12px; }
+.card-title { margin:0 0 10px; font-weight:700; }
+.fld { display:flex; flex-direction:column; gap:6px; }
+.fld input { padding:8px; border-radius:8px; border:1px solid #1a515d; background:#0c2b33; color:#e9f6f8; }
+.sum-row { display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding-top:10px; border-top:1px dashed #1a515d; font-size:1.05rem; }
+.sum-label { opacity:.9; }
+.sum-value { font-weight:800; }
+
+
+/* globals.css (optional helpers) */
+.ew-chip { padding:6px 10px; border:1px solid #1a515d; border-radius:999px; background:#0c2b33; color:#e9f6f8; cursor:pointer; }
+.ew-chip:hover { filter:brightness(1.1); }

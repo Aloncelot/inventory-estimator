@@ -55,7 +55,7 @@ export default function Sidebar({
       >
         {items.map((it, idx) => {
           const isActive = it.key === active;
-          const disabled = it.key !== 'wallpanels';
+          const disabled = !(it.key === 'wallpanels' || it.key === 'summary');
           return (
             <button
               key={it.key}

@@ -11,8 +11,8 @@ export default function Level({
   id,           // required: stable per-level id
   name,         // e.g. "Level 1"
   onRemove,     // optional: () => void
-  onLooseTotal, // optional: ({ id, subtotal }) => void  (kept for external listeners)
-  onLevelTotal,
+  onLooseTotal = () => {}, 
+  onLevelTotal = () => {},
 }) {
   // UI (collapsed persisted per level)
   const [ui, setUi] = useLocalStorageJson(`inv:v1:level-ui:${id}`, { collapsed: false });
@@ -36,7 +36,9 @@ export default function Level({
   const handleLooseSubtotal = useCallback((payload) => {
     const sub = Number(payload?.subtotal) || 0;
     setLooseSubtotal(sub);
-    onLooseTotal?.({ id, subtotal: sub });
+    if (typeof onLooseTotal === 'function') {
+      onLooseTotal?.({ id, subtotal: sub });
+    }
   }, [id, onLooseTotal]);
 
   // Level total = exterior panels + interior panels + loose (for this level)
@@ -113,8 +115,6 @@ export default function Level({
         <LoosePanelMaterials
           title={`${name} — Loose materials (wall panels)`}
           persistKey={`loose:${id}`}
-          // Inputs are computed inside LoosePanelMaterials from wrappers’ live totals via props on your current build.
-          // If you feed explicit props, keep passing them here (left as-is if you're already doing it).
           onSubtotalChange={handleLooseSubtotal}
         />
       </div>

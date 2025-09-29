@@ -148,7 +148,10 @@ export default function SearchableSelect({
 
       <div className="combo-caret" aria-hidden />
       {open && (
-        <ul id={listId} role="listbox" className="combo-list">
+        <ul 
+        id={listId} 
+        role="listbox" 
+        className="combo-list">
           {loading ? (
             <li className="combo-empty">Loading…</li>
           ) : filtered.length ? (

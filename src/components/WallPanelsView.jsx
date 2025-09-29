@@ -4,13 +4,17 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import Level from '@/components/Level';
+import PanelsManufactureEstimate from "@/components/PanelsManufactureEstimate";
+
 
 function genLevel() {
   return { id: crypto?.randomUUID?.() || ('lvl-' + Math.random().toString(36).slice(2,8)), name: '' };
 }
 
-export default function WallPanelsView() {
+export default function WallPanelsView({ onGrandTotal}) {
   // Persist levels
+  const [manufactureTotal, setManufactureTotal] = useState(0);
+
   const [levels, setLevels] = useLocalStorageJson('inv:v1:levels', [
     { id: 'level-1', name: 'Level 1' },
   ]);
@@ -59,21 +63,42 @@ export default function WallPanelsView() {
     });
   }, []);
 
-  // const grandLooseTotal = useMemo(() => {
-  //   return Object.values(looseByLevel).reduce((s, n) => s + (Number(n) || 0), 0);
-  // }, [looseByLevel]);
-
   const handleLevelTotal = useCallback(({id, total}) => {
     setTotalsByLevel(prev => (prev[id] === total ? prev : {...prev, [id]: total}));
   }, []);
 
-  const grandTotal = useMemo(
-    () => Object.values(totalsByLevel).reduce((s,n) => s + (Number(n) || 0), 0),
-    [totalsByLevel] 
-  );
+const grandLooseTotal = useMemo(
+  () => Object.values(looseByLevel).reduce((s, n) => s + (Number(n) || 0), 0),
+  [looseByLevel]
+);
+
+
+const grandTotal = useMemo(
+  () =>
+   Object.values(totalsByLevel).reduce((s,n) => s + (Number(n) || 0), 0)
+    + grandLooseTotal
+    + Number(manufactureTotal || 0),
+  [totalsByLevel, grandLooseTotal, manufactureTotal]
+);
+
+useEffect(()=> {
+  if (typeof onGrandTotal === 'function') onGrandTotal(grandTotal);
+}, [grandTotal, onGrandTotal]);
 
   const moneyFmt = useMemo(() => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }), []);
   const fmt = (n) => moneyFmt.format(Number(n) || 0);
+
+const [manufactureRows, setManufactureRows] = useState({
+  exteriorWalls: { lf: 0, panels: 0 },
+  interiorShear: { lf: 0, panels: 0 },
+  interiorBlockingOnly: { lf: 0, panels: 0 },
+  interiorNonLoad: { lf: 0, panels: 0 },
+  kneeWall: { lf: 0, panels: 0 },
+  windows: { qty: 0 },
+  exteriorDoors: { qty: 0 },
+  blocking2x10: { rows: 0 },
+});
+
 
   return (
     <div className="app-content">
@@ -83,7 +108,6 @@ export default function WallPanelsView() {
           Grand total: {fmt(grandTotal)}
           </div>
       </div>
-
       {levels.map((lvl, i) => (
         <Level
           key={lvl.id}
@@ -92,9 +116,14 @@ export default function WallPanelsView() {
           onRemove={levels.length > 1 ? () => removeLevel(lvl.id) : undefined}
           onLooseTotal={handleLooseTotal}
           onLevelTotal={handleLevelTotal}
-        />
+        />    
       ))}
-
+        {/* Panels Manufacture Estimate */}
+        <PanelsManufactureEstimate
+          rows={manufactureRows}
+          panelLenFt={8} 
+          onTotalChange={({ total}) => setManufactureTotal(Number(total) || 0)}
+        />
       <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div className="ew-subtle">Add another floor (mirrors functionality; you can input different quantities)</div>
         <button className="ew-btn ew-btn--turq" onClick={addLevel}>+ Add level</button>

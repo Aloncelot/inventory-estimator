@@ -367,7 +367,7 @@ export default function LoosePanelMaterials({
     // Concrete nails (Fastener Plus, Drive Pins with Washers (HD), 3"-100s)
     {
       const res = looseConcreteNails({ 
-        ptLF: ptLFTotal, 
+        ptLF: (ptLFTotal ?? ptLFAll), 
         item: getItem(sel.nailsConcrete), 
         unit: getUnit(sel.nailsConcrete) || 'box' 
       });
@@ -432,7 +432,7 @@ export default function LoosePanelMaterials({
     return out;
   }, [
     sel,
-    ptLFTotal, sheetsInThisSection, wallsLFTotal,
+    (ptLFTotal ?? ptLFAll), sheetsInThisSection, wallsLFTotal,
     generalInputs.platePiecesTotal
   ]);
 

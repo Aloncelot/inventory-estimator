@@ -4,7 +4,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import ExteriorWallGroup from '@/components/ExteriorWallGroup';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
-import { sum } from 'firebase/firestore';
 
 function genId() {
   return 'ex-' + Math.random().toString(36).slice(2, 8) + '-' + Date.now().toString(36);
