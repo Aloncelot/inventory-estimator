@@ -11,6 +11,7 @@ export default function InteriorWalls({
   title = 'Interior walls',
   levelId = 'default',               // <-- important for per-level storage
   onTotalsChange,                    // ({ int2x6LF, int2x4LF, intPlatePieces, intPTLFSum }) => void
+  isLevelOne = false,
 }) {
   // One persisted list of sections per level
   const [sections, setSections] = useLocalStorageJson(
@@ -73,6 +74,7 @@ export default function InteriorWalls({
           persistKey={`int:${levelId}:${sec.id}`}             // keep notes/selections per-level & per-section
           onRemove={() => removeSection(sec.id)}
           onStatsChange={(s) => updateStats(sec.id, s)}       // section → wrapper
+          bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
         />
       ))}
     </div>

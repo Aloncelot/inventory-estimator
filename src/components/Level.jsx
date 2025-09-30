@@ -104,12 +104,14 @@ export default function Level({
           levelId={id}
           onTotalsChange={handleExtTotals}
           title={`${name} — Exterior walls`}
+          isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
         />
 
         <InteriorWalls
           levelId={id}
           onTotalsChange={handleIntTotals}
           title={`${name} — Interior walls`}
+          isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
         />
 
         <LoosePanelMaterials

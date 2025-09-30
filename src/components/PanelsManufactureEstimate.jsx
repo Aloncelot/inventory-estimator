@@ -28,6 +28,7 @@ export default function PanelsManufactureEstimate({
   defaultCollapsed = false,
   persistKey = "inv:v1:ui:manufactureCollapsed",
   onTotalChange,
+  exteriorLF = 0
 }) {
   const [collapsed, setCollapsed] = useState(!!defaultCollapsed);
 
@@ -59,7 +60,9 @@ export default function PanelsManufactureEstimate({
   const lines = useMemo(() => {
     const L = [];
     const pushLF = (label, key, r) => {
-      const lf = Number(safe[key].lf || 0);
+      const lf = key === 'exteriorWalls'
+      ? Number(exteriorLF || 0)
+      : Number(safe[key].lf || 0);
       const panels = safe[key].panels || Math.round(lf / Math.max(1, panelLenFt));
       const subtotal = lf * (r.ratePerLF || 0); // switch to per-panel if needed
       L.push({ label, lf, panelLenFt, panels, ratePerLF: r.ratePerLF, ratePerPanel: r.ratePerPanel, total: subtotal });
@@ -96,7 +99,7 @@ export default function PanelsManufactureEstimate({
 
     return L;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(rows), panelLenFt, JSON.stringify(rates)]);
+  }, [JSON.stringify(rows), panelLenFt, JSON.stringify(rates), exteriorLF]);
 
   const totals = useMemo(() => {
     const lf = lines.reduce((s, x) => s + (Number(x.lf) || 0), 0);
@@ -114,44 +117,34 @@ export default function PanelsManufactureEstimate({
   const contentId = "manufacture-estimate-body";
 
   return (
-    <section className="card">
-      <div className="card-head" style={{
-      display:"grid",
-      gridTemplateColumns:"auto 1fr auto",
-      alignItems:"center",
-      gap:8
-    }}>
-      <button
-        type="button"
-        className="ew-chip"
-        onClick={() => setCollapsed(v => !v)}
-        aria-expanded={!collapsed}
-        aria-controls={contentId}
-        title={collapsed ? "Expand" : "Collapse"}
-        style={{justifySelf:"start"}}
-      >
-        {collapsed ? "▶" : "▼"}
-      </button>
-      <h2 className="card-title" style={{ margin: 0 }}>Panels Manufacture Estimate</h2>
-      <div className="sum-value" style={{ justifySelf:"end" }}>
-        {money(totals.total)}
+    <section className="ew-card"> {/* match wall-panels cards */}
+      <div className="ew-head" style={{ justifyContent:'space-between' }}>
+        <h2 className="ew-h2" style={{ margin:0 }}>Panels Manufacture Estimate</h2>
+          <button
+            type="button"
+            className="ew-chip"
+            onClick={() => setCollapsed(v => !v)}
+            aria-expanded={!collapsed}
+            aria-controls={contentId}
+            title={collapsed ? "Expand" : "Collapse"}
+          > 
+          {collapsed ? '▶' : '🔽'} {money(totals.total)}
+          </button>
       </div>
-    </div>
 
       {!collapsed && (
         <div className="table-wrap" id={contentId}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Wall type</th>
-                <th className="num">lf / qty</th>
-                <th className="num">panel</th>
-                <th className="num"># panels</th>
-                <th className="num">rate per</th>
-                <th className="num">rate per panel</th>
-                <th className="num">final price per</th>
-              </tr>
-            </thead>
+        <table className="tbl" style={{ width:'100%', tableLayout:'fixed' }}>
+         <colgroup>
+            <col style={{ width:'26%' }} />
+            <col style={{ width:'13%' }} />
+            <col style={{ width:'13%' }} />
+            <col style={{ width:'13%' }} />
+            <col style={{ width:'12%' }} />
+            <col style={{ width:'12%' }} />
+            <col style={{ width:'11%' }} />
+          </colgroup>
+          <thead>
             <tbody>
               {lines.map((r, i) => (
                 <tr key={i}>
@@ -163,8 +156,9 @@ export default function PanelsManufactureEstimate({
                   <td className="num">{r.ratePerPanel === "n/a" ? "n/a" : money(r.ratePerPanel)}</td>
                   <td className="num">{money(r.total)}</td>
                 </tr>
-              ))}
+              ))}                      
             </tbody>
+          </thead>        
             <tfoot>
               <tr>
                 <th>TOTALS</th>

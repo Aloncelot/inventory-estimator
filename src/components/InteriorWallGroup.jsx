@@ -43,6 +43,7 @@ export default function InteriorWallGroup({
   title = 'Interior walls',
   onRemove,
   persistKey = 'interior-0',
+  bottomDefaultFamily = 'SPF#2'
 }) {
   /* Interior toggles */
   const [series, setSeries] = useState('2x6');          // 2x4 | 2x6 | 2x8 | 2x10
@@ -263,6 +264,45 @@ export default function InteriorWallGroup({
         return { ...r, unit: res.unit, qtyRaw: res.qtyRaw, qtyFinal: res.qtyFinal, unitPrice: res.unitPrice, subtotal: res.subtotal, boardLenFt };
       }
 
+      if (r.type === 'Extra blocking') {
+        const rowsCnt = Math.max(1, Number(r?.inputs?.rows || 1));
+        const res = calcPlates({
+          lengthLF: Number(lengthLF || 0) * rowsCnt,
+          boardLenFt,
+          wastePct: r.wastePct ?? 10,
+          item: getItem(r),
+          unit: getUnit(r),
+        });
+        return {
+          ...r,
+          unit: res.unit,
+          qtyRaw: res.qtyRaw,
+          qtyFinal: res.qtyFinal,
+          unitPrice: res.unitPrice,
+          subtotal: res.subtotal,
+          boardLenFt
+        };
+      }
+
+          if (r.type === 'Extra sheathing') {
+            const res = calcSheathing({
+              lengthLF,
+              heightFt,
+              wastePct: r.wastePct ?? 5,
+              item: getItem(r),
+              unit: getUnit(r) || 'sheet',
+            });
+            return {
+              ...r,
+              unit: res.unit,
+              qtyRaw: res.qtyRaw,
+              qtyFinal: res.qtyFinal,
+              unitPrice: res.unitPrice,
+              subtotal: res.subtotal,
+              boardLenFt: null,
+            };
+          }
+
       if (r.type === 'Post') {
         const res = calcPost({
           isLinearLF: isLVL(fam) || isVersaColumn(fam),
@@ -288,7 +328,7 @@ export default function InteriorWallGroup({
       // Unknown extra type — pass through
       return r;
     });
-  }, [extras, heightFt]);
+  }, [extras, heightFt, lengthLF]);
 
   const groupSubtotal = useMemo(() => {
     const b = baseRows.reduce((s,r)=> s + (r.subtotal||0), 0);
@@ -472,8 +512,9 @@ export default function InteriorWallGroup({
                         defaultVendor="Gillies & Prittie Warehouse"
                         defaultFamilyLabel={
                           row.key==='sheathing' ? 'CDX SE' :
-                          row.key==='bottomPlate' ? 'PT' : 'SPF#2'
+                          row.key==='bottomPlate' ? bottomDefaultFamily : 'SPF#2'
                         }
+                        preferredSeries={row.key === 'sheathing' ? undefined : series}
                       />
                     </div>
 
@@ -580,7 +621,12 @@ export default function InteriorWallGroup({
                         compact
                         onSelect={item => updateExtra(ex.id, { item })}
                         defaultVendor="Gillies & Prittie Warehouse"
-                        defaultFamilyLabel={ex.type === 'Headers infill' ? 'CDX SE' : 'SPF#2'}
+                        defaultFamilyLabel={
+                          (ex.type === 'Headers infill' || ex.type === 'Extra sheathing')
+                          ? 'CDX SE' 
+                          : 'SPF#2'
+                        }
+                        defaultSizeLabel={ex.type === 'Extra sheathing' ? `4x8'-1/2"` : undefined}
                       />
 
                       {/* Header params */}
@@ -660,6 +706,32 @@ export default function InteriorWallGroup({
                           QTY = Σ Header LF ÷ 3 ÷ 32 × 2 (then waste)
                         </div>
                       )}
+                      {ex.type==='Extra sheathing' && (
+                        <div className='ew-hint'
+                        style={{marginTop:6}}>
+                          Same math as regular sheathing (length × height ÷ 32), then waste.
+                          </div>
+                      )}
+                      {ex.type==='Extra blocking' && (
+                        <div className="ew-inline" style={{ marginTop:6, alignItems:'end', gap:12 }}>
+                          <label style={{ minWidth:140 }}>
+                            <span className="ew-subtle">Rows (#)</span>
+                            <input
+                              className="ew-input focus-anim"
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={ex.inputs?.rows || 1}
+                              onChange={e => updateExtra(ex.id, {
+                                inputs: { ...(ex.inputs || {}), rows: Math.max(1, Number(e.target.value || 1)) }
+                              })}
+                            />
+                          </label>
+                          <div className="ew-hint">
+                            Same math as plates × rows (then waste). Board length from size: {ex.boardLenFt || parseBoardLengthFt(getSize(ex)) || '—'} ft
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Qty / waste / unit / price / subtotal */}
@@ -729,6 +801,10 @@ export default function InteriorWallGroup({
           <div className="ew-footer">
             <button className="ew-btn" onClick={() => addExtra('Header')}>➕ Header</button>
             <button className="ew-btn" onClick={() => addExtra('Post')}>➕ Post</button>
+            <button className='ew-btn' onClick={() => addExtra('Extra blocking')}>➕ Blocking</button>
+            {showSheathing && (
+              <button className='ew-btn' onClick={ () => addExtra('Extra sheathing')}>➕ Extra Sheathing</button>
+            )}
             <div className="ew-total">Group subtotal: {fmt(groupSubtotal)}</div>
           </div>
         </div>

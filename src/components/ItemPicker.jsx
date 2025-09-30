@@ -8,12 +8,21 @@ import SearchableSelect from '@/components/SearchableSelect';
 // Normalize a string for case-insensitive, space-insensitive comparisons
 const norm = (s = '') => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+// Normalize a size token for series matching: keep digits and "x", remove quotes/symbols/spaces
+// e.g. `2×6"-8'` -> `2x6-8` (we only care that it starts with `2x6`)
+const cleanSizeToken = (s = '') =>
+  String(s)
+    .toLowerCase()
+    .replace(/×/g, 'x')
+    .replace(/[^a-z0-9x]+/g, ''); // strip quotes, spaces, punctuation
+
 export default function ItemPicker({
   onSelect,
   compact = false,
   // Preferred default vendor label; you can add a defaultVendorId prop later if needed
   defaultVendor = 'Gillies & Prittie Warehouse',
   defaultFamilyLabel,   // e.g., "SPF#2" (optional)
+  preferredSeries,      // e.g., "2x6" | "2x4" (optional)
   defaultSizeLabel,     // e.g., 2x6"-12' (optional)
 }) {
   // Data
@@ -35,6 +44,13 @@ export default function ItemPicker({
   const didAutoFamilyForVendor = useRef(''); // remembers vendorId we auto-picked a family for
   const didAutoSizeForFamily   = useRef(''); // remembers vendorId::familySlug we auto-picked a size for
 
+  // Helper: try to find first size that matches the preferred series
+  const findSeriesMatch = (list) => {
+    if (!preferredSeries) return null;
+    const want = cleanSizeToken(preferredSeries);  // "2x6"
+    return (list || []).find(s => cleanSizeToken(s.sizeLabel).startsWith(want)) || null;
+  };
+
   // 1) Load vendors once (on mount)
   useEffect(() => {
     let alive = true;
@@ -53,7 +69,7 @@ export default function ItemPicker({
 
     const want = norm(defaultVendor);
     const pick =
-      // loose token match for "Gillies & Prittie"
+      // token match for "Gillies & Prittie"
       vendors.find(v => {
         const n = norm(v.displayName || v.id);
         return n.includes('gillies') && n.includes('prittie');
@@ -116,7 +132,7 @@ export default function ItemPicker({
     return () => { alive = false; };
   }, [vendorId]); // keep deps minimal by design
 
-  // 4) When family changes → reset size, load sizes, auto-pick one
+  // 4) When family changes → reset size, load sizes, auto-pick one (prefer series)
   useEffect(() => {
     let alive = true;
 
@@ -139,10 +155,19 @@ export default function ItemPicker({
       if (didAutoSizeForFamily.current !== famKey && ss?.length) {
         let size = null;
 
-        if (defaultSizeLabel) {
+        // 1) Try to match by preferred series (e.g., "2x6" → '2x6"-8\'')
+        size = findSeriesMatch(ss);
+
+        // 2) Then try defaultSizeLabel (your original behavior)
+        if (!size && defaultSizeLabel) {
           const want = norm(defaultSizeLabel);
-          size = ss.find(s => norm(s.sizeLabel) === want) || ss.find(s => norm(s.sizeLabel).includes(want));
+          size =
+            ss.find(s => norm(s.sizeLabel) === want) ||
+            ss.find(s => norm(s.sizeLabel).includes(want)) ||
+            null;
         }
+
+        // 3) Fallback: first size
         if (!size) size = ss[0];
 
         didAutoSizeForFamily.current = famKey;
@@ -151,7 +176,20 @@ export default function ItemPicker({
     })();
 
     return () => { alive = false; };
-  }, [vendorId, familySlug, defaultSizeLabel]);
+  }, [vendorId, familySlug, preferredSeries, defaultSizeLabel]); // include series so first auto-pick prefers it
+
+  // 5) If the user changes the Series later (without changing vendor/family),
+  // re-align the size to the new series if current size doesn't match.
+  useEffect(() => {
+    if (!preferredSeries || !sizes?.length) return;
+    const current = sizes.find(s => s.id === sizeId);
+    const wantMatch = findSeriesMatch(sizes);
+    const currentMatches =
+      current && wantMatch && cleanSizeToken(current.sizeLabel).startsWith(cleanSizeToken(preferredSeries));
+    if (!currentMatches && wantMatch) {
+      setSizeId(wantMatch.id);
+    }
+  }, [preferredSeries, sizes, sizeId]); // safe: setting sizeId won't change these deps in a loop
 
   // Build selected object for parent consumers
   const selected = useMemo(() => {

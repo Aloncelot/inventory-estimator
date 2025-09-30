@@ -9,12 +9,19 @@ function genId() {
   return 'ex-' + Math.random().toString(36).slice(2, 8) + '-' + Date.now().toString(36);
 }
 
-export default function ExteriorWalls({ onTotalsChange, title = 'Exterior walls', levelId = 'default' }) {
+export default function ExteriorWalls({ 
+  onTotalsChange, 
+  title = 'Exterior walls', 
+  levelId = 'default', 
+  isLevelOne = false,
+  onLengthLFChange,
+}) {
   const [sections, setSections] = useLocalStorageJson(`inv:v1:ex:sections:${levelId}`, [
     { id: genId() },
   ]);
 
   const [statsById, setStatsById] = useState({}); // { [id]: { id, lengthLF, zipSheetsFinal, platePieces, ptLF, groupSubtotal } }
+  const [lengths, setLengths] = useState({}); // { sectionId: lengthLF }
 
   const addSection = () => setSections(prev => [...prev, { id: genId() }]);
   const removeSection = (id) => {
@@ -22,21 +29,32 @@ export default function ExteriorWalls({ onTotalsChange, title = 'Exterior walls'
     setStatsById(prev => { const c={...prev}; delete c[id]; return c; });
   };
 
+
   const handleStatsChange = useCallback((s) => {
     if (!s || !s.id) return;
+
+    // Keep your original memoized statsById behavior
     setStatsById(prev => {
       const p = prev[s.id];
       if (p &&
-          p.lengthLF === s.lengthLF &&
+          p.lengthLF       === s.lengthLF &&
           p.zipSheetsFinal === s.zipSheetsFinal &&
-          p.platePieces === s.platePieces &&
-          p.ptLF === s.ptLF &&
-          p.groupSubtotal === s.groupSubtotal) {
+          p.platePieces    === s.platePieces &&
+          p.ptLF           === s.ptLF &&
+          p.groupSubtotal  === s.groupSubtotal) {
         return prev;
       }
       return { ...prev, [s.id]: s };
     });
+
+    // NEW: track raw LF per section (for total Exterior LF)
+    if (Number.isFinite(s.lengthLF)) {
+      setLengths(prev => (prev[s.id] === s.lengthLF ? prev : { ...prev, [s.id]: s.lengthLF }));
+    }
   }, []);
+
+
+  
 
   const totals = useMemo(() => {
     const arr = Object.values(statsById);
@@ -48,6 +66,15 @@ export default function ExteriorWalls({ onTotalsChange, title = 'Exterior walls'
     const panelsSubtotal  = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
     return { extLengthSum, extZipSheetsSum, extPlatePieces, extPTLFSum, extMoneySum, panelsSubtotal };
   }, [statsById]);
+
+  const totalExteriorLF = useMemo(
+    () => Object.values(lengths).reduce((sum, n) => sum + (Number(n) || 0), 0),
+    [lengths]
+  );
+
+  useEffect(() => {
+    if (typeof onLengthLFChange === 'function') onLengthLFChange(totalExteriorLF);
+  }, [totalExteriorLF, onLengthLFChange]);
 
   useEffect(() => { onTotalsChange?.(totals); }, [totals, onTotalsChange]);
 
@@ -74,6 +101,7 @@ export default function ExteriorWalls({ onTotalsChange, title = 'Exterior walls'
           title={`Exterior walls — section ${idx + 1}`}
           onRemove={() => removeSection(sec.id)}
           onStatsChange={handleStatsChange}
+          bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
         />
       ))}
     </section>

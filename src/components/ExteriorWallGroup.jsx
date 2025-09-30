@@ -40,6 +40,7 @@ export default function ExteriorWallGroup({
   title = 'Exterior walls',
   onRemove,
   persistKey = 'exterior-0',
+  bottomDefaultFamily = 'SPF#2',
 }) {
   /** Shared inputs */
   const [lengthLF, setLengthLF]           = useState(0);
@@ -419,7 +420,12 @@ export default function ExteriorWallGroup({
                       compact
                       onSelect={setPick(row.key)}
                       defaultVendor="Gillies & Prittie Warehouse"
-                      defaultFamilyLabel="SPF#2"
+                      defaultFamilyLabel={
+                        row.key === 'sheathing'   ?   'CDX SE':
+                        row.key === 'bottomPlate' ?   bottomDefaultFamily :
+                                                      'SPF#2'
+                      }                     
+                      preferredSeries={row.key === 'sheathing'  ? undefined: '2x6'}
                     />
 
                     {/* Qty raw (rounded up visually) */}
