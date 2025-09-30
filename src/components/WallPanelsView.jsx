@@ -14,6 +14,27 @@ function genLevel() {
 export default function WallPanelsView({ onGrandTotal}) {
   // Persist levels
   const [manufactureTotal, setManufactureTotal] = useState(0);
+  const [extLfByLevel, setExtLfByLevel] = useState({}); // { levelId: lf }
+  const handleExteriorLF = useCallback(({ id, lf }) => {
+    setExtLfByLevel(prev => (prev[id] === lf ? prev : { ...prev, [id]: Number(lf) || 0 }));
+  }, []);
+  const totalExteriorLF = useMemo(
+    () => Object.values(extLfByLevel).reduce((s, n) => s + (Number(n) || 0), 0),
+    [extLfByLevel]
+  );
+
+  // panel length (ft) per level (from bottom plate size)
+const [extPanelLenByLevel, setExtPanelLenByLevel] = useState({});
+const handleExteriorPanelLen = useCallback(({ id, len }) => {
+  setExtPanelLenByLevel(prev => (prev[id] === len ? prev : { ...prev, [id]: Number(len) || 0 }));
+}, []);
+const panelLenFtExterior = useMemo(() => {
+  const vals = Object.values(extPanelLenByLevel).filter(Boolean);
+  if (!vals.length) return 8;
+  const counts = {};
+  for (const v of vals) counts[v] = (counts[v] || 0) + 1;
+  return Number(Object.keys(counts).sort((a,b) => counts[b]-counts[a] || b-a)[0]);
+}, [extPanelLenByLevel]);
 
   const [levels, setLevels] = useLocalStorageJson('inv:v1:levels', [
     { id: 'level-1', name: 'Level 1' },
@@ -116,12 +137,16 @@ const [manufactureRows, setManufactureRows] = useState({
           onRemove={levels.length > 1 ? () => removeLevel(lvl.id) : undefined}
           onLooseTotal={handleLooseTotal}
           onLevelTotal={handleLevelTotal}
+          onExteriorLF={handleExteriorLF}
+          onExteriorPanelLen={handleExteriorPanelLen}
         />    
       ))}
         {/* Panels Manufacture Estimate */}
         <PanelsManufactureEstimate
           rows={manufactureRows}
           panelLenFt={8} 
+          panelLenFtExterior={panelLenFtExterior}
+          exteriorLF={totalExteriorLF}
           onTotalChange={({ total}) => setManufactureTotal(Number(total) || 0)}
         />
       <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>

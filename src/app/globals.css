@@ -472,3 +472,40 @@ input[type="number"] { -moz-appearance: textfield; }
 /* globals.css (optional helpers) */
 .ew-chip { padding:6px 10px; border:1px solid #1a515d; border-radius:999px; background:#0c2b33; color:#e9f6f8; cursor:pointer; }
 .ew-chip:hover { filter:brightness(1.1); }
+
+/* === Generic table styling for estimators ================================= */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;          /* consistent column widths */
+  table-layout: fixed;                /* respects <colgroup> widths */
+}
+
+.tbl th,
+.tbl td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.tbl thead th {
+  text-align: left;                   /* default for text columns */
+  color: var(--turq-300);
+  font-weight: 700;
+  background: linear-gradient(180deg, rgba(47,183,173,.10), transparent 70%);
+}
+
+.tbl tfoot th,
+.tbl tfoot td {
+  font-weight: 700;
+  background: rgba(0,0,0,.06);
+}
+
+/* Right-align numeric columns (headers + cells) */
+.tbl .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums; /* keeps digits aligned */
+}
+
+/* Optional: zebra only for body rows (not head/foot) */
+.tbl tbody tr:nth-child(even) { background: var(--bg-750); }
+.tbl tbody tr:hover { background: var(--bg-700); }

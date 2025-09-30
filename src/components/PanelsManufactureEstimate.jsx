@@ -1,4 +1,3 @@
-// src/components/PanelsManufactureEstimate.jsx
 "use client";
 import { useMemo, useEffect, useState } from "react";
 
@@ -24,15 +23,26 @@ function fmt(n){ return Number(n || 0).toLocaleString("en-US"); }
 export default function PanelsManufactureEstimate({
   rows = {},
   panelLenFt = 8,
+  panelLenFtExterior,
   rates = DEFAULT_RATES,
   defaultCollapsed = false,
   persistKey = "inv:v1:ui:manufactureCollapsed",
+  persistRatesKey = "inv:v1:ui:manufactureRates",
   onTotalChange,
   exteriorLF = 0
 }) {
   const [collapsed, setCollapsed] = useState(!!defaultCollapsed);
 
-  // load persisted state
+  // editable Rate per LF, per LF-row key
+  const [ratePerLFByKey, setRatePerLFByKey] = useState({
+    exteriorWalls:   rates.exteriorWalls?.ratePerLF ?? 0,
+    interiorShear:   rates.interiorShear?.ratePerLF ?? 0,
+    interiorBlockingOnly: rates.interiorBlocking?.ratePerLF ?? 0,
+    interiorNonLoad: rates.interiorNonLoad?.ratePerLF ?? 0,
+    kneeWall:        rates.kneeWall?.ratePerLF ?? 0,
+  });
+
+  // load persisted collapse
   useEffect(() => {
     try {
       const raw = localStorage.getItem(persistKey);
@@ -40,12 +50,31 @@ export default function PanelsManufactureEstimate({
     } catch {}
   }, [persistKey]);
 
-  // persist on change
+  // persist collapse
   useEffect(() => {
     try { localStorage.setItem(persistKey, collapsed ? "1" : "0"); } catch {}
   }, [collapsed, persistKey]);
 
-  // safe shape
+  // load persisted rates
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(persistRatesKey);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved && typeof saved === 'object') {
+          setRatePerLFByKey(prev => ({ ...prev, ...saved }));
+        }
+      }
+    } catch {}
+    // also (re)seed from incoming rates if they change
+  }, [persistRatesKey, rates]);
+
+  // persist rates on change
+  useEffect(() => {
+    try { localStorage.setItem(persistRatesKey, JSON.stringify(ratePerLFByKey)); } catch {}
+  }, [ratePerLFByKey, persistRatesKey]);
+
+  // safe shape from parent
   const safe = {
     exteriorWalls: rows.exteriorWalls || { lf:0, panels:0 },
     interiorShear: rows.interiorShear || { lf:0, panels:0 },
@@ -60,22 +89,36 @@ export default function PanelsManufactureEstimate({
   const lines = useMemo(() => {
     const L = [];
     const pushLF = (label, key, r) => {
-      const lf = key === 'exteriorWalls'
-      ? Number(exteriorLF || 0)
+      const lf = key === 'exteriorWalls' 
+      ? Number(exteriorLF || 0) 
       : Number(safe[key].lf || 0);
-      const panels = safe[key].panels || Math.round(lf / Math.max(1, panelLenFt));
-      const subtotal = lf * (r.ratePerLF || 0); // switch to per-panel if needed
-      L.push({ label, lf, panelLenFt, panels, ratePerLF: r.ratePerLF, ratePerPanel: r.ratePerPanel, total: subtotal });
-    };
+      const panelLenThisRow = (key === 'exteriorWalls' && Number(panelLenFtExterior || 0) > 0)
+        ? Number(panelLenFtExterior)
+        : panelLenFt;
+      const panels = safe[key].panels || Math.round(lf / Math.max(1, panelLenThisRow));
+      const rateLF = Number(ratePerLFByKey[key] ?? r.ratePerLF ?? 0);
+      const subtotal = lf * rateLF;
 
+      L.push({
+        key, label,
+        lf,
+        panelLenFt: panelLenThisRow,
+        panels,
+        ratePerLF: rateLF,
+        ratePerPanel: r.ratePerPanel,
+        total: subtotal
+      });
+    };
+    
     pushLF("Exterior Walls", "exteriorWalls", rates.exteriorWalls);
     pushLF("Interior Shear walls", "interiorShear", rates.interiorShear);
     pushLF("Interior wall with blocking only", "interiorBlockingOnly", rates.interiorBlocking);
     pushLF("Interior Non-load bearing walls", "interiorNonLoad", rates.interiorNonLoad);
     pushLF("Knee wall", "kneeWall", rates.kneeWall);
 
-    // unit-based items
+    // unit-based items (not editable)
     L.push({
+      key: 'windows',
       label: "Windows",
       lf: "0", panelLenFt: "n/a", panels: "n/a",
       ratePerLF: rates.windows.each, ratePerPanel: "n/a",
@@ -83,6 +126,7 @@ export default function PanelsManufactureEstimate({
       qtyOnly: true, qty: safe.windows.qty || 0,
     });
     L.push({
+      key: 'exteriorDoors',
       label: "Exterior Doors",
       lf: "0", panelLenFt: "n/a", panels: "n/a",
       ratePerLF: rates.exteriorDoors.each, ratePerPanel: "n/a",
@@ -90,6 +134,7 @@ export default function PanelsManufactureEstimate({
       qtyOnly: true, qty: safe.exteriorDoors.qty || 0,
     });
     L.push({
+      key: 'blocking2x10',
       label: "2x10 blocking rows",
       lf: "0", panelLenFt: "n/a", panels: "n/a",
       ratePerLF: rates.blocking2x10.each, ratePerPanel: "n/a",
@@ -99,7 +144,7 @@ export default function PanelsManufactureEstimate({
 
     return L;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(rows), panelLenFt, JSON.stringify(rates), exteriorLF]);
+  }, [JSON.stringify(rows), panelLenFt, JSON.stringify(rates), exteriorLF, ratePerLFByKey]);
 
   const totals = useMemo(() => {
     const lf = lines.reduce((s, x) => s + (Number(x.lf) || 0), 0);
@@ -108,57 +153,90 @@ export default function PanelsManufactureEstimate({
     return { lf, panels, total };
   }, [lines]);
 
-  useEffect( () => {
-    if ( typeof onTotalChange === 'function') {
-      onTotalChange ({ total: totals.total});
+  useEffect(() => {
+    if (typeof onTotalChange === 'function') {
+      onTotalChange({ total: totals.total });
     }
   }, [totals.total, onTotalChange]);
 
   const contentId = "manufacture-estimate-body";
 
+  const handleRateChange = (key) => (e) => {
+    const val = Number(e.target.value);
+    setRatePerLFByKey(prev => ({ ...prev, [key]: Number.isFinite(val) ? val : 0 }));
+  };
+
   return (
-    <section className="ew-card"> {/* match wall-panels cards */}
+    <section className="ew-card">
       <div className="ew-head" style={{ justifyContent:'space-between' }}>
         <h2 className="ew-h2" style={{ margin:0 }}>Panels Manufacture Estimate</h2>
-          <button
-            type="button"
-            className="ew-chip"
-            onClick={() => setCollapsed(v => !v)}
-            aria-expanded={!collapsed}
-            aria-controls={contentId}
-            title={collapsed ? "Expand" : "Collapse"}
-          > 
+        <button
+          type="button"
+          className="ew-chip"
+          onClick={() => setCollapsed(v => !v)}
+          aria-expanded={!collapsed}
+          aria-controls={contentId}
+          title={collapsed ? "Expand" : "Collapse"}
+        >
           {collapsed ? '▶' : '🔽'} {money(totals.total)}
-          </button>
+        </button>
       </div>
 
       {!collapsed && (
         <div className="table-wrap" id={contentId}>
-        <table className="tbl" style={{ width:'100%', tableLayout:'fixed' }}>
-         <colgroup>
-            <col style={{ width:'26%' }} />
-            <col style={{ width:'13%' }} />
-            <col style={{ width:'13%' }} />
-            <col style={{ width:'13%' }} />
-            <col style={{ width:'12%' }} />
-            <col style={{ width:'12%' }} />
-            <col style={{ width:'11%' }} />
-          </colgroup>
-          <thead>
+          <table className="tbl" style={{ width:'100%', tableLayout:'fixed' }}>
+            <colgroup>
+              <col style={{ width:'26%' }} />
+              <col style={{ width:'13%' }} />
+              <col style={{ width:'13%' }} />
+              <col style={{ width:'13%' }} />
+              <col style={{ width:'12%' }} />
+              <col style={{ width:'12%' }} />
+              <col style={{ width:'11%' }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Wall type</th>
+                <th className="num">lf / qty</th>
+                <th className="num">panel</th>
+                <th className="num"># panels</th>
+                <th className="num">Rate per lf</th>
+                <th className="num">Rate per panel</th>
+                <th className="num">Final price per</th>
+              </tr>
+            </thead>
             <tbody>
-              {lines.map((r, i) => (
-                <tr key={i}>
-                  <td>{r.label}</td>
-                  <td className="num">{r.qtyOnly ? fmt(r.qty) : fmt(r.lf)}</td>
-                  <td className="num">{r.panelLenFt}</td>
-                  <td className="num">{r.qtyOnly ? "n/a" : fmt(r.panels)}</td>
-                  <td className="num">{money(r.ratePerLF)}</td>
-                  <td className="num">{r.ratePerPanel === "n/a" ? "n/a" : money(r.ratePerPanel)}</td>
-                  <td className="num">{money(r.total)}</td>
-                </tr>
-              ))}                      
+              {lines.map((r, i) => {
+                const isEditableLF = !r.qtyOnly && typeof r.ratePerLF === 'number';
+                return (
+                  <tr key={r.key || i}>
+                    <td>{r.label}</td>
+                    <td className="num">{r.qtyOnly ? fmt(r.qty) : fmt(r.lf)}</td>
+                    <td className="num">{r.panelLenFt}</td>
+                    <td className="num">{r.qtyOnly ? "n/a" : fmt(r.panels)}</td>
+                    <td className="num">
+                      {isEditableLF ? (
+                        <input
+                          className="ew-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={ratePerLFByKey[r.key]}
+                          onChange={handleRateChange(r.key)}
+                          style={{ width: 110, textAlign:'right', padding: '6px 8px' }}
+                          aria-label={`Rate per LF for ${r.label}`}
+                          title="Rate per LF"
+                        />
+                      ) : (
+                        money(r.ratePerLF)
+                      )}
+                    </td>
+                    <td className="num">{r.ratePerPanel === "n/a" ? "n/a" : money(r.ratePerPanel)}</td>
+                    <td className="num">{money(r.total)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
-          </thead>        
             <tfoot>
               <tr>
                 <th>TOTALS</th>

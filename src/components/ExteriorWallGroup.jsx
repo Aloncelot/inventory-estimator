@@ -72,6 +72,7 @@ export default function ExteriorWallGroup({
   const bottomLen = parseBoardLengthFt(getSize(sel.bottomPlate)) ?? 12;
   const topLen    = parseBoardLengthFt(getSize(sel.topPlate))    ?? 12;
   const blockLen  = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
+  const bottomBoardLenFt = Number(bottomLen || 0);
 
   /* Build base rows */
   const baseRows = useMemo(() => {
@@ -178,7 +179,7 @@ export default function ExteriorWallGroup({
       });
       rows.push({
         key: 'sheathing',
-        label: 'Sheathing (4x8)',
+        label: 'Sheathing',
         item: getItem(sel.sheathing),
         unit: res.unit,
         qtyRaw: res.qtyRaw,
@@ -307,8 +308,9 @@ export default function ExteriorWallGroup({
       platePieces,
       ptLF: Number(lengthLF || 0),
       groupSubtotal,
+      bottomBoardLenFt,
     });
-  }, [persistKey, lengthLF, zipSheetsFinal, platePieces, groupSubtotal]);  
+  }, [persistKey, lengthLF, zipSheetsFinal, platePieces, groupSubtotal, bottomBoardLenFt]);  
 
   /* ────────────────────────────────────────────────────────────────────────
      Render
@@ -607,8 +609,8 @@ export default function ExteriorWallGroup({
                     </div>
 
                     {/* Qty / waste / unit / price / subtotal */}
-                    <div className="t-right">{Math.ceil(ex.qtyRaw ?? 0)}</div>
-                    <div className="t-right">
+                    <div className="ew-right">{Math.ceil(ex.qtyRaw ?? 0)}</div>
+                    <div className="ew-right">
                       <input
                         className="ew-input focus-anim"
                         type="number" inputMode="decimal"
@@ -617,10 +619,10 @@ export default function ExteriorWallGroup({
                         style={{ width: 80, textAlign: 'right' }}
                       />
                     </div>
-                    <div className="t-right">{ex.qtyFinal ?? '—'}</div>
-                    <div className="t-right">{ex.unit}</div>
-                    <div className="t-right ew-money">{ex.unitPrice ? fmt(ex.unitPrice) : '—'}</div>
-                    <div className="t-right ew-money">{ex.subtotal ? fmt(ex.subtotal) : '—'}</div>
+                    <div className="ew-right">{ex.qtyFinal ?? '—'}</div>
+                    <div className="ew-right">{ex.unit}</div>
+                    <div className="ew-right ew-money">{ex.unitPrice ? fmt(ex.unitPrice) : '—'}</div>
+                    <div className="ew-right ew-money">{ex.subtotal ? fmt(ex.subtotal) : '—'}</div>
 
                     {/* Notes */}
                     <div>

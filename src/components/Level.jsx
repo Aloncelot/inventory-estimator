@@ -13,6 +13,8 @@ export default function Level({
   onRemove,     // optional: () => void
   onLooseTotal = () => {}, 
   onLevelTotal = () => {},
+  onExteriorLF,
+  onExteriorPanelLen,
 }) {
   // UI (collapsed persisted per level)
   const [ui, setUi] = useLocalStorageJson(`inv:v1:level-ui:${id}`, { collapsed: false });
@@ -101,9 +103,13 @@ export default function Level({
       <div style={{ display: collapsed ? 'none' : 'block' }} aria-hidden={collapsed}>
         {/* pass levelId so each floor stores its own sections */}
         <ExteriorWalls
-          levelId={id}
-          onTotalsChange={handleExtTotals}
+          levelId={id}          
+          onTotalsChange={(t) => {
+            handleExtTotals(t);
+          }}
           title={`${name} — Exterior walls`}
+          onLengthLFChange={ (lf) => onExteriorLF?.({ id, lf })}
+          onPanelLenFtChange={(len) => onExteriorPanelLen?.({ id, len })}
           isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
         />
 
