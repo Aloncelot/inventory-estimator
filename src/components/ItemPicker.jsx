@@ -189,7 +189,7 @@ export default function ItemPicker({
     if (!currentMatches && wantMatch) {
       setSizeId(wantMatch.id);
     }
-  }, [preferredSeries, sizes, sizeId]); // safe: setting sizeId won't change these deps in a loop
+  }, [preferredSeries, sizes, sizeId]); // safe: guarded by comparisons
 
   // Build selected object for parent consumers
   const selected = useMemo(() => {
@@ -212,13 +212,27 @@ export default function ItemPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
+  // ---- memoized options to avoid re-renders in the select ----
+  const vendorOptions = useMemo(
+    () => vendors.map(v => ({ value: v.id,    label: v.displayName })),
+    [vendors]
+  );
+  const familyOptions = useMemo(
+    () => families.map(f => ({ value: f.slug, label: f.label })),
+    [families]
+  );
+  const sizeOptions = useMemo(
+    () => sizes.map(s => ({ value: s.id,     label: s.sizeLabel })),
+    [sizes]
+  );
+
   // ---- UI pieces (searchable) ------------------------------------------
   const VendorSelect = (
     <SearchableSelect
       ariaLabel="Vendor"
       value={vendorId}
       onChange={setVendorId}
-      options={vendors.map(v => ({ value: v.id, label: v.displayName }))}
+      options={vendorOptions}
       placeholder="Select vendor…"
       disabled={!vendors.length}
     />
@@ -229,7 +243,7 @@ export default function ItemPicker({
       ariaLabel="Family"
       value={familySlug}
       onChange={setFamilySlug}
-      options={families.map(f => ({ value: f.slug, label: f.label }))}
+      options={familyOptions}
       placeholder={loadingFamilies ? 'Loading families…' : 'Family…'}
       disabled={!families.length || loadingFamilies}
       loading={loadingFamilies}
@@ -241,7 +255,7 @@ export default function ItemPicker({
       ariaLabel="Size"
       value={sizeId}
       onChange={setSizeId}
-      options={sizes.map(s => ({ value: s.id, label: s.sizeLabel }))}
+      options={sizeOptions}
       placeholder={loadingSizes ? 'Loading sizes…' : 'Size…'}
       disabled={!sizes.length || loadingSizes}
       loading={loadingSizes}

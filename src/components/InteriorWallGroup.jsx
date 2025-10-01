@@ -107,6 +107,7 @@ export default function InteriorWallGroup({
         unitPrice: res.unitPrice,
         subtotal: res.subtotal,
         wastePct: waste.bottomPlate ?? 0,
+        boardLenFt: res.boardLenFt,
       });
     }
 
@@ -344,8 +345,9 @@ export default function InteriorWallGroup({
       platePieces,
       ptLF: Number(lengthLF||0),
       groupSubtotal,
+      bottomBoardLenFt: Number(rowByKey.bottomPlate?.boardLenFt ?? bottomLen ?? 0), 
     });
-  }, [persistKey, wallKind, lengthLF, platePieces, ptLF, groupSubtotal]);
+  }, [persistKey, wallKind, lengthLF, platePieces, ptLF, groupSubtotal, bottomLen, rowByKey.bottomPlate?.boardLenFt]);
 
   /* ────────────────────────────────────────────────────────────────────────
      Render
@@ -514,7 +516,8 @@ export default function InteriorWallGroup({
                           row.key==='sheathing' ? 'CDX SE' :
                           row.key==='bottomPlate' ? bottomDefaultFamily : 'SPF#2'
                         }
-                        preferredSeries={row.key === 'sheathing' ? undefined : series}
+                        defaultSizeLabel={row.key === 'sheathing' ? `4x8'-1/2"` : undefined}
+                        preferredSeries={row.key === 'sheathing' ? undefined : '2x6'}
                       />
                     </div>
 

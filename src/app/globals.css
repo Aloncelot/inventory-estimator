@@ -63,6 +63,19 @@ html, body {
 }
 .ew-title span{ color: var(--turq-300); }
 
+/* Brighten ONLY the Level header card (it’s the one that contains the Level total chip) */
+.ew-card:has(.ew-chip[title="Level total (Panels + Loose)"]) .ew-h2 {
+  color: #00fcef;           /* brighter/darker for emphasis */
+  letter-spacing: 0.2px;
+}
+
+/* Optional: subtle band so the Level start/stop is obvious */
+.ew-card:has(.ew-chip[title="Level total (Panels + Loose)"]) {
+  background: linear-gradient(to bottom, rgba(41, 94, 94, 0.986), transparent);
+  border-color: rgb(0, 255, 255);
+}
+
+
 .ew-grid{
   display:grid;
   grid-template-columns: var(--cols);

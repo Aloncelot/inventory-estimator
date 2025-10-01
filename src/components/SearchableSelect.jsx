@@ -1,15 +1,8 @@
+// src/components/SearchableSelect.jsx
 'use client';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 // Keyboard-friendly, searchable combobox.
-// Props:
-// - value: string | undefined
-// - onChange: (value) => void
-// - options: Array<{ value: string, label: string }>
-// - placeholder?: string
-// - disabled?: boolean
-// - loading?: boolean
-// - ariaLabel?: string
 export default function SearchableSelect({
   value,
   onChange,
@@ -28,23 +21,28 @@ export default function SearchableSelect({
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // Current label (for controlled value)
+  // Current option for controlled value
   const selected = useMemo(
     () => options.find(o => o.value === value) || null,
     [options, value]
   );
 
-  // Filter by label (case-insensitive, accent-insensitive if you wish to add)
+  // Filter by label (case-insensitive)
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = (query || '').trim().toLowerCase();
     if (!q) return options;
-    return options.filter(o => o.label.toLowerCase().includes(q));
+    return options.filter(o => o.label?.toLowerCase().includes(q));
   }, [options, query]);
 
   // Ensure activeIndex is in bounds when the list changes
   useEffect(() => {
-    if (!filtered.length) setActiveIndex(-1);
-    else if (activeIndex < 0 || activeIndex >= filtered.length) setActiveIndex(0);
+    if (!filtered.length) {
+      setActiveIndex(prev => (prev === -1 ? prev : -1));
+      return;
+    }
+    if (activeIndex < 0 || activeIndex >= filtered.length) {
+      setActiveIndex(prev => (prev === 0 ? prev : 0));
+    }
   }, [filtered, activeIndex]);
 
   // Close on outside click
@@ -58,19 +56,20 @@ export default function SearchableSelect({
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, []);
 
-  // When opening, prefill the input with the selected label for quick refine
+  // When opening, prefill the input with the selected label for quick refine.
+  // Guard to avoid writing the same value repeatedly.
   useEffect(() => {
     if (!open) return;
-    // If user hasn’t typed, show current selection (if any)
-    if (!query && selected) {
-      setQuery(selected.label);
+    if (!query && selected?.label) {
+      setQuery(prev => (prev === selected.label ? prev : selected.label));
       // Put cursor at end
       requestAnimationFrame(() => {
         const input = inputRef.current;
         if (input) input.setSelectionRange(input.value.length, input.value.length);
       });
     }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    // We intentionally depend on open + selected + query, but we guard setQuery.
+  }, [open, selected, query]);
 
   function handleInputFocus() {
     if (disabled) return;
@@ -78,14 +77,19 @@ export default function SearchableSelect({
   }
 
   function handleInputChange(e) {
-    setQuery(e.target.value);
+    const next = e.target.value;
+    setQuery(next);
     if (!open) setOpen(true);
   }
 
   function commitSelection(opt) {
-    onChange && onChange(opt.value);
+    // Avoid redundant updates / loops if same value
+    if (opt?.value !== value) {
+      onChange?.(opt.value);
+    }
     setOpen(false);
-    setQuery(''); // clear so it shows the selected label when closed
+    // Clear so, when closed, the input shows selected label (via displayText)
+    setQuery(prev => (prev === '' ? prev : ''));
   }
 
   function onKeyDown(e) {
@@ -111,13 +115,11 @@ export default function SearchableSelect({
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setOpen(false);
-      setQuery('');
+      setQuery(prev => (prev === '' ? prev : ''));
     }
   }
 
-  const displayText = open
-    ? query
-    : (selected?.label ?? '');
+  const displayText = open ? query : (selected?.label ?? '');
 
   return (
     <div
@@ -148,10 +150,7 @@ export default function SearchableSelect({
 
       <div className="combo-caret" aria-hidden />
       {open && (
-        <ul 
-        id={listId} 
-        role="listbox" 
-        className="combo-list">
+        <ul id={listId} role="listbox" className="combo-list">
           {loading ? (
             <li className="combo-empty">Loading…</li>
           ) : filtered.length ? (

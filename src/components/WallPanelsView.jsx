@@ -12,6 +12,7 @@ function genLevel() {
 }
 
 export default function WallPanelsView({ onGrandTotal}) {
+    
   // Persist levels
   const [manufactureTotal, setManufactureTotal] = useState(0);
   const [extLfByLevel, setExtLfByLevel] = useState({}); // { levelId: lf }
@@ -75,6 +76,21 @@ const panelLenFtExterior = useMemo(() => {
       delete copy[id];
       return copy;
     });
+    setTotalsByLevel(prev => {
+  const copy = { ...prev };
+  delete copy[id];
+  return copy;
+  });
+  setExtLfByLevel(prev => {
+    const copy = { ...prev };
+    delete copy[id];
+    return copy;
+  });
+  setExtPanelLenByLevel(prev => {
+    const copy = { ...prev };
+    delete copy[id];
+    return copy;
+  });
   }, [setLevels]);
 
   const handleLooseTotal = useCallback(({ id, subtotal }) => {
@@ -125,10 +141,11 @@ const [manufactureRows, setManufactureRows] = useState({
     <div className="app-content">
       <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <h1 className="ew-h2" style={{ margin:0 }}>Wall Panels</h1>
-        <div className="ew-chip" title= "Sum of all levels (panels + loose)"> 
+        <div className="ew-chip" title="Sum of all levels (panels + loose)">
           Grand total: {fmt(grandTotal)}
-          </div>
+        </div>
       </div>
+
       {levels.map((lvl, i) => (
         <Level
           key={lvl.id}
@@ -138,21 +155,24 @@ const [manufactureRows, setManufactureRows] = useState({
           onLooseTotal={handleLooseTotal}
           onLevelTotal={handleLevelTotal}
           onExteriorLF={handleExteriorLF}
-          onExteriorPanelLen={handleExteriorPanelLen}
-        />    
-      ))}
-        {/* Panels Manufacture Estimate */}
-        <PanelsManufactureEstimate
-          rows={manufactureRows}
-          panelLenFt={8} 
-          panelLenFtExterior={panelLenFtExterior}
-          exteriorLF={totalExteriorLF}
-          onTotalChange={({ total}) => setManufactureTotal(Number(total) || 0)}
+          onExteriorPanelLenChange={handleExteriorPanelLen}
         />
+      ))}
+
+      {/* <-- Move this card ABOVE the manufacture estimate */}
       <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div className="ew-subtle">Add another floor (mirrors functionality; you can input different quantities)</div>
         <button className="ew-btn ew-btn--turq" onClick={addLevel}>+ Add level</button>
       </div>
+
+      {/* Panels Manufacture Estimate (stays below the Add button now) */}
+      <PanelsManufactureEstimate
+        rows={manufactureRows}
+        panelLenFt={panelLenFtExterior || 8}
+        exteriorLF={totalExteriorLF}
+        onTotalChange={({ total }) => setManufactureTotal(Number(total) || 0)}
+      />
     </div>
   );
+
 }

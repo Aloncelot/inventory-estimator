@@ -69,10 +69,13 @@ export default function ExteriorWallGroup({
   const [collapsed, setCollapsed] = useState(false);
 
   /* Board lengths */
-  const bottomLen = parseBoardLengthFt(getSize(sel.bottomPlate)) ?? 12;
-  const topLen    = parseBoardLengthFt(getSize(sel.topPlate))    ?? 12;
-  const blockLen  = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
-  const bottomBoardLenFt = Number(bottomLen || 0);
+const _parsedBottom = parseBoardLengthFt(getSize(sel.bottomPlate));
+const bottomLen = _parsedBottom ?? 12;
+const bottomBoardLenFt = Number.isFinite(_parsedBottom) ? _parsedBottom : 0;
+
+const topLen   = parseBoardLengthFt(getSize(sel.topPlate))    ?? 12;
+const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
+
 
   /* Build base rows */
   const baseRows = useMemo(() => {

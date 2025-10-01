@@ -7,25 +7,42 @@ import InteriorWalls from '@/components/InteriorWalls';
 import LoosePanelMaterials from '@/components/LoosePanelMaterials';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 
+// Compara solo los campos que nos importan para evitar renders en bucle
+const sameExtTotals = (a, b) => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = [
+    'extLengthSum',
+    'extZipSheetsSum',
+    'extPlatePieces',
+    'extPTLFSum',
+    'extMoneySum',
+    'panelsSubtotal',
+    'panelLenFtExterior',
+  ];
+  return keys.every(k => a[k] === b[k]);
+};
+
 export default function Level({
   id,           // required: stable per-level id
   name,         // e.g. "Level 1"
   onRemove,     // optional: () => void
   onLooseTotal = () => {}, 
   onLevelTotal = () => {},
+  onExteriorPanelLenChange,
   onExteriorLF,
-  onExteriorPanelLen,
 }) {
+  const handlePanelLenFromExterior = useCallback((len) => {
+    onExteriorPanelLenChange?.({ id, len: Number(len) || 0 });
+  }, [onExteriorPanelLenChange, id]);
+
   // UI (collapsed persisted per level)
   const [ui, setUi] = useLocalStorageJson(`inv:v1:level-ui:${id}`, { collapsed: false });
   const collapsed = !!ui.collapsed;
   const toggleCollapsed = () => setUi(prev => ({ ...prev, collapsed: !prev.collapsed }));
 
   // Live totals reported by wrappers
-  const [extTotals, setExtTotals] = useState({
-    extLengthSum: 0, extZipSheetsSum: 0, extPlatePieces: 0, extPTLFSum: 0,
-    panelsSubtotal: 0, // NEW: sum of ExteriorWallGroup groupSubtotal for this level
-  });
+  const [extTotals, setExtTotals] = useState(null);
   const [intTotals, setIntTotals] = useState({
     int2x6LF: 0, int2x4LF: 0, intPlatePieces: 0, intPTLFSum: 0,
     panelsSubtotal: 0, // NEW: sum of InteriorWallGroup groupSubtotal for this level
@@ -33,7 +50,9 @@ export default function Level({
   const [looseSubtotal, setLooseSubtotal] = useState(0);
 
   // Stable handlers from child → level
-  const handleExtTotals = useCallback((t) => setExtTotals(t || {}), []);
+  const handleExtTotals = useCallback((t) => {
+  setExtTotals(prev => sameExtTotals(prev, t) ? prev : t);
+}, []);
   const handleIntTotals = useCallback((t) => setIntTotals(t || {}), []);
   const handleLooseSubtotal = useCallback((payload) => {
     const sub = Number(payload?.subtotal) || 0;
@@ -58,7 +77,7 @@ export default function Level({
   const fmt = (n) => moneyFmt.format(Number(n) || 0);
   useEffect(()=> {
     onLevelTotal?.({id, total: levelTotal});
-  }, [id, levelTotal]);
+  }, [id, levelTotal, onLevelTotal]);
 
   return (
     <section className="ew-stack">
@@ -109,7 +128,7 @@ export default function Level({
           }}
           title={`${name} — Exterior walls`}
           onLengthLFChange={ (lf) => onExteriorLF?.({ id, lf })}
-          onPanelLenFtChange={(len) => onExteriorPanelLen?.({ id, len })}
+          onPanelLenFtChange={handlePanelLenFromExterior}
           isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
         />
 

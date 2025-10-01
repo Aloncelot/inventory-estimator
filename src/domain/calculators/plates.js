@@ -11,5 +11,5 @@ export function calcPlates({ lengthLF, boardLenFt, wastePct = 0, item, unit = "p
   const qtyFinal = applyWaste(qtyRaw, wastePct);
   const unitPrice = unitPriceFrom(item);
   const subtotal  = Number(unitPrice * qtyFinal) || 0;
-  return { qtyRaw, qtyFinal, unit, unitPrice, subtotal };
+  return { qtyRaw, qtyFinal, unit, unitPrice, subtotal, boardLenFt: board };
 }
