@@ -41,7 +41,6 @@ const panelLenFtExterior = useMemo(() => {
     { id: 'level-1', name: 'Level 1' },
   ]);
 
-// One-time sanitize: ensure unique IDs, ensure names
   useEffect(() => {
     if (!Array.isArray(levels) || levels.length === 0) {
       setLevels([{ id: genLevel().id, name: 'Level 1' }]);
@@ -136,6 +135,37 @@ const [manufactureRows, setManufactureRows] = useState({
   blocking2x10: { rows: 0 },
 });
 
+const [shearLfByLevel, setShearLfByLevel] = useState({});           // { levelId: lf }
+const [shearPanelLenByLevel, setShearPanelLenByLevel] = useState({}); // { levelId: len }
+const [intShearLfByLevel, setIntShearLfByLevel] = useState({});
+const handleInteriorShearLF = useCallback(({ id, lf }) => {
+  setIntShearLfByLevel(prev => (prev[id] === lf ? prev : { ...prev, [id]: Number(lf) || 0 }));
+}, []);
+
+const totalInteriorShearLF = useMemo(
+  () => Object.values(intShearLfByLevel).reduce((s, n) => s + (Number(n) || 0), 0),
+  [intShearLfByLevel]
+);
+
+const [intShearPanelLenByLevel, setIntShearPanelLenByLevel] = useState({});
+const handleInteriorShearPanelLen = useCallback(({ id, len }) => {
+  setIntShearPanelLenByLevel(prev => (prev[id] === len ? prev : { ...prev, [id]: Number(len) || 0 }));
+}, []);
+const panelLenFtInterior = useMemo(() => {
+  const vals = Object.values(intShearPanelLenByLevel).filter(Boolean);
+  if (!vals.length) return 8;
+  const counts = {};
+  for (const v of vals) counts[v] = (counts[v] || 0) + 1;
+  return Number(Object.keys(counts).sort((a,b)=>counts[b]-counts[a] || b-a)[0]);
+}, [intShearPanelLenByLevel]);
+
+const panelLenFtInteriorShear = useMemo(() => {
+  const vals = Object.values(shearPanelLenByLevel).filter(Boolean);
+  if (!vals.length) return 8;
+  const counts = {};
+  for (const v of vals) counts[v] = (counts[v] || 0) + 1;
+  return Number(Object.keys(counts).sort((a, b) => counts[b] - counts[a] || b - a)[0]);
+}, [shearPanelLenByLevel]);
 
   return (
     <div className="app-content">
@@ -156,6 +186,8 @@ const [manufactureRows, setManufactureRows] = useState({
           onLevelTotal={handleLevelTotal}
           onExteriorLF={handleExteriorLF}
           onExteriorPanelLenChange={handleExteriorPanelLen}
+          onInteriorShearLF={handleInteriorShearLF}
+          onInteriorShearPanelLenChange={handleInteriorShearPanelLen}
         />
       ))}
 
@@ -169,7 +201,9 @@ const [manufactureRows, setManufactureRows] = useState({
       <PanelsManufactureEstimate
         rows={manufactureRows}
         panelLenFt={panelLenFtExterior || 8}
+        panelLenFtInterior={panelLenFtInteriorShear || 8}
         exteriorLF={totalExteriorLF}
+        interiorShearLF={totalInteriorShearLF}
         onTotalChange={({ total }) => setManufactureTotal(Number(total) || 0)}
       />
     </div>

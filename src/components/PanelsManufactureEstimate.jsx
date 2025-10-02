@@ -1,131 +1,127 @@
-// src/components/PanelsManufactureEstimate.jsx
 "use client";
 import { useMemo, useEffect, useState } from "react";
 
 const DEFAULT_RATES = {
-  exteriorWalls:   { ratePerLF: 10.50, ratePerPanel: 84.00 },
-  interiorShear:   { ratePerLF: 10.25, ratePerPanel: 82.00 },
-  interiorBlocking:{ ratePerLF:  6.50, ratePerPanel: 52.00 },
-  interiorNonLoad: { ratePerLF:  6.00, ratePerPanel: 48.00 },
-  kneeWall:        { ratePerLF:  4.50, ratePerPanel: 36.00 },
-  windows:         { each: 20.05 },
-  exteriorDoors:   { each: 15.19 },
-  blocking2x10:    { each: 0.60 }, // per row
+  exteriorWalls:    { ratePerLF: 10.50, ratePerPanel: 84.00 },
+  interiorShear:    { ratePerLF: 10.25, ratePerPanel: 82.00 },
+  interiorBlocking: { ratePerLF:  6.50, ratePerPanel: 52.00 },
+  interiorNonLoad:  { ratePerLF:  6.00, ratePerPanel: 48.00 },
+  kneeWall:         { ratePerLF:  4.50, ratePerPanel: 36.00 },
+  windows:          { each: 20.05 },
+  exteriorDoors:    { each: 15.19 },
+  blocking2x10:     { each: 0.60 }, // per row
 };
 
-const USD = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  currencyDisplay: "narrowSymbol",
-});
-function money(n){ return USD.format(Number(n || 0)); }
-function fmt(n){ return Number(n || 0).toLocaleString("en-US"); }
-function parseMoney(str) {
-  const s = String(str ?? "").replace(/[^0-9.\-]/g, "");
-  const v = Number(s);
-  return Number.isFinite(v) ? v : 0;
-}
+const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (n) => USD.format(Number(n || 0));
+const fmt   = (n) => Number(n || 0).toLocaleString("en-US");
 
 export default function PanelsManufactureEstimate({
   rows = {},
-  panelLenFt = 8,                 // default incoming "panel" length (from bottom plate)
+  // default panel length “fallback” (used by non-editable rows)
+  panelLenFt = 8,
+  // ⬇ NEW: interior shear derived default (editable in the table)
+  panelLenFtInterior = 8,
+  // already had exterior derived default (editable in the table)
+  panelLenFtExterior = undefined, // optional; if not sent we’ll use panelLenFt
   rates = DEFAULT_RATES,
   defaultCollapsed = false,
   persistKey = "inv:v1:ui:manufactureCollapsed",
   onTotalChange,
-  exteriorLF = 0
+  // LFs coming from the levels:
+  exteriorLF = 0,
+  interiorShearLF = 0, // ⬅ NEW
 }) {
   const [collapsed, setCollapsed] = useState(!!defaultCollapsed);
 
-  // load persisted collapse
+  // persist collapsed
   useEffect(() => {
     try {
       const raw = localStorage.getItem(persistKey);
       if (raw !== null) setCollapsed(raw === "1");
     } catch {}
   }, [persistKey]);
-
-  // persist collapse
   useEffect(() => {
     try { localStorage.setItem(persistKey, collapsed ? "1" : "0"); } catch {}
   }, [collapsed, persistKey]);
 
-  // safe shape
+  // safe shape for other rows (still allowed to feed values via "rows" prop)
   const safe = {
-    exteriorWalls: rows.exteriorWalls || { lf:0, panels:0 },
-    interiorShear: rows.interiorShear || { lf:0, panels:0 },
-    interiorBlockingOnly: rows.interiorBlockingOnly || { lf:0, panels:0 },
-    interiorNonLoad: rows.interiorNonLoad || { lf:0, panels:0 },
-    kneeWall: rows.kneeWall || { lf:0, panels:0 },
-    windows: rows.windows || { qty:0 },
-    exteriorDoors: rows.exteriorDoors || { qty:0 },
-    blocking2x10: rows.blocking2x10 || { rows:0 },
+    exteriorWalls: rows.exteriorWalls || { lf: 0, panels: 0 },
+    interiorShear: rows.interiorShear || { lf: 0, panels: 0 },
+    interiorBlockingOnly: rows.interiorBlockingOnly || { lf: 0, panels: 0 },
+    interiorNonLoad: rows.interiorNonLoad || { lf: 0, panels: 0 },
+    kneeWall: rows.kneeWall || { lf: 0, panels: 0 },
+    windows: rows.windows || { qty: 0 },
+    exteriorDoors: rows.exteriorDoors || { qty: 0 },
+    blocking2x10: rows.blocking2x10 || { rows: 0 },
   };
 
-  // Editable “Rate per LF” for LF-based rows
-  const [rateByKey, setRateByKey] = useState(() => ({
-    exteriorWalls:        rates.exteriorWalls?.ratePerLF ?? 0,
-    interiorShear:        rates.interiorShear?.ratePerLF ?? 0,
+  // Editable per-LF rates by row key (persist in state)
+  const [rateByKey, setRateByKey] = useState({
+    exteriorWalls: rates.exteriorWalls?.ratePerLF ?? 0,
+    interiorShear: rates.interiorShear?.ratePerLF ?? 0,
     interiorBlockingOnly: rates.interiorBlocking?.ratePerLF ?? 0,
-    interiorNonLoad:      rates.interiorNonLoad?.ratePerLF ?? 0,
-    kneeWall:             rates.kneeWall?.ratePerLF ?? 0,
-  }));
-  useEffect(() => {
-    setRateByKey(prev => ({
-      exteriorWalls:        prev.exteriorWalls ?? rates.exteriorWalls?.ratePerLF ?? 0,
-      interiorShear:        prev.interiorShear ?? rates.interiorShear?.ratePerLF ?? 0,
-      interiorBlockingOnly: prev.interiorBlockingOnly ?? rates.interiorBlocking?.ratePerLF ?? 0,
-      interiorNonLoad:      prev.interiorNonLoad ?? rates.interiorNonLoad?.ratePerLF ?? 0,
-      kneeWall:             prev.kneeWall ?? rates.kneeWall?.ratePerLF ?? 0,
-    }));
-  }, [rates]);
+    interiorNonLoad: rates.interiorNonLoad?.ratePerLF ?? 0,
+    kneeWall: rates.kneeWall?.ratePerLF ?? 0,
+  });
 
-  // Editable “Panel” length (currently only used for Exterior Walls)
-  const [panelLenByKey, setPanelLenByKey] = useState(() => ({
-    exteriorWalls: Number(panelLenFt) || 8,
-  }));
-  // If parent updates panelLenFt (e.g., you pick a new bottom plate length), adopt it as default
+  // Editable panel length per row key (only exterior + interiorShear for now)
+  const [panelLenByKey, setPanelLenByKey] = useState({
+    exteriorWalls: Number(panelLenFtExterior ?? panelLenFt) || 8,
+    interiorShear: Number(panelLenFtInterior ?? 8) || 8,
+  });
+
+  // If parents send a new default (e.g., when user picks a new bottom plate),
+  // refresh our “initial” only if user hasn’t typed anything for that row yet.
   useEffect(() => {
-    setPanelLenByKey(prev => ({
-      ...prev,
-      exteriorWalls: Number.isFinite(Number(panelLenFt)) && Number(panelLenFt) > 0
-        ? Number(panelLenFt)
-        : (prev.exteriorWalls || 8),
-    }));
-  }, [panelLenFt]);
+    setPanelLenByKey((prev) => {
+      const next = { ...prev };
+      if (!prev.exteriorWalls && panelLenFtExterior) {
+        next.exteriorWalls = Number(panelLenFtExterior) || 8;
+      }
+      if (!prev.interiorShear && panelLenFtInterior) {
+        next.interiorShear = Number(panelLenFtInterior) || 8;
+      }
+      return next;
+    });
+  }, [panelLenFtExterior, panelLenFtInterior]);
 
   const lines = useMemo(() => {
     const L = [];
 
-    const pushLF = (label, key, r) => {
-      const lf = key === 'exteriorWalls'
-        ? Number(exteriorLF || 0)
-        : Number(safe[key].lf || 0);
+    const pushLF = (label, key, rateConfig) => {
+      const lf =
+        key === "exteriorWalls"
+          ? Number(exteriorLF || 0)
+          : key === "interiorShear"
+          ? Number(interiorShearLF || 0)
+          : Number(safe[key]?.lf || 0);
 
+      // Which panel length do we use for math?
       const usedPanelLenFt =
-        key === 'exteriorWalls'
-          ? (Number(panelLenByKey.exteriorWalls) || 8)
-          : panelLenFt; // for now only exterior is editable/derived; others can follow later
+        Number(panelLenByKey[key]) ||
+        (key === "exteriorWalls"
+          ? Number(panelLenFtExterior ?? panelLenFt) || 8
+          : key === "interiorShear"
+          ? Number(panelLenFtInterior) || 8
+          : Number(panelLenFt) || 8);
 
-      const u = Number(usedPanelLenFt) || 0;
-      const panels =
-        safe[key].panels ||
-        (u > 0 ? Math.ceil((lf / u) * 1.1) : 0);
+      // Your spec: ceil(LF / panelLen) * 1.1
+      const panels = Math.ceil((lf / Math.max(1, usedPanelLenFt)) * 1.1);
 
-      const editableRate = rateByKey[key] ?? r.ratePerLF ?? 0;
-      const subtotal = lf * editableRate;
+      const ratePerLF = Number(rateByKey[key] ?? rateConfig.ratePerLF ?? 0);
+      const subtotal = lf * ratePerLF;
 
       L.push({
-        key,
         label,
+        key,
         lf,
         panelLenFt: usedPanelLenFt,
         panels,
-        ratePerLF: editableRate,
-        ratePerPanel: r.ratePerPanel,
+        ratePerLF,
+        ratePerPanel: rateConfig.ratePerPanel,
         total: subtotal,
-        qtyOnly: false,
-        canEditPanelLen: key === 'exteriorWalls',
       });
     };
 
@@ -135,35 +131,56 @@ export default function PanelsManufactureEstimate({
     pushLF("Interior Non-load bearing walls", "interiorNonLoad", rates.interiorNonLoad);
     pushLF("Knee wall", "kneeWall", rates.kneeWall);
 
-    // unit-based items (not LF; no panel length here)
+    // unit-based items
     L.push({
-      key: "windows",
       label: "Windows",
-      lf: "0", panelLenFt: "n/a", panels: "n/a",
-      ratePerLF: rates.windows.each, ratePerPanel: "n/a",
+      key: "windows",
+      lf: 0,
+      panelLenFt: "n/a",
+      panels: "n/a",
+      ratePerLF: rates.windows.each,
+      ratePerPanel: "n/a",
       total: (safe.windows.qty || 0) * (rates.windows.each || 0),
-      qtyOnly: true, qty: safe.windows.qty || 0,
+      qtyOnly: true,
+      qty: safe.windows.qty || 0,
     });
     L.push({
-      key: "exteriorDoors",
       label: "Exterior Doors",
-      lf: "0", panelLenFt: "n/a", panels: "n/a",
-      ratePerLF: rates.exteriorDoors.each, ratePerPanel: "n/a",
+      key: "exteriorDoors",
+      lf: 0,
+      panelLenFt: "n/a",
+      panels: "n/a",
+      ratePerLF: rates.exteriorDoors.each,
+      ratePerPanel: "n/a",
       total: (safe.exteriorDoors.qty || 0) * (rates.exteriorDoors.each || 0),
-      qtyOnly: true, qty: safe.exteriorDoors.qty || 0,
+      qtyOnly: true,
+      qty: safe.exteriorDoors.qty || 0,
     });
     L.push({
-      key: "blocking2x10",
       label: "2x10 blocking rows",
-      lf: "0", panelLenFt: "n/a", panels: "n/a",
-      ratePerLF: rates.blocking2x10.each, ratePerPanel: "n/a",
+      key: "blocking2x10",
+      lf: 0,
+      panelLenFt: "n/a",
+      panels: "n/a",
+      ratePerLF: rates.blocking2x10.each,
+      ratePerPanel: "n/a",
       total: (safe.blocking2x10.rows || 0) * (rates.blocking2x10.each || 0),
-      qtyOnly: true, qty: safe.blocking2x10.rows || 0,
+      qtyOnly: true,
+      qty: safe.blocking2x10.rows || 0,
     });
 
     return L;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(rows), panelLenFt, JSON.stringify(rates), exteriorLF, rateByKey, panelLenByKey]);
+  }, [
+    JSON.stringify(rows),
+    rates,
+    panelLenFt,
+    panelLenFtExterior,
+    panelLenFtInterior,
+    exteriorLF,
+    interiorShearLF,
+    panelLenByKey,
+    rateByKey,
+  ]);
 
   const totals = useMemo(() => {
     const lf = lines.reduce((s, x) => s + (Number(x.lf) || 0), 0);
@@ -173,15 +190,15 @@ export default function PanelsManufactureEstimate({
   }, [lines]);
 
   useEffect(() => {
-    onTotalChange?.({ total: totals.total });
+    if (typeof onTotalChange === "function") onTotalChange({ total: totals.total });
   }, [totals.total, onTotalChange]);
 
   const contentId = "manufacture-estimate-body";
 
   return (
     <section className="ew-card">
-      <div className="ew-head" style={{ justifyContent:'space-between' }}>
-        <h2 className="ew-h2" style={{ margin:0 }}>Panels Manufacture Estimate</h2>
+      <div className="ew-head" style={{ justifyContent: "space-between" }}>
+        <h2 className="ew-h2" style={{ margin: 0 }}>Panels Manufacture Estimate</h2>
         <button
           type="button"
           className="ew-chip"
@@ -190,21 +207,21 @@ export default function PanelsManufactureEstimate({
           aria-controls={contentId}
           title={collapsed ? "Expand" : "Collapse"}
         >
-          {collapsed ? '▶' : '🔽'} {money(totals.total)}
+          {collapsed ? "▶" : "🔽"} {money(totals.total)}
         </button>
       </div>
 
       {!collapsed && (
         <div className="table-wrap" id={contentId}>
-          <table className="tbl" style={{ width:'100%', tableLayout:'fixed' }}>
+          <table className="tbl" style={{ width: "100%", tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width:'26%' }} />
-              <col style={{ width:'13%' }} />
-              <col style={{ width:'13%' }} />
-              <col style={{ width:'13%' }} />
-              <col style={{ width:'12%' }} />
-              <col style={{ width:'12%' }} />
-              <col style={{ width:'11%' }} />
+              <col style={{ width: "26%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "11%" }} />
             </colgroup>
             <thead>
               <tr>
@@ -218,69 +235,92 @@ export default function PanelsManufactureEstimate({
               </tr>
             </thead>
             <tbody>
-              {lines.map((r) => (
-                <tr key={r.key}>
-                  <td>{r.label}</td>
-                  <td className="num">{r.qtyOnly ? fmt(r.qty) : fmt(r.lf)}</td>
+              {lines.map((r, i) => {
+                const isLFRow = !r.qtyOnly;
+                const isEditablePanel = r.key === "exteriorWalls" || r.key === "interiorShear";
+                const showRateEditable = isLFRow; // only LF-based rows can edit rate per LF
 
-                  {/* Panel length (editable for Exterior Walls) */}
-                  <td className="num">
-                    {r.canEditPanelLen ? (
-                      <input
-                        className="ew-input"
-                        inputMode="decimal"
-                        style={{ width: 90, textAlign: 'right' }}
-                        value={panelLenByKey.exteriorWalls ?? ''}
-                        onChange={(e) => {
-                          const v = Number(e.target.value);
-                          setPanelLenByKey(prev => ({
-                            ...prev,
-                            exteriorWalls: Number.isFinite(v) && v > 0 ? v : 0
-                          }));
-                        }}
-                        title="Panel length (ft)"
-                      />
-                    ) : (
-                      r.panelLenFt
-                    )}
-                  </td>
+                return (
+                  <tr key={i}>
+                    <td>{r.label}</td>
 
-                  <td className="num">{r.qtyOnly ? "n/a" : fmt(r.panels)}</td>
+                    {/* LF / Qty */}
+                    <td className="num">{r.qtyOnly ? fmt(r.qty) : fmt(r.lf)}</td>
 
-                  {/* Rate per LF: editable for LF rows */}
-                  <td className="num">
-                    {r.qtyOnly ? (
-                      money(r.ratePerLF)
-                    ) : (
-                      <input
-                        className="ew-input"
-                        inputMode="decimal"
-                        style={{ width: 110, textAlign: 'right' }}
-                        value={money(rateByKey[r.key] ?? 0)}
-                        onChange={(e) => {
-                          const v = parseMoney(e.target.value);
-                          setRateByKey(prev => ({ ...prev, [r.key]: v }));
-                        }}
-                        title="Rate per LF"
-                      />
-                    )}
-                  </td>
+                    {/* Panel length (editable only for exterior + interiorShear) */}
+                    <td className="num">
+                      {isLFRow ? (
+                        isEditablePanel ? (
+                          <input
+                            className="ew-input"
+                            type="number"
+                            min={1}
+                            value={panelLenByKey[r.key] ?? r.panelLenFt ?? 8}
+                            onChange={(e) =>
+                              setPanelLenByKey((prev) => ({
+                                ...prev,
+                                [r.key]: Number(e.target.value) || 0,
+                              }))
+                            }
+                            style={{ width: 90, textAlign: "right" }}
+                          />
+                        ) : (
+                          r.panelLenFt
+                        )
+                      ) : (
+                        "n/a"
+                      )}
+                    </td>
 
-                  <td className="num">
-                    {r.ratePerPanel === "n/a" ? "n/a" : money(r.ratePerPanel)}
-                  </td>
-                  <td className="num">{money(r.total)}</td>
-                </tr>
-              ))}
+                    {/* # Panels */}
+                    <td className="num">{r.qtyOnly ? "n/a" : fmt(r.panels)}</td>
+
+                    {/* Rate per LF (editable) */}
+                    <td className="num">
+                      {showRateEditable ? (
+                        <input
+                          className="ew-input"
+                          type="number"
+                          step="0.01"
+                          value={rateByKey[r.key] ?? r.ratePerLF ?? 0}
+                          onChange={(e) =>
+                            setRateByKey((prev) => ({
+                              ...prev,
+                              [r.key]: Number(e.target.value) || 0,
+                            }))
+                          }
+                          onBlur={(e) =>
+                            setRateByKey((prev) => ({
+                              ...prev,
+                              [r.key]: Number(Number(e.target.value).toFixed(2)),
+                            }))
+                          }
+                          style={{ width: 110, textAlign: "right" }}
+                        />
+                      ) : (
+                        "n/a"
+                      )}
+                    </td>
+
+                    {/* Rate per panel (read-only) */}
+                    <td className="num">
+                      {r.ratePerPanel === "n/a" ? "n/a" : money(r.ratePerPanel)}
+                    </td>
+
+                    {/* Final price */}
+                    <td className="num">{money(r.total)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr>
                 <th>TOTALS</th>
                 <th className="num">{fmt(totals.lf)}</th>
-                <th className="num">-</th>
+                <th className="num">{panelLenByKey.exteriorWalls ?? panelLenFt}</th>
                 <th className="num">{fmt(totals.panels)}</th>
-                <th className="num">-</th>
-                <th className="num">-</th>
+                <th></th>
+                <th></th>
                 <th className="num">{money(totals.total)}</th>
               </tr>
             </tfoot>

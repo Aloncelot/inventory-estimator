@@ -7,7 +7,7 @@ import InteriorWalls from '@/components/InteriorWalls';
 import LoosePanelMaterials from '@/components/LoosePanelMaterials';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 
-// Compara solo los campos que nos importan para evitar renders en bucle
+// Compare only the fields that matter to avoid loops
 const sameExtTotals = (a, b) => {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -27,10 +27,12 @@ export default function Level({
   id,           // required: stable per-level id
   name,         // e.g. "Level 1"
   onRemove,     // optional: () => void
-  onLooseTotal = () => {}, 
+  onLooseTotal = () => {},
   onLevelTotal = () => {},
   onExteriorPanelLenChange,
   onExteriorLF,
+  onInteriorShearLF,
+  onInteriorShearPanelLenChange,
 }) {
   const handlePanelLenFromExterior = useCallback((len) => {
     onExteriorPanelLenChange?.({ id, len: Number(len) || 0 });
@@ -45,21 +47,41 @@ export default function Level({
   const [extTotals, setExtTotals] = useState(null);
   const [intTotals, setIntTotals] = useState({
     int2x6LF: 0, int2x4LF: 0, intPlatePieces: 0, intPTLFSum: 0,
-    panelsSubtotal: 0, // NEW: sum of InteriorWallGroup groupSubtotal for this level
+    panelsSubtotal: 0, // sum of InteriorWallGroup groupSubtotal for this level
   });
   const [looseSubtotal, setLooseSubtotal] = useState(0);
 
   // Stable handlers from child → level
   const handleExtTotals = useCallback((t) => {
-  setExtTotals(prev => sameExtTotals(prev, t) ? prev : t);
-}, []);
-  const handleIntTotals = useCallback((t) => setIntTotals(t || {}), []);
+    setExtTotals(prev => sameExtTotals(prev, t) ? prev : t);
+  }, []);
+
+  // const handleIntTotals = useCallback((t) => {
+  //   setIntTotals(t || {});
+  //   // forward shear aggregates upward (for Manufacture Estimate)
+  //   if (t && typeof onInteriorShearLF === 'function') {
+  //     onInteriorShearLF({ id, lf: Number(t.shearLengthSum) || 0 });
+  //   }
+  //   if (t && typeof onInteriorShearPanelLenChange === 'function') {
+  //     onInteriorShearPanelLenChange({ id, len: Number(t.shearPanelLenFt) || 8 });
+  //   }
+  // }, [id, onInteriorShearLF, onInteriorShearPanelLenChange]);
+  
+  const handleIntTotals = useCallback((t) => {
+    const safe = t || {};
+    setIntTotals(safe);
+    if (typeof onInteriorShearLF === 'function') {
+      onInteriorShearLF({ id, lf: Number(safe.shearLengthSum) || 0 });
+    }
+    if (typeof onInteriorShearPanelLenChange === 'function') {
+      onInteriorShearPanelLenChange({ id, len: Number(safe.shearPanelLenFt) || 8 });
+    }
+  }, [id, onInteriorShearLF, onInteriorShearPanelLenChange]);
+
   const handleLooseSubtotal = useCallback((payload) => {
     const sub = Number(payload?.subtotal) || 0;
     setLooseSubtotal(sub);
-    if (typeof onLooseTotal === 'function') {
-      onLooseTotal?.({ id, subtotal: sub });
-    }
+    onLooseTotal?.({ id, subtotal: sub });
   }, [id, onLooseTotal]);
 
   // Level total = exterior panels + interior panels + loose (for this level)
@@ -75,8 +97,9 @@ export default function Level({
     []
   );
   const fmt = (n) => moneyFmt.format(Number(n) || 0);
-  useEffect(()=> {
-    onLevelTotal?.({id, total: levelTotal});
+
+  useEffect(() => {
+    onLevelTotal?.({ id, total: levelTotal });
   }, [id, levelTotal, onLevelTotal]);
 
   return (
@@ -95,7 +118,7 @@ export default function Level({
           >
             {collapsed ? '▶' : '🔽'}
           </button>
-          <h2 className="ew-h2" style={{ margin:0 }}>{name}</h2>
+          <h2 className="ew-h2 ew-level-title" style={{ margin:0 }}>{name}</h2>
         </div>
 
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -104,7 +127,7 @@ export default function Level({
             style={{
               fontWeight: 800,
               fontSize: 16,
-              color: 'var(--turq-300)',        // bright turquoise
+              color: 'var(--turq-300)',
               borderColor: 'rgba(47,183,173,.35)',
               background: 'rgba(47,183,173,.15)',
             }}
@@ -120,14 +143,11 @@ export default function Level({
 
       {/* Keep content mounted; just hide/show to preserve state instantly */}
       <div style={{ display: collapsed ? 'none' : 'block' }} aria-hidden={collapsed}>
-        {/* pass levelId so each floor stores its own sections */}
         <ExteriorWalls
-          levelId={id}          
-          onTotalsChange={(t) => {
-            handleExtTotals(t);
-          }}
+          levelId={id}
+          onTotalsChange={handleExtTotals}
           title={`${name} — Exterior walls`}
-          onLengthLFChange={ (lf) => onExteriorLF?.({ id, lf })}
+          onLengthLFChange={(lf) => onExteriorLF?.({ id, lf })}
           onPanelLenFtChange={handlePanelLenFromExterior}
           isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
         />

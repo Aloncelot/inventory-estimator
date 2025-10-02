@@ -51,7 +51,21 @@ export default function InteriorWalls({
     const intPlatePieces = arr.reduce((a, b) => a + (Number(b?.platePieces)   || 0), 0);
     const intPTLFSum     = arr.reduce((a, b) => a + (Number(b?.ptLF)          || 0), 0);
     const panelsSubtotal = arr.reduce((a, b) => a + (Number(b?.groupSubtotal) || 0), 0)
-    return { int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, panelsSubtotal };
+    // shearing walls-only aggregates
+    const shearArr = arr.filter(s => !!s?.isShear);
+    const shearLengthSum = shearArr.reduce((sum, s) => sum + (Number(s?.lengthLF) || 0), 0);
+    // majority-vote panel length from shear groups’ bottom plates
+    let shearPanelLenFt = 8;
+    {
+      const vals = shearArr.map(s => Number(s?.bottomBoardLenFt) || 0).filter(Boolean);
+      if (vals.length) {
+        const counts = {};
+        for (const v of vals) counts[v] = (counts[v] || 0) + 1;
+        shearPanelLenFt = Number(Object.keys(counts).sort((a,b)=>counts[b]-counts[a] || b-a)[0]);
+      }
+    }
+
+    return { int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, panelsSubtotal, shearLengthSum, shearPanelLenFt };
   }, [stats]);
 
   // Emit to parent (Level.jsx)

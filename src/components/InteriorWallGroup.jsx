@@ -76,7 +76,8 @@ export default function InteriorWallGroup({
   const toggleOpen = k => setNote(k, { open: !getNote(k).open });
 
   /* Board lengths */
-  const bottomLen = parseBoardLengthFt(getSize(sel.bottomPlate)) ?? 12;
+  const bottomLen = parseBoardLengthFt(getSize(sel.bottomPlate)) ?? 0;
+  const bottomBoardLenFt = Number.isFinite(bottomLen) ? bottomLen : 0;
   const topLen    = parseBoardLengthFt(getSize(sel.topPlate))    ?? 12;
   const blockLen  = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
 
@@ -345,9 +346,10 @@ export default function InteriorWallGroup({
       platePieces,
       ptLF: Number(lengthLF||0),
       groupSubtotal,
+      isShear: kind === 'shear',
       bottomBoardLenFt: Number(rowByKey.bottomPlate?.boardLenFt ?? bottomLen ?? 0), 
     });
-  }, [persistKey, wallKind, lengthLF, platePieces, ptLF, groupSubtotal, bottomLen, rowByKey.bottomPlate?.boardLenFt]);
+  }, [persistKey, kind, wallKind, lengthLF, platePieces, ptLF, groupSubtotal, bottomLen, rowByKey.bottomPlate?.boardLenFt]);
 
   /* ────────────────────────────────────────────────────────────────────────
      Render
