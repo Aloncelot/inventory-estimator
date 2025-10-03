@@ -45,8 +45,7 @@ export default function InteriorWallGroup({
   persistKey = 'interior-0',
   bottomDefaultFamily = 'SPF#2'
 }) {
-  /* Interior toggles */
-  const [series, setSeries] = useState('2x6');          // 2x4 | 2x6 | 2x8 | 2x10
+  /* Interior toggles */  
   const [kind, setKind]     = useState('partition');    // partition | bearing | shear | standard
 
   /* Shared inputs */
@@ -100,7 +99,7 @@ export default function InteriorWallGroup({
       });
       rows.push({
         key: 'bottomPlate',
-        label: `Bottom plate (${series})`,
+        label: `Bottom plate`,
         item: getItem(sel.bottomPlate),
         unit: res.unit,
         qtyRaw: res.qtyRaw,
@@ -123,7 +122,7 @@ export default function InteriorWallGroup({
       });
       rows.push({
         key: 'topPlate',
-        label: `Top plate (${series})`,
+        label: `Top plate`,
         item: getItem(sel.topPlate),
         unit: res.unit,
         qtyRaw: res.qtyRaw,
@@ -146,7 +145,7 @@ export default function InteriorWallGroup({
       });
       rows.push({
         key: 'studs',
-        label: `Studs (${series})`,
+        label: `Studs`,
         item: getItem(sel.studs),
         unit: res.unit,
         qtyRaw: res.qtyRaw,
@@ -169,7 +168,7 @@ export default function InteriorWallGroup({
       });
       rows.push({
         key: 'blocking',
-        label: `Blocking (${series})`,
+        label: `Blocking`,
         item: getItem(sel.blocking),
         unit: res.unit,
         qtyRaw: res.qtyRaw,
@@ -204,7 +203,7 @@ export default function InteriorWallGroup({
 
     return rows;
   }, [
-    sel, waste, series, showBlocking, showSheathing,
+    sel, waste, showBlocking, showSheathing,
     lengthLF, heightFt, studSpacingIn, studMultiplier,
     bottomLen, topLen, blockLen
   ]);
@@ -218,7 +217,11 @@ export default function InteriorWallGroup({
     (rowByKey.bottomPlate?.qtyFinal ?? 0) +
     (rowByKey.topPlate?.qtyFinal ?? 0);
   const ptLF = Number(lengthLF || 0);
-  const wallKind = String(series).includes('2x6') ? 'int-2x6' : 'int-2x4';
+ // Infer interior series from the chosen sizes (studs preferred, else bottom plate)
+  const sizeLabel = getSize(sel.studs) || getSize(sel.bottomPlate) || '';
+  const is2x6 = /(^|\D)2\s*[x×]\s*6(\D|$)/i.test(sizeLabel);
+  const wallKind = is2x6 ? 'int-2x6' : 'int-2x4';
+
 
   /* Extras (Header/Post + auto Headers infill) */
   const [extras, setExtras] = useState([]);
@@ -451,22 +454,7 @@ export default function InteriorWallGroup({
               </select>
             </label>
           </div>
-
-          {/* Controls row 2 */}
-          <div className="controls2" style={{ marginBottom: 12 }}>
-            <label>
-              <span className="ew-subtle">Series (stud size)</span>
-              <select
-                className="ew-select focus-anim"
-                value={series}
-                onChange={e=>setSeries(e.target.value)}
-              >
-                <option value="2x6">2×6″</option>
-                <option value="2x4">2×4″</option>
-                <option value="2x8">2×8″</option>
-                <option value="2x10">2×10″</option>
-              </select>
-            </label>
+          <div className="controls2" style={{ marginBottom: 12 }}>          
             <label>
               <span className="ew-subtle">Wall kind</span>
               <select

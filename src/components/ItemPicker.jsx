@@ -8,48 +8,32 @@ import SearchableSelect from '@/components/SearchableSelect';
 // Normalize a string for case-insensitive, space-insensitive comparisons
 const norm = (s = '') => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-// Normalize a size token for series matching: keep digits and "x", remove quotes/symbols/spaces
-// e.g. `2×6"-8'` -> `2x6-8` (we only care that it starts with `2x6`)
-const cleanSizeToken = (s = '') =>
-  String(s)
-    .toLowerCase()
-    .replace(/×/g, 'x')
-    .replace(/[^a-z0-9x]+/g, ''); // strip quotes, spaces, punctuation
-
 export default function ItemPicker({
   onSelect,
   compact = false,
-  // Preferred default vendor label; you can add a defaultVendorId prop later if needed
   defaultVendor = 'Gillies & Prittie Warehouse',
-  defaultFamilyLabel,   // e.g., "SPF#2" (optional)
-  preferredSeries,      // e.g., "2x6" | "2x4" (optional)
-  defaultSizeLabel,     // e.g., 2x6"-12' (optional)
+  defaultFamilyLabel,     // e.g., "SPF#2"
+  preferredSeries,        // e.g., "2x4", "2x6", "2x8", "2x10"
+  defaultSizeLabel,       // e.g., 2x6"-12'
 }) {
   // Data
   const [vendors, setVendors] = useState([]);
-  const [families, setFamilies] = useState([]); // [{ slug, label }]
-  const [sizes, setSizes]       = useState([]); // [{ id, sizeSlug, sizeLabel, unit, ... }]
+  const [families, setFamilies] = useState([]);
+  const [sizes, setSizes] = useState([]);
 
   // Selection
-  const [vendorId, setVendorId]     = useState('');
+  const [vendorId, setVendorId] = useState('');
   const [familySlug, setFamilySlug] = useState('');
-  const [sizeId, setSizeId]         = useState('');
+  const [sizeId, setSizeId] = useState('');
 
   // Loading flags
   const [loadingFamilies, setLoadingFamilies] = useState(false);
-  const [loadingSizes, setLoadingSizes]       = useState(false);
+  const [loadingSizes, setLoadingSizes] = useState(false);
 
   // One-time auto-select guards
   const didAutoVendor = useRef(false);
-  const didAutoFamilyForVendor = useRef(''); // remembers vendorId we auto-picked a family for
-  const didAutoSizeForFamily   = useRef(''); // remembers vendorId::familySlug we auto-picked a size for
-
-  // Helper: try to find first size that matches the preferred series
-  const findSeriesMatch = (list) => {
-    if (!preferredSeries) return null;
-    const want = cleanSizeToken(preferredSeries);  // "2x6"
-    return (list || []).find(s => cleanSizeToken(s.sizeLabel).startsWith(want)) || null;
-  };
+  const didAutoFamilyForVendor = useRef('');
+  const didAutoSizeForKey = useRef(''); // guard key includes series so it can re-auto when series changes
 
   // 1) Load vendors once (on mount)
   useEffect(() => {
@@ -69,16 +53,12 @@ export default function ItemPicker({
 
     const want = norm(defaultVendor);
     const pick =
-      // token match for "Gillies & Prittie"
       vendors.find(v => {
         const n = norm(v.displayName || v.id);
         return n.includes('gillies') && n.includes('prittie');
       })
-      // contains normalized defaultVendor label
       || vendors.find(v => norm(v.displayName || '').includes(want))
-      // known slug fallback
       || vendors.find(v => v.id === 'gillies_prittie_warehouse')
-      // fallback: first vendor
       || vendors[0];
 
     didAutoVendor.current = true;
@@ -89,13 +69,12 @@ export default function ItemPicker({
   useEffect(() => {
     let alive = true;
 
-    // Reset dependent selections and data
     const hadSelection = !!(familySlug || sizeId);
     setFamilySlug(prev => (prev ? '' : prev));
     setSizeId(prev => (prev ? '' : prev));
     setFamilies([]);
     setSizes([]);
-    if (hadSelection && onSelect) onSelect(null); // notify parent that selection is cleared
+    if (hadSelection && onSelect) onSelect(null);
 
     if (!vendorId) return;
 
@@ -106,7 +85,6 @@ export default function ItemPicker({
       setFamilies(fs || []);
       setLoadingFamilies(false);
 
-      // Auto-pick a family once per vendor
       if (didAutoFamilyForVendor.current !== vendorId && fs?.length) {
         let fam = null;
 
@@ -114,15 +92,13 @@ export default function ItemPicker({
           const want = norm(defaultFamilyLabel);
           fam = fs.find(f => norm(f.label) === want) || fs.find(f => norm(f.label).includes(want));
         }
-        // Prefer SPF#2 if present
         if (!fam) {
+          // Prefer SPF#2 if present
           fam = fs.find(f => {
             const n = norm(f.label);
             return n.includes('spf') && (n.includes('#2') || n.includes(' 2'));
-          });
+          }) || fs[0];
         }
-        // Fallback: first family
-        if (!fam) fam = fs[0];
 
         didAutoFamilyForVendor.current = vendorId;
         setFamilySlug(fam.slug);
@@ -130,9 +106,9 @@ export default function ItemPicker({
     })();
 
     return () => { alive = false; };
-  }, [vendorId]); // keep deps minimal by design
+  }, [vendorId]); // intentionally minimal
 
-  // 4) When family changes → reset size, load sizes, auto-pick one (prefer series)
+  // 4) When family or series changes → reset size, load sizes, auto-pick a default
   useEffect(() => {
     let alive = true;
 
@@ -150,46 +126,38 @@ export default function ItemPicker({
       setSizes(ss || []);
       setLoadingSizes(false);
 
-      // Auto-pick a size once per vendor+family
-      const famKey = `${vendorId}::${familySlug}`;
-      if (didAutoSizeForFamily.current !== famKey && ss?.length) {
+      // Include series in the guard key so we re-auto-pick when series changes
+      const famKey = `${vendorId}::${familySlug}::${preferredSeries || ''}`;
+      if (didAutoSizeForKey.current !== famKey && ss?.length) {
         let size = null;
 
-        // 1) Try to match by preferred series (e.g., "2x6" → '2x6"-8\'')
-        size = findSeriesMatch(ss);
-
-        // 2) Then try defaultSizeLabel (your original behavior)
-        if (!size && defaultSizeLabel) {
+        // If a default size label is provided, try to honor it first
+        if (defaultSizeLabel) {
           const want = norm(defaultSizeLabel);
           size =
             ss.find(s => norm(s.sizeLabel) === want) ||
-            ss.find(s => norm(s.sizeLabel).includes(want)) ||
-            null;
+            ss.find(s => norm(s.sizeLabel).includes(want));
         }
 
-        // 3) Fallback: first size
+        // Then try to match the preferredSeries, but DO NOT FILTER options
+        if (!size && preferredSeries) {
+          const wantSeries = norm(preferredSeries).replace(/[^0-9x]/g, '');
+          const labelNorm = (s) => norm(String(s || '')).replace(/[^0-9x]/g, '');
+          size =
+            ss.find(s => labelNorm(s.sizeLabel).startsWith(wantSeries)) ||
+            ss.find(s => labelNorm(s.sizeLabel).includes(wantSeries));
+        }
+
+        // Fallback: first available size
         if (!size) size = ss[0];
 
-        didAutoSizeForFamily.current = famKey;
+        didAutoSizeForKey.current = famKey;
         setSizeId(size.id);
       }
     })();
 
     return () => { alive = false; };
-  }, [vendorId, familySlug, preferredSeries, defaultSizeLabel]); // include series so first auto-pick prefers it
-
-  // 5) If the user changes the Series later (without changing vendor/family),
-  // re-align the size to the new series if current size doesn't match.
-  useEffect(() => {
-    if (!preferredSeries || !sizes?.length) return;
-    const current = sizes.find(s => s.id === sizeId);
-    const wantMatch = findSeriesMatch(sizes);
-    const currentMatches =
-      current && wantMatch && cleanSizeToken(current.sizeLabel).startsWith(cleanSizeToken(preferredSeries));
-    if (!currentMatches && wantMatch) {
-      setSizeId(wantMatch.id);
-    }
-  }, [preferredSeries, sizes, sizeId]); // safe: guarded by comparisons
+  }, [vendorId, familySlug, preferredSeries, defaultSizeLabel]);
 
   // Build selected object for parent consumers
   const selected = useMemo(() => {
@@ -202,29 +170,14 @@ export default function ItemPicker({
       vendorName: (vendors.find(v => v.id === vendorId)?.displayName) || vendorId,
       family: fam.slug,
       familyLabel: fam.label,
-      item: itm, // includes unit, supplierPrice, markupPct, priceWithMarkup, raw, etc.
+      item: itm,
     };
   }, [vendorId, familySlug, sizeId, vendors, families, sizes]);
 
-  // Notify parent only when a complete selection exists
   useEffect(() => {
     if (onSelect && selected) onSelect(selected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
-
-  // ---- memoized options to avoid re-renders in the select ----
-  const vendorOptions = useMemo(
-    () => vendors.map(v => ({ value: v.id,    label: v.displayName })),
-    [vendors]
-  );
-  const familyOptions = useMemo(
-    () => families.map(f => ({ value: f.slug, label: f.label })),
-    [families]
-  );
-  const sizeOptions = useMemo(
-    () => sizes.map(s => ({ value: s.id,     label: s.sizeLabel })),
-    [sizes]
-  );
 
   // ---- UI pieces (searchable) ------------------------------------------
   const VendorSelect = (
@@ -232,7 +185,7 @@ export default function ItemPicker({
       ariaLabel="Vendor"
       value={vendorId}
       onChange={setVendorId}
-      options={vendorOptions}
+      options={vendors.map(v => ({ value: v.id, label: v.displayName }))}
       placeholder="Select vendor…"
       disabled={!vendors.length}
     />
@@ -243,19 +196,20 @@ export default function ItemPicker({
       ariaLabel="Family"
       value={familySlug}
       onChange={setFamilySlug}
-      options={familyOptions}
+      options={families.map(f => ({ value: f.slug, label: f.label }))}
       placeholder={loadingFamilies ? 'Loading families…' : 'Family…'}
       disabled={!families.length || loadingFamilies}
       loading={loadingFamilies}
     />
   );
 
+  // ⬇ IMPORTANT: show ALL sizes; do not filter by preferredSeries
   const SizeSelect = (
     <SearchableSelect
       ariaLabel="Size"
       value={sizeId}
       onChange={setSizeId}
-      options={sizeOptions}
+      options={sizes.map(s => ({ value: s.id, label: s.sizeLabel }))}
       placeholder={loadingSizes ? 'Loading sizes…' : 'Size…'}
       disabled={!sizes.length || loadingSizes}
       loading={loadingSizes}
