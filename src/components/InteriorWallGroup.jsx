@@ -46,7 +46,7 @@ export default function InteriorWallGroup({
   bottomDefaultFamily = 'SPF#2'
 }) {
   /* Interior toggles */  
-  const [kind, setKind]     = useState('partition');    // partition | bearing | shear | standard
+  const [kind, setKind]     = useState('partition');    // partition | bearing | shear | knee
 
   /* Shared inputs */
   const [lengthLF, setLengthLF]             = useState(0);
@@ -350,6 +350,9 @@ export default function InteriorWallGroup({
       ptLF: Number(lengthLF||0),
       groupSubtotal,
       isShear: kind === 'shear',
+      isBearing: kind === 'bearing',
+      isPartition: kind === 'partition',
+      isKnee: kind === 'knee',
       bottomBoardLenFt: Number(rowByKey.bottomPlate?.boardLenFt ?? bottomLen ?? 0), 
     });
   }, [persistKey, kind, wallKind, lengthLF, platePieces, ptLF, groupSubtotal, bottomLen, rowByKey.bottomPlate?.boardLenFt]);
@@ -465,7 +468,7 @@ export default function InteriorWallGroup({
                 <option value="partition">Partition</option>
                 <option value="bearing">Bearing (adds blocking)</option>
                 <option value="shear">Shear (adds sheathing)</option>
-                <option value="standard">Standard</option>
+                <option value="knee">Knee</option>
               </select>
             </label>
           </div>

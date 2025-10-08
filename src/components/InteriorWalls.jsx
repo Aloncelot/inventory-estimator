@@ -12,7 +12,21 @@ export default function InteriorWalls({
   levelId = 'default',               // <-- important for per-level storage
   onTotalsChange,                    // ({ int2x6LF, int2x4LF, intPlatePieces, intPTLFSum }) => void
   isLevelOne = false,
+  onBearingLFChange,
+  onShearLFChange,
+  onShearPanelLenChange,
+  onPartitionLFChange,
+  onKneeLFChange,
 }) {
+
+  const majority = (vals) => {
+  const v = vals.filter(Boolean);
+  if (!v.length) return 8;
+  const counts = {};
+  for (const n of v) counts[n] = (counts[n] || 0) + 1;
+  return Number(Object.keys(counts).sort((a,b)=>counts[b]-counts[a] || b-a)[0]);
+};
+
   // One persisted list of sections per level
   const [sections, setSections] = useLocalStorageJson(
     `inv:v1:int:sections:${levelId}`,
@@ -65,12 +79,36 @@ export default function InteriorWalls({
       }
     }
 
-    return { int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, panelsSubtotal, shearLengthSum, shearPanelLenFt };
+    // ── Partition (NON-load) ───────────────────────────────────────
+    const partitionArr = arr.filter(s => !!s?.isPartition);
+    const partitionLengthSum = partitionArr.reduce((sum, s) => sum + (Number(s.lengthLF) || 0), 0);
+    // Optional panel length majority if you want it later:
+    // const partitionPanelLenFt = majority(partitionArr.map(s => Number(s.bottomBoardLenFt) || 0));
+    // ── Knee wall (from wallType === 'knee') ───────────────────────
+    const kneeArr = arr.filter(s => !!s?.isKnee);
+    const kneeLengthSum = kneeArr.reduce((sum, s) => sum + (Number(s.lengthLF) || 0), 0);
+    // const kneePanelLenFt = majority(kneeArr.map(s => Number(s.bottomBoardLenFt) || 0));
+
+    // Bearing (adds blocking)
+    const bearingArr = arr.filter(s => !!s?.isBearing);
+    const bearingLengthSum = bearingArr.reduce((sum, s) => sum + (Number(s.lengthLF) || 0), 0);
+    const bearingPanelLenFt = majority(bearingArr.map(s => Number(s.bottomBoardLenFt) || 0));
+
+    return { 
+      int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, panelsSubtotal, 
+      shearLengthSum, shearPanelLenFt, 
+      bearingLengthSum, bearingPanelLenFt,
+      partitionLengthSum, kneeLengthSum, 
+    };
   }, [stats]);
 
   // Emit to parent (Level.jsx)
   useEffect(() => {
     onTotalsChange?.(totals);
+    onBearingLFChange?.(Number(totals?.bearingLengthSum) || 0);    
+    onPartitionLFChange?.(Number(totals?.partitionLengthSum) || 0);
+    onKneeLFChange?.(Number(totals?.kneeLengthSum) || 0);
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totals]);
 

@@ -33,6 +33,9 @@ export default function Level({
   onExteriorLF,
   onInteriorShearLF,
   onInteriorShearPanelLenChange,
+  onInteriorBearingLF,
+  onInteriorNonLoadLF,
+  onKneeWallLF,
 }) {
   const handlePanelLenFromExterior = useCallback((len) => {
     onExteriorPanelLenChange?.({ id, len: Number(len) || 0 });
@@ -48,6 +51,7 @@ export default function Level({
   const [intTotals, setIntTotals] = useState({
     int2x6LF: 0, int2x4LF: 0, intPlatePieces: 0, intPTLFSum: 0,
     panelsSubtotal: 0, // sum of InteriorWallGroup groupSubtotal for this level
+    // (InteriorWalls should also provide shearLengthSum, shearPanelLenFt, bearingLengthSum)
   });
   const [looseSubtotal, setLooseSubtotal] = useState(0);
 
@@ -56,27 +60,23 @@ export default function Level({
     setExtTotals(prev => sameExtTotals(prev, t) ? prev : t);
   }, []);
 
-  // const handleIntTotals = useCallback((t) => {
-  //   setIntTotals(t || {});
-  //   // forward shear aggregates upward (for Manufacture Estimate)
-  //   if (t && typeof onInteriorShearLF === 'function') {
-  //     onInteriorShearLF({ id, lf: Number(t.shearLengthSum) || 0 });
-  //   }
-  //   if (t && typeof onInteriorShearPanelLenChange === 'function') {
-  //     onInteriorShearPanelLenChange({ id, len: Number(t.shearPanelLenFt) || 8 });
-  //   }
-  // }, [id, onInteriorShearLF, onInteriorShearPanelLenChange]);
-  
   const handleIntTotals = useCallback((t) => {
-    const safe = t || {};
-    setIntTotals(safe);
+    setIntTotals(t || {});
+    if (!t) return;
+
+    // forward interior shear LF
     if (typeof onInteriorShearLF === 'function') {
-      onInteriorShearLF({ id, lf: Number(safe.shearLengthSum) || 0 });
+      onInteriorShearLF({ id, lf: Number(t.shearLengthSum) || 0 });
     }
+    // forward interior shear panel length (derived from bottom plate in shear groups)
     if (typeof onInteriorShearPanelLenChange === 'function') {
-      onInteriorShearPanelLenChange({ id, len: Number(safe.shearPanelLenFt) || 8 });
+      onInteriorShearPanelLenChange({ id, len: Number(t.shearPanelLenFt) || 8 });
     }
-  }, [id, onInteriorShearLF, onInteriorShearPanelLenChange]);
+    // forward interior bearing LF (a.k.a. “blocking only / bearing walls”)
+    if (typeof onInteriorBearingLF === 'function') {
+      onInteriorBearingLF({ id, lf: Number(t.bearingLengthSum) || 0 });
+    }
+  }, [id, onInteriorShearLF, onInteriorShearPanelLenChange, onInteriorBearingLF]);
 
   const handleLooseSubtotal = useCallback((payload) => {
     const sub = Number(payload?.subtotal) || 0;
@@ -157,6 +157,16 @@ export default function Level({
           onTotalsChange={handleIntTotals}
           title={`${name} — Interior walls`}
           isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
+          onInteriorBearingLF={onInteriorBearingLF}
+          onBearingLFChange={(lfVal) => 
+            onInteriorBearingLF?.({ id, lf: Number(lfVal) || 0 })
+          }
+          onPartitionLFChange={(lfVal) =>
+            onInteriorNonLoadLF?.({id, lf: Number(lfVal) || 0})
+          }
+          onKneeLFChange={(lfVal) => 
+            onKneeWallLF?.({ id, lf: Number(lfVal) || 0 })
+          }
         />
 
         <LoosePanelMaterials
