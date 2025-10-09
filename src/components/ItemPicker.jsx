@@ -17,23 +17,28 @@ export default function ItemPicker({
   defaultSizeLabel,       // e.g., 2x6"-12'
 }) {
   // Data
-  const [vendors, setVendors] = useState([]);
-  const [families, setFamilies] = useState([]);
-  const [sizes, setSizes] = useState([]);
+  const [vendors, setVendors]       = useState([]);
+  const [families, setFamilies]     = useState([]);
+  const [sizes, setSizes]           = useState([]);
 
   // Selection
-  const [vendorId, setVendorId] = useState('');
+  const [vendorId, setVendorId]     = useState('');
   const [familySlug, setFamilySlug] = useState('');
-  const [sizeId, setSizeId] = useState('');
+  const [sizeId, setSizeId]         = useState('');
 
   // Loading flags
   const [loadingFamilies, setLoadingFamilies] = useState(false);
-  const [loadingSizes, setLoadingSizes] = useState(false);
+  const [loadingSizes, setLoadingSizes]       = useState(false);
 
   // One-time auto-select guards
-  const didAutoVendor = useRef(false);
-  const didAutoFamilyForVendor = useRef('');
-  const didAutoSizeForKey = useRef(''); // guard key includes series so it can re-auto when series changes
+  const didAutoVendor           = useRef(false);
+  const didAutoFamilyForVendor  = useRef('');
+  const didAutoSizeForKey       = useRef(''); // guard key includes series so it can re-auto when series changes
+
+  // Helpers to suppress re-auto-pick when the user clears manually
+  const userClearedVendor       = useRef(false);
+  const userClearedFamily       = useRef(false);
+  const userClearedSize         = useRef(false);
 
   // 1) Load vendors once (on mount)
   useEffect(() => {
@@ -46,9 +51,9 @@ export default function ItemPicker({
     return () => { alive = false; };
   }, []);
 
-  // 2) Auto-pick default vendor once when vendors arrive
+  // 2) Auto-pick default vendor once when vendors arrive (unless user cleared)
   useEffect(() => {
-    if (didAutoVendor.current) return;
+    if (didAutoVendor.current || userClearedVendor.current) return;
     if (!vendors.length || vendorId) return;
 
     const want = norm(defaultVendor);
@@ -84,6 +89,8 @@ export default function ItemPicker({
       if (!alive) return;
       setFamilies(fs || []);
       setLoadingFamilies(false);
+
+      if (userClearedFamily.current) return; // family do not auto-pick
 
       if (didAutoFamilyForVendor.current !== vendorId && fs?.length) {
         let fam = null;
@@ -128,6 +135,9 @@ export default function ItemPicker({
 
       // Include series in the guard key so we re-auto-pick when series changes
       const famKey = `${vendorId}::${familySlug}::${preferredSeries || ''}`;
+
+      if (userClearedSize.current) return; // user explicitly cleared size; do not auto-pick
+
       if (didAutoSizeForKey.current !== famKey && ss?.length) {
         let size = null;
 
@@ -159,6 +169,12 @@ export default function ItemPicker({
     return () => { alive = false; };
   }, [vendorId, familySlug, preferredSeries, defaultSizeLabel]);
 
+  // If user clears SIZE explicitly via "✖ Clear selection", notify parent
+  useEffect(() => {
+    if (!sizeId && onSelect) onSelect(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sizeId]);
+
   // Build selected object for parent consumers
   const selected = useMemo(() => {
     if (!vendorId || !familySlug || !sizeId) return null;
@@ -179,12 +195,38 @@ export default function ItemPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
+  // ---- Wrapped onChange handlers to detect clears ----------------
+  const handleVendorChange = (val) => {
+    if (val === '') {
+      userClearedVendor.current = true;
+    }
+    setVendorId(val);
+  };
+
+  const handleFamilyChange = (val) => {
+    if (val === '') {
+      userClearedFamily.current = true;
+      // Clear sizes immediately when family is cleared
+      setSizeId(prev => (prev ? '' : prev));
+      setSizes([]);
+      if (onSelect) onSelect(null);
+    }
+    setFamilySlug(val);
+  };
+
+  const handleSizeChange = (val) => {
+    if (val === '') {
+      userClearedSize.current = true;
+    }
+    setSizeId(val);
+  };
+
   // ---- UI pieces (searchable) ------------------------------------------
   const VendorSelect = (
     <SearchableSelect
       ariaLabel="Vendor"
       value={vendorId}
-      onChange={setVendorId}
+      onChange={handleVendorChange}
       options={vendors.map(v => ({ value: v.id, label: v.displayName }))}
       placeholder="Select vendor…"
       disabled={!vendors.length}
@@ -195,7 +237,7 @@ export default function ItemPicker({
     <SearchableSelect
       ariaLabel="Family"
       value={familySlug}
-      onChange={setFamilySlug}
+      onChange={handleFamilyChange}
       options={families.map(f => ({ value: f.slug, label: f.label }))}
       placeholder={loadingFamilies ? 'Loading families…' : 'Family…'}
       disabled={!families.length || loadingFamilies}
@@ -208,7 +250,7 @@ export default function ItemPicker({
     <SearchableSelect
       ariaLabel="Size"
       value={sizeId}
-      onChange={setSizeId}
+      onChange={handleSizeChange}
       options={sizes.map(s => ({ value: s.id, label: s.sizeLabel }))}
       placeholder={loadingSizes ? 'Loading sizes…' : 'Size…'}
       disabled={!sizes.length || loadingSizes}

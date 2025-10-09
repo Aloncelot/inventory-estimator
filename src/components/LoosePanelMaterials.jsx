@@ -2,14 +2,14 @@
 'use client';
 
 import { Fragment, useMemo, useState, useEffect } from 'react';
-import { parseBoardLengthFt } from '@/domain/lib/parsing';
+import { parseBoardLengthFt, unitPriceFrom } from '@/domain/lib/parsing';
 import ItemPicker from '@/components/ItemPicker';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 
 import {
   // exterior
   looseExtBottomPlates, looseExtTopPlates, loosePanelBandSheathing,
-  looseExtraSheathing, looseZipTapeFromSheets, looseOpeningsBlocking, looseSecondBottomPlate,
+  looseExtraSheathing, looseOpeningsBlocking, looseSecondBottomPlate,
   // interior
   looseInt2x6PTPlates, looseInt2x6Plates, looseInt2x4PTPlates, looseInt2x4Plates, looseCabinetBlocking,
   // general
@@ -29,19 +29,14 @@ const wordsPreview = (s = '', maxWords = 8) => {
   return parts.length > maxWords ? `${preview}…` : preview || '';
 };
 
-/**
- * Optional props (you may pass later from groups):
- * - extLengthLF: number             // exterior walls LF
- * - extZipSheetsFinal: number       // ZIP sheets from exterior groups
- * - int2x6LF: number                // interior 2x6 LF
- * - int2x4LF: number                // interior 2x4 LF
- */
+
 export default function LoosePanelMaterials({
   title = 'Loose materials — Wall Panels',
   persistKey = 'loose-panels-0',
   onRemove,
   extLengthLF,
   extZipSheetsFinal,
+  extZipSheetsSum,
   int2x6LF,
   int2x4LF,
   ptLFTotal,
@@ -49,7 +44,15 @@ export default function LoosePanelMaterials({
   onTotalChange,
   onSubtotalChange,
 }) {
-  // Collapsible
+
+  const extSheets = useMemo(
+    () => Number(extZipSheetsFinal ?? extZipSheetsSum ?? 0),
+    [extZipSheetsFinal, extZipSheetsSum]
+  );
+
+  const showZipTape = extSheets > 0;
+
+    // Collapsible
   const [collapsed, setCollapsed] = useState(false);
 
   // Notes per row
@@ -60,13 +63,15 @@ export default function LoosePanelMaterials({
 
   // ── Exterior context (manual if props not provided) ─────────────
   const [extInputs, setExtInputs] = useState({
-    lengthLF: extLengthLF ?? 0,
-    panelBandLF: 0,
-    panelBandHeightFt: 4,
-    lfPerZipSheet: 12,
-    tapeRollLenFt: 75,
-    openingsBlockingLF: 0,
+    lengthLF:             Number(extLengthLF ?? 0),
+    panelBandLF:          Number(extLengthLF ?? 0),
+    panelBandHeightFt:    4,
+    lfPerZipSheet:        12,
+    tapeRollLenFt:        75,
+    openingsBlockingLF:   0,
   });
+
+  const [panelBandEdited, setPanelBandEdited] = useState(false);
 
   // ── Interior context (manual if props not provided) ─────────────
   const [intInputs, setIntInputs] = useState({
@@ -74,6 +79,7 @@ export default function LoosePanelMaterials({
     int2x4LF: int2x4LF ?? 0,
     blockingLF: 0,                 // bathroom/kitchen blocking LF (always included)
   });
+
 
   // Include toggles (ONLY for these two)
   const [include, setInclude] = useState({
@@ -114,23 +120,33 @@ export default function LoosePanelMaterials({
 
   // Derived effective LFs
   const effectiveExtLF     = Number(extLengthLF ?? extInputs.lengthLF ?? 0);
-  const effectiveInt2x6LF  = Number(int2x6LF   ?? intInputs.int2x6LF ?? 0);
-  const effectiveInt2x4LF  = Number(int2x4LF   ?? intInputs.int2x4LF ?? 0);
+  const effectiveInt2x6LF  = Number(int2x6LF    ?? intInputs.int2x6LF ?? 0);
+  const effectiveInt2x4LF  = Number(int2x4LF    ?? intInputs.int2x4LF ?? 0);
+
+  useEffect(() => {
+  if (!panelBandEdited) {
+    const ext = Number(extLengthLF ?? extInputs.lengthLF ?? 0);
+    setExtInputs(v => ({ ...v, panelBandLF: ext }));
+  }
+}, [extLengthLF, panelBandEdited]); // extInputs.lengthLF if you allow editing that too
+
 
   // Board lengths from sizes
   const lenBottomPT      = parseBoardLengthFt(getSize(sel.extBottomPT)) || 12;
   const lenTopPlate      = parseBoardLengthFt(getSize(sel.extTopPlate)) || 12;
   const lenOpeningBlk    = parseBoardLengthFt(getSize(sel.openingsBlocking)) || 10;
   const lenSecondBottom  = parseBoardLengthFt(getSize(sel.secondBottom)) || 12;
-
+  
   const lenInt2x6PT      = parseBoardLengthFt(getSize(sel.int2x6PT)) || 12;
   const lenInt2x6Pl      = parseBoardLengthFt(getSize(sel.int2x6Plate)) || 12;
   const lenInt2x4PT      = parseBoardLengthFt(getSize(sel.int2x4PT)) || 12;
   const lenInt2x4Pl      = parseBoardLengthFt(getSize(sel.int2x4Plate)) || 12;
-
+  
   // ── Build EXTERIOR rows ────────────────────────────────────────
   const exteriorRows = useMemo(() => {
     const out = [];
+
+
 
     // PT Bottom Plates – Loose
     {
@@ -144,9 +160,10 @@ export default function LoosePanelMaterials({
         key: 'extBottomPT', 
         label: 'PT Bottom Plates – Loose', ...res, 
         item: getItem(sel.extBottomPT), 
-        wastePct: 10 
+        wastePct: 5
       });
     }
+    
 
     // Top Plates – Loose
     {
@@ -159,23 +176,25 @@ export default function LoosePanelMaterials({
         key: 'extTopPlate', 
         label: 'Top Plates – Loose', ...res, 
         item: getItem(sel.extTopPlate), 
-        wastePct: 10 
+        wastePct: 5 
       });
     }
 
     // Panel band sheathing (ZIP family by default)
     {
-      const res = loosePanelBandSheathing({ 
-        panelBandLF: Number(extInputs.panelBandLF||0), 
-        bandHeightFt: Number(extInputs.panelBandHeightFt||0), 
-        item: getItem(sel.panelBandSheathing), 
-        unit: getUnit(sel.panelBandSheathing)||'sheet' 
+      const res = loosePanelBandSheathing({
+        panelBandLF: Number(extInputs.panelBandLF || 0),
+        bandHeightFt: 4, // 4' band ⇒ sheets ≈ LF / 8 (waste applied inside)
+        item: getItem(sel.panelBandSheathing),
+        unit: getUnit(sel.panelBandSheathing) || 'sheet',
+        wastePct: 20,
       });
+
       out.push({ 
         key: 'panelBandSheathing', 
         label: 'Panel band sheathing', ...res, 
         item: getItem(sel.panelBandSheathing), 
-        wastePct: 10 
+        wastePct: 20 
       });
     }
 
@@ -196,28 +215,34 @@ export default function LoosePanelMaterials({
       });
     }
 
-    // Tape – ZIP system
+    // Tape – ZIP system  (Rolls = total ZIP sheets ÷ 6; per-level)
     {
+      if (showZipTape) {
+      const panelBandSheetsLocal =
+      Number(out.find(r => r.key === 'panelBandSheathing')?.qtyFinal || 0);
+      const extraSheetsLocal =
+      include.extraSheathing ? Number(out.find(r => r.key === 'extraSheathing')?.qtyFinal || 0) : 0;
+
       const panelBandSheets = out.find(r => r.key === 'panelBandSheathing')?.qtyFinal || 0;
       const extraSheets     = include.extraSheathing ? (out.find(r => r.key === 'extraSheathing')?.qtyFinal || 0) : 0;
-      const extZipSheets    = Number(extZipSheetsFinal || 0);
-      const totalSheets     = extZipSheets + panelBandSheets + extraSheets;
-      const seamLF          = totalSheets * Number(extInputs.lfPerZipSheet || 0);
+      const totalSheets =  Number(extSheets) + panelBandSheetsLocal + extraSheetsLocal;
 
-      const res = looseZipTapeFromSheets({ 
-        totalSheets, 
-        lfPerSheet: Number(extInputs.lfPerZipSheet||0), 
-        rollLenFt: Number(extInputs.tapeRollLenFt||75), 
-        item: getItem(sel.zipTape), 
-        unit: getUnit(sel.zipTape)||'roll' 
+
+      const qtyRaw   = Number(totalSheets) / 6;
+      const qtyFinal = Math.ceil(qtyRaw);           // whole rolls only
+      const unit     = getUnit(sel.zipTape) || 'roll';
+      const item     = getItem(sel.zipTape);
+      const unitPrice = unitPriceFrom(item);
+      const subtotal  = qtyFinal * (Number(unitPrice) || 0);
+
+      out.push({
+        key: 'zipTape',
+        label: 'Tape – ZIP system',
+        unit, qtyRaw, qtyFinal, unitPrice, subtotal,
+        item,
+        wastePct: 15, // explicit: rule has no waste factor
       });
-      out.push({ 
-        key: 'zipTape', 
-        label: 'Tape – ZIP system', ...res, 
-        item: getItem(sel.zipTape), 
-        wastePct: 5 
-      });
-    }
+    }}
 
     // Blocking at openings (LF ÷ board length)
     {
@@ -247,7 +272,7 @@ export default function LoosePanelMaterials({
         key: 'secondBottom', 
         label: 'Second bottom plate (optional)', ...res, 
         item: getItem(sel.secondBottom), 
-        wastePct: 10 
+        wastePct: 5 
       });
     }
 
@@ -256,8 +281,24 @@ export default function LoosePanelMaterials({
     sel, include,
     effectiveExtLF, extZipSheetsFinal,
     extInputs.panelBandLF, extInputs.panelBandHeightFt, extInputs.lfPerZipSheet, extInputs.tapeRollLenFt, extInputs.openingsBlockingLF,
-    lenBottomPT, lenTopPlate, lenOpeningBlk, lenSecondBottom
+    lenBottomPT, lenTopPlate, lenOpeningBlk, lenSecondBottom, extSheets
   ]);
+
+  const rowsByKey = useMemo(
+    () => Object.fromEntries(exteriorRows.map(r => [r.key, r])),
+    [exteriorRows]
+  );
+
+  const bandSheets  = Math.ceil(rowsByKey.panelBandSheathing?.qtyFinal || 0);
+  const extraSheets = include.extraSheathing
+  ? Math.ceil(rowsByKey.extraSheathing?.qtyFinal || 0)
+  : 0;
+
+  // If you need the combined count for nails:
+  const sheetsInThisSection =
+    (rowsByKey.panelBandSheathing?.qtyFinal || 0) +
+    (include.extraSheathing ? (rowsByKey.extraSheathing?.qtyFinal || 0) : 0);
+
 
   // ── Build INTERIOR rows ────────────────────────────────────────
   const interiorRows = useMemo(() => {
@@ -269,13 +310,14 @@ export default function LoosePanelMaterials({
         lengthLF: effectiveInt2x6LF, 
         boardLenFt: lenInt2x6PT, 
         item: getItem(sel.int2x6PT), 
-        unit: getUnit(sel.int2x6PT) 
+        unit: getUnit(sel.int2x6PT),
+        wastePct: 5, 
       });
       out.push({ 
         key: 'int2x6PT', 
         label: 'Interior 2×6 — PT Plates – Loose', ...res, 
         item: getItem(sel.int2x6PT), 
-        wastePct: 10 
+        wastePct: 5
       });
     }
 
@@ -285,13 +327,14 @@ export default function LoosePanelMaterials({
         lengthLF: effectiveInt2x6LF, 
         boardLenFt: lenInt2x6Pl, 
         item: getItem(sel.int2x6Plate), 
-        unit: getUnit(sel.int2x6Plate) 
+        unit: getUnit(sel.int2x6Plate),
+        wastePct: 5, 
       });
       out.push({ 
         key: 'int2x6Plate', 
         label: 'Interior 2×6 — Plates – Loose', ...res, 
         item: getItem(sel.int2x6Plate), 
-        wastePct: 10 
+        wastePct: 5
       });
     }
 
@@ -301,13 +344,14 @@ export default function LoosePanelMaterials({
         lengthLF: effectiveInt2x4LF, 
         boardLenFt: lenInt2x4PT, 
         item: getItem(sel.int2x4PT), 
-        unit: getUnit(sel.int2x4PT) 
+        unit: getUnit(sel.int2x4PT),
+        wastePct: 5,
       });
       out.push({ 
         key: 'int2x4PT', 
         label: 'Interior 2×4 — PT Plates – Loose', ...res, 
         item: getItem(sel.int2x4PT), 
-        wastePct: 10 
+        wastePct: 5 
       });
     }
 
@@ -317,13 +361,14 @@ export default function LoosePanelMaterials({
         lengthLF: effectiveInt2x4LF, 
         boardLenFt: lenInt2x4Pl, 
         item: getItem(sel.int2x4Plate), 
-        unit: getUnit(sel.int2x4Plate) 
+        unit: getUnit(sel.int2x4Plate),
+        wastePct: 5,
       });
       out.push({ 
         key: 'int2x4Plate', 
         label: 'Interior 2×4 — Plates – Loose', ...res, 
         item: getItem(sel.int2x4Plate), 
-        wastePct: 10 
+        wastePct: 5 
       });
     }
 
@@ -343,7 +388,7 @@ export default function LoosePanelMaterials({
         wastePct: 10
       });
     }
-
+    
     return out;
   }, [
     sel,
@@ -352,10 +397,9 @@ export default function LoosePanelMaterials({
     lenInt2x6PT, lenInt2x6Pl, lenInt2x4PT, lenInt2x4Pl
   ]);
 
+  
+
   // Totals for nails math
-  const sheetsInThisSection =
-    (exteriorRows.find(r => r.key === 'panelBandSheathing')?.qtyFinal || 0) +
-    (exteriorRows.find(r => r.key === 'extraSheathing')?.qtyFinal || 0);
 
   const ptLFAll = Number(ptLFTotal ?? (effectiveExtLF + effectiveInt2x6LF + effectiveInt2x4LF));
   const wallsLFTotal = effectiveExtLF + effectiveInt2x6LF + effectiveInt2x4LF;
@@ -367,7 +411,7 @@ export default function LoosePanelMaterials({
     // Concrete nails (Fastener Plus, Drive Pins with Washers (HD), 3"-100s)
     {
       const res = looseConcreteNails({ 
-        ptLF: (ptLFTotal ?? ptLFAll), 
+        ptLFAll: (ptLFTotal ?? ptLFAll), 
         item: getItem(sel.nailsConcrete), 
         unit: getUnit(sel.nailsConcrete) || 'box' 
       });
@@ -376,7 +420,7 @@ export default function LoosePanelMaterials({
         label: 'Concrete nails',
         ...res,
         item: getItem(sel.nailsConcrete),
-        wastePct: 50
+        wastePct: 40
       });
     }
 
@@ -385,14 +429,15 @@ export default function LoosePanelMaterials({
       const res = looseSheathingNails({ 
         sheetsCount: sheetsInThisSection, 
         item: getItem(sel.nailsSheathing), 
-        unit: getUnit(sel.nailsSheathing) || 'box' 
+        unit: getUnit(sel.nailsSheathing) || 'box', 
+        wastePct: 40,
       });
       out.push({
         key: 'nailsSheathing',
         label: 'Sheathing nails',
         ...res,
         item: getItem(sel.nailsSheathing),
-        wastePct: 50
+        wastePct: 40
       });
     }
 
@@ -401,14 +446,15 @@ export default function LoosePanelMaterials({
       const res = looseFramingNails({ 
         wallLF: wallsLFTotal, 
         item: getItem(sel.nailsFraming), 
-        unit: getUnit(sel.nailsFraming) || 'box' 
+        unit: getUnit(sel.nailsFraming) || 'box',
+        wastePct: 40,
       });
       out.push({
         key: 'nailsFraming',
         label: 'Framing nails',
         ...res,
         item: getItem(sel.nailsFraming),
-        wastePct: 50
+        wastePct: 40
       });
     }
 
@@ -418,14 +464,15 @@ export default function LoosePanelMaterials({
       const res = looseTempBracing({ 
         platePiecesTotal: Number(platePiecesTotal ?? generalInputs.platePiecesTotal ?? 0), 
         item: getItem(sel.tempBracing), 
-        unit: getUnit(sel.tempBracing) 
+        unit: getUnit(sel.tempBracing),
+        wastePct: 0, 
       });
       out.push({
         key: 'tempBracing',
         label: 'Temporary Bracing',
         ...res,
         item: getItem(sel.tempBracing),
-        wastePct: 10
+        wastePct: 0
       });
     }
 
@@ -515,10 +562,35 @@ export default function LoosePanelMaterials({
           </label>
           <label>
             <span className="ew-subtle">Panel band LF</span>
-            <input className="ew-input focus-anim" type="number" inputMode="decimal"
-              value={extInputs.panelBandLF}
-              onChange={e => setExtInputs(v => ({ ...v, panelBandLF: Number(e.target.value) }))}
-            />
+            <div className="flex items-center gap-2">
+              <input
+                className="ew-input focus-anim"
+                type="number"
+                inputMode="decimal"
+                value={extInputs.panelBandLF}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setPanelBandEdited(true);
+                  setExtInputs(prev => ({ ...prev, panelBandLF: Number.isFinite(v) ? v : 0 }));
+                }}
+                style={{ width: 140, textAlign: "right" }}
+              />
+              {/* optional reset to re-link it to exterior LF */}
+              <button
+                type="button"
+                className="ew-btn-secondary"
+                onClick={() => {
+                  setPanelBandEdited(false);
+                  setExtInputs(prev => ({
+                    ...prev,
+                    panelBandLF: Number(extLengthLF ?? prev.lengthLF ?? 0),
+                  }));
+                }}
+                title="Use Exterior LF"
+              >
+                ↺ use exterior LF
+              </button>
+            </div>
           </label>
           <label>
             <span className="ew-subtle">Band height (ft)</span>
@@ -526,14 +598,7 @@ export default function LoosePanelMaterials({
               value={extInputs.panelBandHeightFt}
               onChange={e => setExtInputs(v => ({ ...v, panelBandHeightFt: Number(e.target.value) }))}
             />
-          </label>
-          <label>
-            <span className="ew-subtle">ZIP seam LF / sheet</span>
-            <input className="ew-input focus-anim" type="number" inputMode="decimal"
-              value={extInputs.lfPerZipSheet}
-              onChange={e => setExtInputs(v => ({ ...v, lfPerZipSheet: Number(e.target.value) }))}
-            />
-          </label>
+          </label>         
         </div>
 
         {/* Exterior header */}
@@ -599,62 +664,37 @@ export default function LoosePanelMaterials({
                   defaultVendor="Gillies & Prittie Warehouse"
                   defaultFamilyLabel="Green Zip"
                 />
-                <div className="ew-hint">Sheets computed from Band LF × Band height</div>
+                <div className="ew-hint">Here: 4′ band ⇒ sheets ≈ (Exterior LF ÷ 8) + waste</div>
               </div>
             )}
             row={exteriorRows.find(r => r.key === 'panelBandSheathing')}
           />
 
-          {/* Extra sheathing (optional include) */}
-          <Row
-            gridCols={gridCols}
-            label="Extra sheathing (optional)"
-            noteKey="loose:extraSheathing"
-            noteApi={{ getNote, toggleOpen, setNote }}
-            picker={(
-              <ItemPicker
-                compact
-                onSelect={setPick('extraSheathing')}
-                defaultVendor="Gillies & Prittie Warehouse"
-                defaultFamilyLabel="CDX SE"
-              />
-            )}
-            row={exteriorRows.find(r => r.key === 'extraSheathing')}
-            includeControl={{
-              checked: include.extraSheathing,
-              onChange: (v) => setInclude(p => ({ ...p, extraSheathing: v })),
-              label: 'Include extra sheathing',
-            }}
-          />
 
           {/* Tape – ZIP system */}
-          <Row
+          {showZipTape && (
+            <Row
             gridCols={gridCols}
             label="Tape – ZIP system"
             noteKey="loose:zipTape"
             noteApi={{ getNote, toggleOpen, setNote }}
             picker={(
               <div className="ew-inline" style={{ alignItems: 'end' }}>
-                <ItemPicker
-                  compact
-                  onSelect={setPick('zipTape')}
-                  defaultVendor="Gillies & Prittie Warehouse"
-                  defaultFamilyLabel="ZIP Flashing Tape"
-                />
-                <label style={{ minWidth: 170 }}>
-                  <span className="ew-subtle">Roll length (ft)</span>
-                  <input className="ew-input focus-anim" type="number"
-                    value={extInputs.tapeRollLenFt}
-                    onChange={e => setExtInputs(v => ({ ...v, tapeRollLenFt: Number(e.target.value) }))}
-                  />
-                </label>
-                <div className="ew-hint">
-                  ZIP sheets = (ext: {Number(extZipSheetsFinal||0)}) + (band: {Math.ceil(exteriorRows.find(r=>r.key==='panelBandSheathing')?.qtyFinal||0)}){include.extraSheathing ? ` + (extra: ${Math.ceil(exteriorRows.find(r=>r.key==='extraSheathing')?.qtyFinal||0)})` : ''}
+                  <ItemPicker
+                    compact
+                    onSelect={setPick('zipTape')}
+                    defaultVendor="Gillies & Prittie Warehouse"
+                    defaultFamilyLabel="ZIP Flashing Tape"
+                  />       
+                  <div className="ew-hint">
+                    ZIP sheets = (ext: {extSheets}) + (band: {bandSheets})
+                    {include.extraSheathing ? ` + (extra: ${extraSheets})` : ''}
+                  </div>
                 </div>
-              </div>
+              )}
+              row={exteriorRows.find(r => r.key === 'zipTape')}
+              />
             )}
-            row={exteriorRows.find(r => r.key === 'zipTape')}
-          />
 
           {/* Blocking at openings */}
           <Row
@@ -669,41 +709,103 @@ export default function LoosePanelMaterials({
                   onSelect={setPick('openingsBlocking')}
                   defaultVendor="Gillies & Prittie Warehouse"
                   defaultFamilyLabel="SPF#2"
-                />
+                  />
                 <label style={{ minWidth: 170 }}>
                   <span className="ew-subtle">Openings blocking (LF)</span>
                   <input className="ew-input focus-anim" type="number"
                     value={extInputs.openingsBlockingLF}
                     onChange={e => setExtInputs(v => ({ ...v, openingsBlockingLF: Number(e.target.value) }))}
-                  />
+                    />
                 </label>
               </div>
             )}
             row={exteriorRows.find(r => r.key === 'openingsBlocking')}
-          />
+            />
 
-          {/* Second bottom plate (optional include) */}
-          <Row
-            gridCols={gridCols}
-            label="Second bottom plate (optional)"
-            noteKey="loose:secondBottom"
-            noteApi={{ getNote, toggleOpen, setNote }}
-            picker={(
-              <ItemPicker
-                compact
-                onSelect={setPick('secondBottom')}
-                defaultVendor="Gillies & Prittie Warehouse"
-                defaultFamilyLabel="SPF#2"
+            {include.extraSheathing && (
+              <Row
+                gridCols={gridCols}
+                label="Extra sheathing (optional)"
+                noteKey="loose:extraSheathing"
+                noteApi={{ getNote, toggleOpen, setNote }}
+                picker={(
+                  <div className="ew-inline" style={{ alignItems: 'end', gap: 8 }}>
+                    <ItemPicker
+                      compact
+                      onSelect={setPick('extraSheathing')}
+                      defaultVendor="Gillies & Prittie Warehouse"
+                      defaultFamilyLabel="CDX SE"
+                    />
+                    <button
+                      type="button"
+                      className="ew-btn"
+                      onClick={() => setInclude(p => ({ ...p, extraSheathing: false }))}
+                      title="Remove this row"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+                row={exteriorRows.find(r => r.key === 'extraSheathing')}
               />
             )}
-            row={exteriorRows.find(r => r.key === 'secondBottom')}
-            includeControl={{
-              checked: include.secondBottom,
-              onChange: (v) => setInclude(p => ({ ...p, secondBottom: v })),
-              label: 'Include second bottom plate',
-            }}
-          />
+
+          {/* Second bottom plate (optional include) */}
+          {include.secondBottom && (
+            <Row
+              gridCols={gridCols}
+              label="Second bottom plate (optional)"
+              noteKey="loose:secondBottom"
+              noteApi={{ getNote, toggleOpen, setNote }}
+              picker={(
+                <div className="ew-inline" style={{ alignItems: 'end', gap: 8 }}>
+                  <ItemPicker
+                    compact
+                    onSelect={setPick('secondBottom')}
+                    defaultVendor="Gillies & Prittie Warehouse"
+                    defaultFamilyLabel="SPF#2"
+                  />
+                  <button
+                    type="button"
+                    className="ew-btn"
+                    onClick={() => setInclude(p => ({ ...p, secondBottom: false }))}
+                    title="Remove this row"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              row={exteriorRows.find(r => r.key === 'secondBottom')}
+            />
+          )}
         </div>
+        {/* Exterior “add optional rows” footer, like wall panels */}
+        <div className="ew-footer" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            className="ew-btn"
+            onClick={() => setInclude(p => ({ ...p, extraSheathing: true }))}
+            disabled={include.extraSheathing}
+            title={include.extraSheathing ? 'Already added' : 'Add extra sheathing row'}
+          >
+            ➕ Extra sheathing
+          </button>
+
+          <button
+            className="ew-btn"
+            onClick={() => setInclude(p => ({ ...p, secondBottom: true }))}
+            disabled={include.secondBottom}
+            title={include.secondBottom ? 'Already added' : 'Add second bottom plate row'}
+          >
+            ➕ Second bottom plate
+          </button>
+
+          {/* Spacer grows; keep it like the panels footer layout */}
+          <div style={{ flex: 1 }} />
+
+          {/* You can optionally echo a small subtotal for exterior-only if you want */}
+          {/* <div className="ew-subtle">Exterior subtotal: {fmt(exteriorRows.reduce((s,r)=>s+(r.subtotal||0),0))}</div> */}
+        </div>
+
 
         {/* ───────────── Interior walls ───────────── */}
         <h3 className="ew-h3" style={{ marginTop: 16, marginBottom: 6 }}>Interior walls</h3>
@@ -843,9 +945,6 @@ export default function LoosePanelMaterials({
               onChange={e => setGeneralInputs(v => ({ ...v, platePiecesTotal: Number(e.target.value) }))}
             />
           </label>
-          <div className="ew-hint" style={{ alignSelf:'end' }}>
-            Temporary bracing uses: pieces × 3 ⇒ boards of 2×4″–16′ (+10% waste)
-          </div>
           <div></div>
           <div></div>
         </div>
@@ -936,6 +1035,9 @@ export default function LoosePanelMaterials({
             )}
             row={generalRows.find(r => r.key === 'tempBracing')}
           />
+            <div className="ew-hint" style={{ alignSelf:'end' }}>
+              Temporary bracing uses: pieces × 3 ⇒ boards of 2×4″–16′ (+10% waste)
+            </div>
         </div>
 
         <div className="ew-footer">

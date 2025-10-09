@@ -409,8 +409,7 @@ export default function InteriorWallGroup({
           borderRadius: 12
         }}
         aria-hidden={collapsed}
-      >
-        <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12 }}>
+      >        
           {/* Controls row 1 */}
           <div className="controls4" style={{ marginBottom: 8 }}>
             <label>
@@ -804,7 +803,7 @@ export default function InteriorWallGroup({
             <div className="ew-total">Group subtotal: {fmt(groupSubtotal)}</div>
           </div>
         </div>
-      </div>
+      
     </div>
   );
 }

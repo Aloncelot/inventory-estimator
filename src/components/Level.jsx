@@ -86,9 +86,10 @@ export default function Level({
 
   // Level total = exterior panels + interior panels + loose (for this level)
   const levelTotal = useMemo(() => {
-    const ext = Number(extTotals?.panelsSubtotal) || 0;
-    const intl = Number(intTotals?.panelsSubtotal) || 0;
-    const loose = Number(looseSubtotal) || 0;
+    const ext   = Number(extTotals?.panelsSubtotal) || 0;
+    const intl  = Number(intTotals?.panelsSubtotal) || 0;
+    const loose = Number(looseSubtotal)             || 0;
+    // console.log('extTotals', extTotals);
     return ext + intl + loose;
   }, [extTotals, intTotals, looseSubtotal]);
 
@@ -145,7 +146,7 @@ export default function Level({
       <div style={{ display: collapsed ? 'none' : 'block' }} aria-hidden={collapsed}>
         <ExteriorWalls
           levelId={id}
-          onTotalsChange={handleExtTotals}
+          onTotalsChange={(t) => setExtTotals(t)}
           title={`${name} — Exterior walls`}
           onLengthLFChange={(lf) => onExteriorLF?.({ id, lf })}
           onPanelLenFtChange={handlePanelLenFromExterior}
@@ -173,6 +174,24 @@ export default function Level({
           title={`${name} — Loose materials (wall panels)`}
           persistKey={`loose:${id}`}
           onSubtotalChange={handleLooseSubtotal}
+          extLengthLF={Number(extTotals?.extLengthSum || 0)}
+          extZipSheetsFinal={Number(
+            extTotals?.extZipSheetsFinal ??
+            extTotals?.extZipSheetsSum ??
+            0
+          )}
+          extZipSheetsSum={extTotals?.extZipSheetsSum}
+          int2x6LF={Number(intTotals?.int2x6LF || 0)}
+          int2x4LF={Number(intTotals?.int2x4LF || 0)}
+          // for nails/bracing math (lets Loose use the real combined totals)
+          ptLFTotal={
+            Number(extTotals?.extPTLFSum || 0) +
+            Number(intTotals?.intPTLFSum || 0)
+          }
+          platePiecesTotal={
+            Number(extTotals?.extPlatePieces || 0) +
+            Number(intTotals?.intPlatePieces || 0)
+          }
         />
       </div>
     </section>

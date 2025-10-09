@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import ExteriorWallGroup from '@/components/ExteriorWallGroup';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 
-// comparación superficial de los totales que nos importan
 const sameTotals = (a, b) => {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -28,17 +27,17 @@ export default function ExteriorWalls({
   onTotalsChange,
   title = 'Exterior walls',
   levelId = 'default',
-  onLengthLFChange,      // opcional: reportar LF total
-  onPanelLenFtChange,    // opcional: reportar largo típico de panel (desde bottom plate)
+  onLengthLFChange,      
+  onPanelLenFtChange,   
   isLevelOne = false,
 }) {
-  // Secciones persistidas por nivel
+  // Sections per level
   const [sections, setSections] = useLocalStorageJson(`inv:v1:ex:sections:${levelId}`, [
     { id: genId() },
   ]);
 
-  // Stats de cada sección
-  const [statsById, setStatsById] = useState({}); // { [id]: { id, lengthLF, zipSheetsFinal, platePieces, ptLF, groupSubtotal, bottomBoardLenFt } }
+  // Stats each section
+  const [statsById, setStatsById] = useState({}); 
 
   const addSection = () => setSections(prev => [...prev, { id: genId() }]);
   const removeSection = (id) => {
@@ -50,7 +49,7 @@ export default function ExteriorWalls({
     });
   };
 
-  // Recibir cambios de cada grupo
+  // Get changes on each group
   const handleStatsChange = useCallback((s) => {
     if (!s || !s.id) return;
     setStatsById(prev => {
@@ -64,13 +63,13 @@ export default function ExteriorWalls({
         p.groupSubtotal   === s.groupSubtotal &&
         p.bottomBoardLenFt=== s.bottomBoardLenFt
       ) {
-        return prev; // sin cambios
+        return prev;
       }
       return { ...prev, [s.id]: s };
     });
   }, []);
 
-  // Totales agregados
+  // Totals
   const totals = useMemo(() => {
     const arr = Object.values(statsById);
     const extLengthSum    = arr.reduce((sum, s) => sum + (Number(s.lengthLF)       || 0), 0);
@@ -79,10 +78,18 @@ export default function ExteriorWalls({
     const extPTLFSum      = arr.reduce((sum, s) => sum + (Number(s.ptLF)           || 0), 0);
     const extMoneySum     = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
     const panelsSubtotal  = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
-    return { extLengthSum, extZipSheetsSum, extPlatePieces, extPTLFSum, extMoneySum, panelsSubtotal };
+    
+    return { 
+      extLengthSum, 
+      extZipSheetsSum, 
+      extZipSheetsFinal: extZipSheetsSum,
+      extPlatePieces, 
+      extPTLFSum, 
+      extMoneySum, 
+      panelsSubtotal, 
+    };
   }, [statsById]);
 
-  // Elegimos un largo típico de panel (bottom plate) por “mayoría” (fallback 8)
   const panelLenFtExterior = useMemo(() => {
     const vals = Object.values(statsById)
       .map(s => Number(s.bottomBoardLenFt) || 0)
@@ -93,7 +100,6 @@ export default function ExteriorWalls({
     return Number(Object.keys(counts).sort((a, b) => counts[b] - counts[a] || b - a)[0]);
   }, [statsById]);
 
-  // Evitar loops al notificar hacia arriba
   const lastSentRef = useRef(null);
   useEffect(() => {
     const payload = { ...totals, panelLenFtExterior };

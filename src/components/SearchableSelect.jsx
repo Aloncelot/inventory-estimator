@@ -31,19 +31,25 @@ export default function SearchableSelect({
   const filtered = useMemo(() => {
     const q = (query || '').trim().toLowerCase();
     if (!q) return options;
-    return options.filter(o => o.label?.toLowerCase().includes(q));
+    return options.filter(o => (o.label || '').toLowerCase().includes(q));
   }, [options, query]);
 
-  // Ensure activeIndex is in bounds when the list changes
+  // Inject a "Clear selection" pseudo-option at the top when there is a selection
+  const displayed = useMemo(() => {
+    if (!selected) return filtered;
+    return [{ value: '__CLEAR__', label: '✖ Clear selection' }, ...filtered];
+  }, [filtered, selected]);
+
+  // Keep active index in range
   useEffect(() => {
-    if (!filtered.length) {
+    if (!displayed.length) {
       setActiveIndex(prev => (prev === -1 ? prev : -1));
       return;
     }
-    if (activeIndex < 0 || activeIndex >= filtered.length) {
-      setActiveIndex(prev => (prev === 0 ? prev : 0));
+    if (activeIndex < 0 || activeIndex >= displayed.length) {
+      setActiveIndex(0);
     }
-  }, [filtered, activeIndex]);
+  }, [displayed, activeIndex]);
 
   // Close on outside click
   useEffect(() => {
@@ -57,7 +63,6 @@ export default function SearchableSelect({
   }, []);
 
   // When opening, prefill the input with the selected label for quick refine.
-  // Guard to avoid writing the same value repeatedly.
   useEffect(() => {
     if (!open) return;
     if (!query && selected?.label) {
@@ -68,7 +73,6 @@ export default function SearchableSelect({
         if (input) input.setSelectionRange(input.value.length, input.value.length);
       });
     }
-    // We intentionally depend on open + selected + query, but we guard setQuery.
   }, [open, selected, query]);
 
   function handleInputFocus() {
@@ -83,10 +87,15 @@ export default function SearchableSelect({
   }
 
   function commitSelection(opt) {
-    // Avoid redundant updates / loops if same value
-    if (opt?.value !== value) {
-      onChange?.(opt.value);
+    if (!opt) return;
+    if (opt.value === '__CLEAR__') {
+      // Clear the selection and the query; close the list
+      onChange?.('');
+      setQuery('');
+      setOpen(false);
+      return;
     }
+    if (opt.value !== value) onChange?.(opt.value);
     setOpen(false);
     // Clear so, when closed, the input shows selected label (via displayText)
     setQuery(prev => (prev === '' ? prev : ''));
@@ -101,16 +110,16 @@ export default function SearchableSelect({
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (!filtered.length) return;
-      setActiveIndex(i => Math.min(i + 1, filtered.length - 1));
+      if (!displayed.length) return;
+      setActiveIndex(i => Math.min(i + 1, displayed.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (!filtered.length) return;
+      if (!displayed.length) return;
       setActiveIndex(i => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (filtered.length && activeIndex >= 0) {
-        commitSelection(filtered[activeIndex]);
+      if (displayed.length && activeIndex >= 0) {
+        commitSelection(displayed[activeIndex]);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -153,13 +162,17 @@ export default function SearchableSelect({
         <ul id={listId} role="listbox" className="combo-list">
           {loading ? (
             <li className="combo-empty">Loading…</li>
-          ) : filtered.length ? (
-            filtered.map((o, idx) => (
+          ) : displayed.length ? (
+            displayed.map((o, idx) => (
               <li
-                key={o.value}
+                key={`${o.value}-${idx}`}
                 role="option"
-                aria-selected={value === o.value}
-                className={'combo-option' + (idx === activeIndex ? ' active' : '')}
+                aria-selected={o.value !== '__CLEAR__' && value === o.value}
+                className={
+                  'combo-option' +
+                  (idx === activeIndex ? ' active' : '') +
+                  (o.value === '__CLEAR__' ? ' danger' : '')
+                }
                 onMouseDown={(e) => { e.preventDefault(); commitSelection(o); }}
                 onMouseEnter={() => setActiveIndex(idx)}
                 title={o.label}

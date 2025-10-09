@@ -76,6 +76,19 @@ const bottomBoardLenFt = Number.isFinite(_parsedBottom) ? _parsedBottom : 0;
 const topLen   = parseBoardLengthFt(getSize(sel.topPlate))    ?? 12;
 const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
 
+// put near your other helpers:
+const deref = x => (x && x.item ? deref(x.item) : x);
+const getFamily = (selLike) => {
+  const it = deref(selLike);
+  return String(
+    it?.familyLabel ??
+    it?.familyDisplay ??
+    it?.raw?.familyDisplay ??
+    it?.raw?.familyLabel ??
+    it?.family ??
+    ''
+  ).toLowerCase();
+};
 
   /* Build base rows */
   const baseRows = useMemo(() => {
@@ -178,7 +191,7 @@ const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
         heightFt,
         wastePct: waste.sheathing ?? 0,
         item: getItem(sel.sheathing),
-        unit: getUnit(sel.sheathing) || 'sheet',
+        unit: getUnit(sel.sheathing) || 'sheet',        
       });
       rows.push({
         key: 'sheathing',
@@ -205,15 +218,18 @@ const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
     [baseRows]
   );
 
+  // after you build `rows` (the same array you map in JSX):
+  const sheathingRow = (baseRows ?? []).find(r => (r.key === 'sheathing') || /sheathing/i.test(r.label || ''));
+  const isZip = /zip/.test(getFamily(sheathingRow?.item));
+  const zipSheetsFinal = isZip ? Math.ceil(Number(sheathingRow?.qtyFinal || 0)) : 0;
 
-
-  const zipSheetsFinal =
-  (baseRows ?? [])
-    .filter(r =>
-      /sheathing/i.test(r.label || '') &&
-      String(r.item?.familyLabel || '').toLowerCase().includes('zip') // only Green Zip families
-    )
-    .reduce((s, r) => s + (Number(r.qtyFinal) || 0), 0);
+  // family label can be in different places; normalize it
+  const getFam = (it) => String(
+    it?.familyLabel ??
+    it?.raw?.familyLabel ??
+    it?.family ??
+    ''
+  ).toLowerCase();
 
   const platePieces =
   (rowByKey?.bottomPlate?.qtyFinal ?? 0) +
@@ -312,7 +328,8 @@ const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
       ptLF: Number(lengthLF || 0),
       groupSubtotal,
       bottomBoardLenFt,
-    });
+    });   
+
   }, [persistKey, lengthLF, zipSheetsFinal, platePieces, groupSubtotal, bottomBoardLenFt]);  
 
   /* ────────────────────────────────────────────────────────────────────────
@@ -360,15 +377,7 @@ const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
         </div>
 
         {/* Full content (stay mounted) */}
-        <div
-          style={{
-            display: collapsed ? 'none' : 'block',
-            padding: 16,
-            border: '1px solid var(--border)',
-            borderRadius: 12
-          }}
-          aria-hidden={collapsed}
-        >
+        
         <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12 }}>
           {/* Shared controls */}
           <div className="controls4" style={{ marginBottom: 12 }}>
@@ -426,7 +435,7 @@ const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
                       onSelect={setPick(row.key)}
                       defaultVendor="Gillies & Prittie Warehouse"
                       defaultFamilyLabel={
-                        row.key === 'sheathing'   ?   'CDX SE':
+                        row.key === 'sheathing'   ?   'Green Zip':
                         row.key === 'bottomPlate' ?   bottomDefaultFamily :
                                                       'SPF#2'
                       }                     
@@ -678,9 +687,9 @@ const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
           <div className="ew-footer">
             <button className="ew-btn" onClick={() => addExtra('Header')}>➕ Header</button>
             <button className="ew-btn" onClick={() => addExtra('Post')}>➕ Post</button>
-            <div className="ew-total">Group subtotal: {fmt(groupSubtotal)}</div>
+            <div className="ew-total">Group subtotal: {fmt(groupSubtotal)}</div>            
           </div>
-        </div>
+        
       </div>
     </div>
   );
