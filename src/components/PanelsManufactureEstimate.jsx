@@ -225,8 +225,8 @@ export default function PanelsManufactureEstimate({
   }, [lines]);
 
   useEffect(() => {
-    onTotalChange?.({ total: totals.total });
-  }, [totals.total, onTotalChange]);
+    onTotalChange?.({ total: totals.total, panels: totals.panels });
+  }, [totals.total, totals.panels, onTotalChange]);
 
   const contentId = "manufacture-estimate-body";
 

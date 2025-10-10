@@ -43,13 +43,15 @@ export default function LoosePanelMaterials({
   platePiecesTotal,
   onTotalChange,
   onSubtotalChange,
+  totalPanelsAllLevels,
+  levelsCount,
 }) {
 
   const extSheets = useMemo(
     () => Number(extZipSheetsFinal ?? extZipSheetsSum ?? 0),
     [extZipSheetsFinal, extZipSheetsSum]
   );
-
+ 
   const showZipTape = extSheets > 0;
 
     // Collapsible
@@ -290,15 +292,12 @@ export default function LoosePanelMaterials({
   );
 
   const bandSheets  = Math.ceil(rowsByKey.panelBandSheathing?.qtyFinal || 0);
-  const extraSheets = include.extraSheathing
-  ? Math.ceil(rowsByKey.extraSheathing?.qtyFinal || 0)
-  : 0;
+  const extraSheets = include.extraSheathing 
+    ? Math.ceil(rowsByKey.extraSheathing?.qtyFinal || 0) 
+    : 0;
 
   // If you need the combined count for nails:
-  const sheetsInThisSection =
-    (rowsByKey.panelBandSheathing?.qtyFinal || 0) +
-    (include.extraSheathing ? (rowsByKey.extraSheathing?.qtyFinal || 0) : 0);
-
+  const sheetsInThisSection = Number(extSheets) + bandSheets + extraSheets;
 
   // ── Build INTERIOR rows ────────────────────────────────────────
   const interiorRows = useMemo(() => {
@@ -408,79 +407,107 @@ export default function LoosePanelMaterials({
   const generalRows = useMemo(() => {
     const out = [];
 
-    // Concrete nails (Fastener Plus, Drive Pins with Washers (HD), 3"-100s)
+    // Concrete nails (Home Depot, Drive Pins with Washers (HD), 3"-100s)
+    // Formula: (PT pieces × 25 / 100) with +40% waste ⇒ ceil(...)
     {
-      const res = looseConcreteNails({ 
-        ptLFAll: (ptLFTotal ?? ptLFAll), 
-        item: getItem(sel.nailsConcrete), 
-        unit: getUnit(sel.nailsConcrete) || 'box' 
-      });
+      // Count PT pieces from the rows we already computed in this section
+      const extPTpieces   = Math.ceil(exteriorRows.find(r => r.key === 'extBottomPT')?.qtyFinal || 0);
+      const int2x6PTpcs   = Math.ceil(interiorRows.find(r => r.key === 'int2x6PT')?.qtyFinal || 0);
+      const int2x4PTpcs   = Math.ceil(interiorRows.find(r => r.key === 'int2x4PT')?.qtyFinal || 0);
+      const ptPiecesTotal = extPTpieces + int2x6PTpcs + int2x4PTpcs;
+      // Boxes: each box is "100s"; we need (pieces * 25) / 100, then add 40% waste
+      const qtyRaw   = (ptPiecesTotal * 25) / 100;
+      const qtyFinal = Math.ceil(qtyRaw * 1.40);
+      const unit      = getUnit(sel.nailsConcrete) || 'box';
+      const item      = getItem(sel.nailsConcrete);
+      const unitPrice = unitPriceFrom(item);
+      const subtotal  = qtyFinal * (Number(unitPrice) || 0);
       out.push({
         key: 'nailsConcrete',
         label: 'Concrete nails',
-        ...res,
-        item: getItem(sel.nailsConcrete),
+        unit, qtyRaw, qtyFinal, unitPrice, subtotal,
+        item,
         wastePct: 40
-      });
+        });
     }
 
     // Sheathing nails (Concord, Bright Ring Coil, 8D-2-3/8x.113-2.7M)
     {
-      const res = looseSheathingNails({ 
-        sheetsCount: sheetsInThisSection, 
-        item: getItem(sel.nailsSheathing), 
-        unit: getUnit(sel.nailsSheathing) || 'box', 
-        wastePct: 40,
-      });
+      const qtyRaw = (Number(sheetsInThisSection) || 0) * 80 /2700;
+      const qtyFinal = Math.ceil(qtyRaw * 1.40);
+      const unit = getUnit(sel.nailsSheathing) || 'box';
+      const item = getItem(sel.nailsSheathing);
+      const unitPrice = unitPriceFrom(item);
+      const subtotal = qtyFinal * (Number(unitPrice) || 0);
+
       out.push({
         key: 'nailsSheathing',
         label: 'Sheathing nails',
-        ...res,
-        item: getItem(sel.nailsSheathing),
-        wastePct: 40
+        unit, qtyRaw, qtyFinal, unitPrice, subtotal, item, wastePct: 40,
       });
     }
-
     // Framing nails (G&P Warehouse, Bright Common Coil, 12D-3-1/4x.120-2.5M)
     {
-      const res = looseFramingNails({ 
-        wallLF: wallsLFTotal, 
-        item: getItem(sel.nailsFraming), 
-        unit: getUnit(sel.nailsFraming) || 'box',
-        wastePct: 40,
-      });
+      // Total plates in this section = sum of all plate PIECES (exterior + interior)
+      const ex = Object.fromEntries(exteriorRows.map(r => [r.key, r]));
+      const inr = Object.fromEntries(interiorRows.map(r => [r.key, r]));
+      const q = (obj, k) => Math.ceil(obj[k]?.qtyFinal || 0);
+
+      const totalPlatePieces  =
+        q(ex, 'extBottomPT')  +
+        q(ex, 'extTopPlate')  +
+        q(ex, 'secondBottom') +
+        q(inr, 'int2x6PT')    +
+        q(inr, 'int2x6Plate') +
+        q(inr, 'int2x4PT')    +
+        q(inr, 'int2x4Plate') ;
+
+      // Math: pieces * 25 / 2500 + 40% waste
+      const qtyRaw   = (totalPlatePieces * 25) / 2500;
+      const qtyFinal = Math.ceil(qtyRaw * 1.40);
+
+      const unit      = getUnit(sel.nailsFraming) || 'box';
+      const item      = getItem(sel.nailsFraming);
+      const unitPrice = unitPriceFrom(item);
+      const subtotal  = qtyFinal * (Number(unitPrice) || 0);
+
       out.push({
         key: 'nailsFraming',
         label: 'Framing nails',
-        ...res,
-        item: getItem(sel.nailsFraming),
-        wastePct: 40
-      });
+        unit, qtyRaw, qtyFinal, unitPrice, subtotal,
+        item,
+        wastePct: 40,
+});
     }
 
-    // Temporary Bracing (G&P, SPF#2, 2x4"-16')
+    // Temporary Bracing
     {
-      // Treat as boards of 16': lengthLF = (platePiecesTotal * 3 * 16), boardLen = 16 → qtyRaw = platePiecesTotal * 3
-      const res = looseTempBracing({ 
-        platePiecesTotal: Number(platePiecesTotal ?? generalInputs.platePiecesTotal ?? 0), 
-        item: getItem(sel.tempBracing), 
-        unit: getUnit(sel.tempBracing),
-        wastePct: 0, 
-      });
+      const allPanels = Number(totalPanelsAllLevels || 0);
+      const lvlCount  = Math.max(1, Number(levelsCount || 1));
+      const qtyRaw    = (allPanels * 3) / lvlCount;
+      const qtyFinal  = Math.ceil(qtyRaw);   // whole-count
+      const unit      = getUnit(sel.tempBracing) || 'pcs';
+      const item      = getItem(sel.tempBracing);
+      const unitPrice = unitPriceFrom(item);
+      const subtotal  = qtyFinal * (Number(unitPrice) || 0);
+
       out.push({
         key: 'tempBracing',
         label: 'Temporary Bracing',
-        ...res,
-        item: getItem(sel.tempBracing),
+        unit, qtyRaw, qtyFinal, unitPrice, subtotal,
+        item,
         wastePct: 0
       });
     }
-
+    
     return out;
   }, [
     sel,
-    (ptLFTotal ?? ptLFAll), sheetsInThisSection, wallsLFTotal,
-    generalInputs.platePiecesTotal
+    sheetsInThisSection, wallsLFTotal,
+    generalInputs.platePiecesTotal,
+    exteriorRows, interiorRows,
+    totalPanelsAllLevels,
+    levelsCount,
   ]);
 
   const sectionSubtotal = useMemo(() => {
@@ -974,7 +1001,7 @@ export default function LoosePanelMaterials({
               <ItemPicker
                 compact
                 onSelect={setPick('nailsConcrete')}
-                defaultVendor="Fastener Plus"
+                defaultVendor="Home Depot"
                 defaultFamilyLabel="Drive Pins with Washers (HD)"
                 defaultSizeLabel={`3"-100s`}
               />
@@ -1010,7 +1037,7 @@ export default function LoosePanelMaterials({
               <ItemPicker
                 compact
                 onSelect={setPick('nailsFraming')}
-                defaultVendor="Gillies & Prittie Warehouse"
+                defaultVendor="Concord"
                 defaultFamilyLabel="Bright Common Coil"
                 defaultSizeLabel={`12D-3-1/4x.120-2.5M`}
               />

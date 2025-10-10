@@ -57,13 +57,21 @@ export default function ItemPicker({
     if (!vendors.length || vendorId) return;
 
     const want = norm(defaultVendor);
-    const pick =
-      vendors.find(v => {
-        const n = norm(v.displayName || v.id);
-        return n.includes('gillies') && n.includes('prittie');
-      })
-      || vendors.find(v => norm(v.displayName || '').includes(want))
-      || vendors.find(v => v.id === 'gillies_prittie_warehouse')
+    const byExactLabelOrId = vendors.find(v => norm(v.displayName || v.id) === want);
+    const byIncludesLabel  = vendors.find(v => norm(v.displayName || '').includes(want));
+    const lowerId = (v) => String(v.id || '').toLowerCase();
+    const byCommonId = vendors.find(v =>
+    ['home_depot','homedepot','hd'].includes(lowerId(v))
+    );
+    const gpBias = vendors.find(v => {
+      const n = norm(v.displayName || v.id);
+      return n.includes('gillies') && n.includes('prittie')
+    });
+
+    const pick = byExactLabelOrId
+      || byIncludesLabel
+      || byCommonId
+      || gpBias
       || vendors[0];
 
     didAutoVendor.current = true;

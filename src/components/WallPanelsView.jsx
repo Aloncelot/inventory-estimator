@@ -13,6 +13,7 @@ function genLevel() {
 export default function WallPanelsView({ onGrandTotal}) {
   // Persist levels
   const [manufactureTotal, setManufactureTotal] = useState(0);
+  const [panelsTotalAllSections, setPanelTotalAllSections] = useState(0);
 
   // ── Exterior LF sum ─────────────────────────────────────────
   const [extLfByLevel, setExtLfByLevel] = useState({}); // { levelId: lf }
@@ -238,6 +239,7 @@ const panelLenFtInteriorBlocking = useMemo(() => {
     () => Object.values(kneeWallLfByLevel).reduce((s,n) => s + (Number(n)||0), 0),
     [kneeWallLfByLevel]
   );
+  const [mfTotals, setMfTotals] = useState({ total: 0, panels: 0 });
 
   return (
     <div className="app-content">
@@ -275,6 +277,9 @@ const panelLenFtInteriorBlocking = useMemo(() => {
           // Knee wall
           onKneeWallLF={handleKneeWallLF}
 
+          levelsCount={levels.length}
+          panelsTotalAllSections={panelsTotalAllSections}
+
         />
       ))}
 
@@ -299,7 +304,10 @@ const panelLenFtInteriorBlocking = useMemo(() => {
         interiorBlockingLF={totalInteriorBlockingLF}
         interiorNonLoadLF={totalInteriorNonLoadLF}
         kneeWallLF={totalKneeWallLF}
-        onTotalChange={({ total }) => setManufactureTotal(Number(total) || 0)}
+        onTotalChange={({ total, panels }) => {
+          setManufactureTotal(Number(total) || 0);
+          setPanelTotalAllSections(Number(total) || 0);
+        }}
         panelLenFtInteriorBlocking={panelLenFtInteriorBlocking}
       />
     </div>
