@@ -5,12 +5,41 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import Level from '@/components/Level';
 import PanelsManufactureEstimate from "@/components/PanelsManufactureEstimate";
+import NailsAndBracing from '@/components/NailsAndBracing';
 
 function genLevel() {
   return { id: crypto?.randomUUID?.() || ('lvl-' + Math.random().toString(36).slice(2,8)), name: '' };
 }
 
 export default function WallPanelsView({ onGrandTotal}) {
+
+ // Per-level general counts for Nails & Bracing (reported by LoosePanelMaterials)
+  const [nailsStatsByLevel, setNailsStatsByLevel] = useState({});
+  const handleLooseGeneralChange = useCallback(
+    ({ id, sheetsExt = 0, sheetsBand = 0, sheetsExtra = 0, platePiecesTotal = 0 }) => {
+      const next = {
+        sheetsExt: Number(sheetsExt) || 0,
+        sheetsBand: Number(sheetsBand) || 0,
+        sheetsExtra: Number(sheetsExtra) || 0,
+        platePiecesTotal: Number(platePiecesTotal) || 0,
+      };
+      setNailsStatsByLevel(prev => {
+        const p = prev[id];
+        if (
+          p &&
+         p.sheetsExt === next.sheetsExt &&
+          p.sheetsBand === next.sheetsBand &&
+          p.sheetsExtra === next.sheetsExtra &&
+          p.platePiecesTotal === next.platePiecesTotal
+        ) {
+          return prev; // no-op if identical
+        }
+        return { ...prev, [id]: next };
+      });
+    },
+    []
+  );
+
   // Persist levels
   const [manufactureTotal, setManufactureTotal] = useState(0);
   const [panelsTotalAllSections, setPanelTotalAllSections] = useState(0);
@@ -239,7 +268,19 @@ const panelLenFtInteriorBlocking = useMemo(() => {
     () => Object.values(kneeWallLfByLevel).reduce((s,n) => s + (Number(n)||0), 0),
     [kneeWallLfByLevel]
   );
-  const [mfTotals, setMfTotals] = useState({ total: 0, panels: 0 });
+
+  const sheetsExtAll   = useMemo(() => Object.values(nailsStatsByLevel).reduce((s, v) => s + (Number(v?.sheetsExt) || 0), 0), [nailsStatsByLevel]);
+  const sheetsBandAll  = useMemo(() => Object.values(nailsStatsByLevel).reduce((s, v) => s + (Number(v?.sheetsBand) || 0), 0), [nailsStatsByLevel]);
+  const sheetsExtraAll = useMemo(() => Object.values(nailsStatsByLevel).reduce((s, v) => s + (Number(v?.sheetsExtra) || 0), 0), [nailsStatsByLevel]);
+  const platePiecesAll = useMemo(() => Object.values(nailsStatsByLevel).reduce((s, v) => s + (Number(v?.platePiecesTotal) || 0), 0), [nailsStatsByLevel]);
+
+  const nailsTotals = useMemo(() => ({
+   panelsAll: Number(panelsTotalAllSections || 0),
+   platePiecesAll,
+   sheetsExtAll,
+   sheetsBandAll,
+   sheetsExtraAll,
+ }), [panelsTotalAllSections, platePiecesAll, sheetsExtAll, sheetsBandAll, sheetsExtraAll]);
 
   return (
     <div className="app-content">
@@ -279,7 +320,7 @@ const panelLenFtInteriorBlocking = useMemo(() => {
 
           levelsCount={levels.length}
           panelsTotalAllSections={panelsTotalAllSections}
-
+          onLooseGeneralChange={handleLooseGeneralChange}
         />
       ))}
 
@@ -288,6 +329,10 @@ const panelLenFtInteriorBlocking = useMemo(() => {
         <div className="ew-subtle">Add another floor (mirrors functionality; you can input different quantities)</div>
         <button className="ew-btn ew-btn--turq" onClick={addLevel}>+ Add level</button>
       </div>
+    <div>
+      {/* Global Nails & Bracing (single section for all levels) */}
+      <NailsAndBracing title="General — Nails & Bracing (all levels)" totals={nailsTotals} />
+    </div>
 
       {/* Panels Manufacture Estimate */}
       <PanelsManufactureEstimate
@@ -306,10 +351,12 @@ const panelLenFtInteriorBlocking = useMemo(() => {
         kneeWallLF={totalKneeWallLF}
         onTotalChange={({ total, panels }) => {
           setManufactureTotal(Number(total) || 0);
-          setPanelTotalAllSections(Number(total) || 0);
+          setPanelTotalAllSections(Number(panels) || 0);
         }}
         panelLenFtInteriorBlocking={panelLenFtInteriorBlocking}
       />
-    </div>
+
+
+  </div>
   );
 }

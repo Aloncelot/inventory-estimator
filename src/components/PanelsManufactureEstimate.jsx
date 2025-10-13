@@ -13,7 +13,6 @@ const DEFAULT_RATES = {
 };
 
 const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-const usd = (n) => Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const money = (n) => USD.format(Number(n || 0));
 const fmt   = (n) => Number(n || 0).toLocaleString("en-US");
 

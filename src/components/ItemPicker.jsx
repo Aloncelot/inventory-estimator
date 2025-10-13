@@ -1,7 +1,7 @@
 // src/components/ItemPicker.jsx
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { listVendors, listFamilies, listSizes } from '@/lib/catalog';
 import SearchableSelect from '@/components/SearchableSelect';
 
@@ -26,21 +26,35 @@ export default function ItemPicker({
   const [familySlug, setFamilySlug] = useState('');
   const [sizeId, setSizeId]         = useState('');
 
-  // Loading flags
-  const [loadingFamilies, setLoadingFamilies] = useState(false);
-  const [loadingSizes, setLoadingSizes]       = useState(false);
+  // Guards for one-time/once-per-key auto picks
+  const didAutoVendor          = useRef(false);
+  const prevVendorRef          = useRef('');                             // last vendor we reacted to
+  const prevFamilyKeyRef       = useRef('');                             // last (vendor|family|series) we reacted to
+  const didAutoFamilyForVendor = useRef('');                             // vendor id we last auto-picked family for
+  const didAutoSizeForKey      = useRef('');                             // key `${vendor}::${family}::${preferredSeries}`
 
-  // One-time auto-select guards
-  const didAutoVendor           = useRef(false);
-  const didAutoFamilyForVendor  = useRef('');
-  const didAutoSizeForKey       = useRef(''); // guard key includes series so it can re-auto when series changes
+  // User-clears should suppress auto-picks
+  const userClearedVendor = useRef(false);
+  const userClearedFamily = useRef(false);
+  const userClearedSize   = useRef(false);
 
-  // Helpers to suppress re-auto-pick when the user clears manually
-  const userClearedVendor       = useRef(false);
-  const userClearedFamily       = useRef(false);
-  const userClearedSize         = useRef(false);
+  // Idempotent setters (avoid re-setting same value)
+  const setVendorIdIf = useCallback((val) => {
+    setVendorId(prev => (prev === val ? prev : val));
+  }, []);
+  const setFamilySlugIf = useCallback((val) => {
+    setFamilySlug(prev => (prev === val ? prev : val));
+  }, []);
+  const setSizeIdIf = useCallback((val) => {
+    setSizeId(prev => (prev === val ? prev : val));
+  }, []);
 
-  // 1) Load vendors once (on mount)
+  // Emit guard + stable onSelect ref
+  const lastEmitRef = useRef(''); // `${vendorId}|${familySlug}|${sizeId}` or 'null'
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+
+  // -------- Load vendors once
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -51,105 +65,107 @@ export default function ItemPicker({
     return () => { alive = false; };
   }, []);
 
-  // 2) Auto-pick default vendor once when vendors arrive (unless user cleared)
+  // -------- Auto-pick default vendor once when vendors arrive
   useEffect(() => {
     if (didAutoVendor.current || userClearedVendor.current) return;
     if (!vendors.length || vendorId) return;
 
     const want = norm(defaultVendor);
-    const byExactLabelOrId = vendors.find(v => norm(v.displayName || v.id) === want);
-    const byIncludesLabel  = vendors.find(v => norm(v.displayName || '').includes(want));
-    const lowerId = (v) => String(v.id || '').toLowerCase();
-    const byCommonId = vendors.find(v =>
-    ['home_depot','homedepot','hd'].includes(lowerId(v))
-    );
-    const gpBias = vendors.find(v => {
+    const byExact = vendors.find(v => norm(v.displayName || v.id) === want);
+    const byIncl  = vendors.find(v => norm(v.displayName || '').includes(want));
+    const gpBias  = vendors.find(v => {
       const n = norm(v.displayName || v.id);
-      return n.includes('gillies') && n.includes('prittie')
+      return n.includes('gillies') && n.includes('prittie');
     });
-
-    const pick = byExactLabelOrId
-      || byIncludesLabel
-      || byCommonId
-      || gpBias
-      || vendors[0];
+    const pick = byExact || byIncl || gpBias || vendors[0];
 
     didAutoVendor.current = true;
-    setVendorId(pick?.id || '');
-  }, [vendors, vendorId, defaultVendor]);
+    if (pick?.id) setVendorIdIf(pick.id);
+  }, [vendors, vendorId, defaultVendor, setVendorIdIf]);
 
-  // 3) When vendor changes → reset family/size, load families, auto-pick one
+  // ================================
+  // VENDOR CHANGED → reset family/size, load families, maybe auto-pick a family
+  // (depends ONLY on vendorId to avoid clearing family when family changes)
+  // ================================
   useEffect(() => {
-    let alive = true;
+    const prevVendor = prevVendorRef.current;
+    if (!vendorId || vendorId === prevVendor) {
+      prevVendorRef.current = vendorId;
+      return;
+    }
 
+    // Snapshot before we clear
     const hadSelection = !!(familySlug || sizeId);
-    setFamilySlug(prev => (prev ? '' : prev));
-    setSizeId(prev => (prev ? '' : prev));
-    setFamilies([]);
-    setSizes([]);
-    if (hadSelection && onSelect) onSelect(null);
 
-    if (!vendorId) return;
+    // Clear local state once for this vendor change
+    if (familySlug) setFamilySlugIf('');
+    if (sizeId) setSizeIdIf('');
+    setFamilies(prev => (prev.length ? [] : prev));
+    setSizes(prev => (prev.length ? [] : prev));
 
+    // Tell parent selection is now null (once)
+    if (hadSelection && onSelectRef.current && lastEmitRef.current !== 'null') {
+      lastEmitRef.current = 'null';
+      onSelectRef.current(null);
+    }
+
+    let alive = true;
     (async () => {
-      setLoadingFamilies(true);
       const fs = await listFamilies(vendorId);
       if (!alive) return;
       setFamilies(fs || []);
-      setLoadingFamilies(false);
 
-      if (userClearedFamily.current) return; // family do not auto-pick
-
-      if (didAutoFamilyForVendor.current !== vendorId && fs?.length) {
+      if (!userClearedFamily.current && didAutoFamilyForVendor.current !== vendorId && fs?.length) {
         let fam = null;
-
         if (defaultFamilyLabel) {
           const want = norm(defaultFamilyLabel);
           fam = fs.find(f => norm(f.label) === want) || fs.find(f => norm(f.label).includes(want));
         }
         if (!fam) {
-          // Prefer SPF#2 if present
+          // prefer SPF #2 if present
           fam = fs.find(f => {
             const n = norm(f.label);
             return n.includes('spf') && (n.includes('#2') || n.includes(' 2'));
           }) || fs[0];
         }
-
         didAutoFamilyForVendor.current = vendorId;
-        setFamilySlug(fam.slug);
+        if (fam?.slug) setFamilySlugIf(fam.slug);
       }
     })();
 
+    prevVendorRef.current = vendorId;
     return () => { alive = false; };
-  }, [vendorId]); // intentionally minimal
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorId]); // <-- ONLY vendorId
 
-  // 4) When family or series changes → reset size, load sizes, auto-pick a default
+  // =========================================
+  // FAMILY or PREFERRED SERIES CHANGED → reset size, load sizes, maybe auto-pick
+  // (NO dependency on sizeId to avoid self-loop)
+  // =========================================
   useEffect(() => {
-    let alive = true;
-
-    const hadSize = !!sizeId;
-    setSizeId(prev => (prev ? '' : prev));
-    setSizes([]);
-    if (hadSize && onSelect) onSelect(null);
-
     if (!vendorId || !familySlug) return;
 
+    const key = `${vendorId}::${familySlug}::${preferredSeries || ''}`;
+    if (prevFamilyKeyRef.current === key) return;
+
+    const hadSize = !!sizeId;
+    if (hadSize) setSizeIdIf('');
+    setSizes(prev => (prev.length ? [] : prev));
+
+    if (hadSize && onSelectRef.current && lastEmitRef.current !== 'null') {
+      lastEmitRef.current = 'null';
+      onSelectRef.current(null);
+    }
+
+    let alive = true;
     (async () => {
-      setLoadingSizes(true);
       const ss = await listSizes(vendorId, familySlug);
       if (!alive) return;
       setSizes(ss || []);
-      setLoadingSizes(false);
 
-      // Include series in the guard key so we re-auto-pick when series changes
-      const famKey = `${vendorId}::${familySlug}::${preferredSeries || ''}`;
-
-      if (userClearedSize.current) return; // user explicitly cleared size; do not auto-pick
-
-      if (didAutoSizeForKey.current !== famKey && ss?.length) {
+      if (!userClearedSize.current && didAutoSizeForKey.current !== key && ss?.length) {
         let size = null;
 
-        // If a default size label is provided, try to honor it first
         if (defaultSizeLabel) {
           const want = norm(defaultSizeLabel);
           size =
@@ -157,7 +173,6 @@ export default function ItemPicker({
             ss.find(s => norm(s.sizeLabel).includes(want));
         }
 
-        // Then try to match the preferredSeries, but DO NOT FILTER options
         if (!size && preferredSeries) {
           const wantSeries = norm(preferredSeries).replace(/[^0-9x]/g, '');
           const labelNorm = (s) => norm(String(s || '')).replace(/[^0-9x]/g, '');
@@ -166,20 +181,26 @@ export default function ItemPicker({
             ss.find(s => labelNorm(s.sizeLabel).includes(wantSeries));
         }
 
-        // Fallback: first available size
         if (!size) size = ss[0];
 
-        didAutoSizeForKey.current = famKey;
-        setSizeId(size.id);
+        didAutoSizeForKey.current = key;
+        if (size?.id) setSizeIdIf(size.id);
       }
     })();
 
+    prevFamilyKeyRef.current = key;
     return () => { alive = false; };
-  }, [vendorId, familySlug, preferredSeries, defaultSizeLabel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorId, familySlug, preferredSeries, defaultSizeLabel]); // <-- NO sizeId here
 
-  // If user clears SIZE explicitly via "✖ Clear selection", notify parent
+  // If user clears SIZE explicitly via "✖ Clear selection", notify parent once
   useEffect(() => {
-    if (!sizeId && onSelect) onSelect(null);
+    if (!sizeId) {
+      if (lastEmitRef.current !== 'null') {
+        lastEmitRef.current = 'null';
+        onSelectRef.current?.(null);
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sizeId]);
 
@@ -198,44 +219,60 @@ export default function ItemPicker({
     };
   }, [vendorId, familySlug, sizeId, vendors, families, sizes]);
 
+  // Emit selection ONLY when it actually changes
   useEffect(() => {
-    if (onSelect && selected) onSelect(selected);
+    const sig = selected ? `${vendorId}|${familySlug}|${sizeId}` : 'null';
+    if (sig !== lastEmitRef.current) {
+      lastEmitRef.current = sig;
+      onSelectRef.current?.(selected);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
-  // ---- Wrapped onChange handlers to detect clears ----------------
-  const handleVendorChange = (val) => {
-    if (val === '') {
-      userClearedVendor.current = true;
-    }
-    setVendorId(val);
-  };
+  // ---- Change handlers (also set "user cleared" flags) ----------------
+  const handleVendorChange = useCallback((val) => {
+    if (val === '') userClearedVendor.current = true;
+    setVendorIdIf(val);
+  }, [setVendorIdIf]);
 
-  const handleFamilyChange = (val) => {
+  const handleFamilyChange = useCallback((val) => {
     if (val === '') {
       userClearedFamily.current = true;
-      // Clear sizes immediately when family is cleared
-      setSizeId(prev => (prev ? '' : prev));
-      setSizes([]);
-      if (onSelect) onSelect(null);
+      if (sizeId) setSizeIdIf('');
+      setSizes(prev => (prev.length ? [] : prev));
+      if (lastEmitRef.current !== 'null') {
+        lastEmitRef.current = 'null';
+        onSelectRef.current?.(null);
+      }
     }
-    setFamilySlug(val);
-  };
+    setFamilySlugIf(val);
+  }, [sizeId, setSizeIdIf, setFamilySlugIf]);
 
-  const handleSizeChange = (val) => {
-    if (val === '') {
-      userClearedSize.current = true;
-    }
-    setSizeId(val);
-  };
+  const handleSizeChange = useCallback((val) => {
+    if (val === '') userClearedSize.current = true;
+    setSizeIdIf(val);
+  }, [setSizeIdIf]);
 
   // ---- UI pieces (searchable) ------------------------------------------
+  const vendorOptions = useMemo(
+    () => vendors.map(v => ({ value: v.id,  label: v.displayName })),
+    [vendors]
+  );
+  const familyOptions = useMemo(
+    () => families.map(f => ({ value: f.slug, label: f.label })),
+    [families]
+  );
+  const sizeOptions = useMemo(
+    () => sizes.map(s => ({ value: s.id,   label: s.sizeLabel })),
+    [sizes]
+  );
+
   const VendorSelect = (
     <SearchableSelect
       ariaLabel="Vendor"
       value={vendorId}
       onChange={handleVendorChange}
-      options={vendors.map(v => ({ value: v.id, label: v.displayName }))}
+      options={vendorOptions}
       placeholder="Select vendor…"
       disabled={!vendors.length}
     />
@@ -246,10 +283,9 @@ export default function ItemPicker({
       ariaLabel="Family"
       value={familySlug}
       onChange={handleFamilyChange}
-      options={families.map(f => ({ value: f.slug, label: f.label }))}
-      placeholder={loadingFamilies ? 'Loading families…' : 'Family…'}
-      disabled={!families.length || loadingFamilies}
-      loading={loadingFamilies}
+      options={familyOptions}
+      placeholder="Family…"
+      disabled={!families.length}
     />
   );
 
@@ -259,10 +295,9 @@ export default function ItemPicker({
       ariaLabel="Size"
       value={sizeId}
       onChange={handleSizeChange}
-      options={sizes.map(s => ({ value: s.id, label: s.sizeLabel }))}
-      placeholder={loadingSizes ? 'Loading sizes…' : 'Size…'}
-      disabled={!sizes.length || loadingSizes}
-      loading={loadingSizes}
+      options={sizeOptions}
+      placeholder="Size…"
+      disabled={!sizes.length}
     />
   );
 

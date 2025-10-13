@@ -38,6 +38,7 @@ export default function Level({
   onKneeWallLF,
   levelsCount,
   panelsTotalAllSections,
+  onLooseGeneralChange,
 }) {
   const handlePanelLenFromExterior = useCallback((len) => {
     onExteriorPanelLenChange?.({ id, len: Number(len) || 0 });
@@ -196,6 +197,8 @@ export default function Level({
           }
           totalPanelsAllLevels={Number(panelsTotalAllSections || 0)}
           levelsCount={Number(levelsCount || 1)}
+          levelId={id}
+          onGeneralChange={onLooseGeneralChange}
         />
       </div>
     </section>

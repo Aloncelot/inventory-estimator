@@ -1,7 +1,7 @@
 // src/components/LoosePanelMaterials.jsx
 'use client';
 
-import { Fragment, useMemo, useState, useEffect } from 'react';
+import { Fragment, useMemo, useState, useEffect, useRef} from 'react';
 import { parseBoardLengthFt, unitPriceFrom } from '@/domain/lib/parsing';
 import ItemPicker from '@/components/ItemPicker';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
@@ -40,17 +40,17 @@ export default function LoosePanelMaterials({
   int2x6LF,
   int2x4LF,
   ptLFTotal,
-  platePiecesTotal,
   onTotalChange,
   onSubtotalChange,
-  totalPanelsAllLevels,
-  levelsCount,
+  levelId,
+  platePiecesTotal,
+  onGeneralChange,
 }) {
 
   const extSheets = useMemo(
     () => Number(extZipSheetsFinal ?? extZipSheetsSum ?? 0),
     [extZipSheetsFinal, extZipSheetsSum]
-  );
+  );  
  
   const showZipTape = extSheets > 0;
 
@@ -89,11 +89,6 @@ export default function LoosePanelMaterials({
     extraSheathing: false,
   });
 
-  // General (nails/bracing) helpers
-  const [generalInputs, setGeneralInputs] = useState({
-    platePiecesTotal: 0,           // total plate boards (from panel groups) for bracing calc
-  });
-
   // Selections
   const [sel, setSel] = useState({
     // Exterior
@@ -113,10 +108,10 @@ export default function LoosePanelMaterials({
     intCabinetBlocking: null,
 
     // General (nails & bracing)
-    nailsConcrete: null,
-    nailsSheathing: null,
-    nailsFraming: null,
-    tempBracing: null,
+    // nailsConcrete: null,
+    // nailsSheathing: null,
+    // nailsFraming: null,
+    // tempBracing: null,
   });
   const setPick = key => item => setSel(prev => ({ ...prev, [key]: item }));
 
@@ -296,8 +291,57 @@ export default function LoosePanelMaterials({
     ? Math.ceil(rowsByKey.extraSheathing?.qtyFinal || 0) 
     : 0;
 
-  // If you need the combined count for nails:
-  const sheetsInThisSection = Number(extSheets) + bandSheets + extraSheets;
+  const sheetsBand = useMemo(
+    () => Number(exteriorRows.find(r => r.key === 'panelBandSheathing')?.qtyFinal || 0),
+    [exteriorRows]
+  );
+
+  const sheetsExtra = useMemo(
+    () => Number(exteriorRows.find(r => r.key === 'extraSheathing')?.qtyFinal || 0),
+    [exteriorRows]
+  );
+
+  const sheetsExt   = useMemo(() => Number(extZipSheetsFinal || extZipSheetsSum || 0), [
+    extZipSheetsFinal, extZipSheetsSum
+  ]);
+
+  const lastGenSigRef = useRef('');
+  const onGenRef = useRef(onGeneralChange);
+  useEffect(() => { onGenRef.current = onGeneralChange; }, [onGeneralChange]);
+
+  useEffect(() => {
+     const sig = [
+       Number(sheetsExt) || 0,
+       Number(sheetsBand) || 0,
+       Number(sheetsExtra) || 0,
+       Number(platePiecesTotal) || 0,
+       String(levelId || ''),
+     ].join('|');
+
+     if (sig !== lastGenSigRef.current) {
+       lastGenSigRef.current = sig;
+       onGenRef.current?.({
+         id: levelId,
+         sheetsExt: Number(sheetsExt) || 0,
+         sheetsBand: Number(sheetsBand) || 0,
+         sheetsExtra: Number(sheetsExtra) || 0,
+         platePiecesTotal: Number(platePiecesTotal) || 0,
+       });
+    }
+   }, [sheetsExt, sheetsBand, sheetsExtra, platePiecesTotal, levelId]);
+
+  useEffect(() => {
+    if (typeof onGeneralChange === 'function') {
+      onGeneralChange({
+        id: levelId,
+        sheetsExt,
+        sheetsBand,
+        sheetsExtra,
+        platePiecesTotal: Number(platePiecesTotal || 0),
+      });
+    }
+  }, [onGeneralChange, levelId, sheetsExt, sheetsBand, sheetsExtra, platePiecesTotal]);
+
 
   // ── Build INTERIOR rows ────────────────────────────────────────
   const interiorRows = useMemo(() => {
@@ -403,119 +447,125 @@ export default function LoosePanelMaterials({
   const ptLFAll = Number(ptLFTotal ?? (effectiveExtLF + effectiveInt2x6LF + effectiveInt2x4LF));
   const wallsLFTotal = effectiveExtLF + effectiveInt2x6LF + effectiveInt2x4LF;
 
-  // ── Build GENERAL (nails & bracing) rows ───────────────────────
-  const generalRows = useMemo(() => {
-    const out = [];
+//   // ── Build GENERAL (nails & bracing) rows ───────────────────────
+//   const generalRows = useMemo(() => {
+//     const out = [];
 
-    // Concrete nails (Home Depot, Drive Pins with Washers (HD), 3"-100s)
-    // Formula: (PT pieces × 25 / 100) with +40% waste ⇒ ceil(...)
-    {
-      // Count PT pieces from the rows we already computed in this section
-      const extPTpieces   = Math.ceil(exteriorRows.find(r => r.key === 'extBottomPT')?.qtyFinal || 0);
-      const int2x6PTpcs   = Math.ceil(interiorRows.find(r => r.key === 'int2x6PT')?.qtyFinal || 0);
-      const int2x4PTpcs   = Math.ceil(interiorRows.find(r => r.key === 'int2x4PT')?.qtyFinal || 0);
-      const ptPiecesTotal = extPTpieces + int2x6PTpcs + int2x4PTpcs;
-      // Boxes: each box is "100s"; we need (pieces * 25) / 100, then add 40% waste
-      const qtyRaw   = (ptPiecesTotal * 25) / 100;
-      const qtyFinal = Math.ceil(qtyRaw * 1.40);
-      const unit      = getUnit(sel.nailsConcrete) || 'box';
-      const item      = getItem(sel.nailsConcrete);
-      const unitPrice = unitPriceFrom(item);
-      const subtotal  = qtyFinal * (Number(unitPrice) || 0);
-      out.push({
-        key: 'nailsConcrete',
-        label: 'Concrete nails',
-        unit, qtyRaw, qtyFinal, unitPrice, subtotal,
-        item,
-        wastePct: 40
-        });
-    }
+//     // Concrete nails (Home Depot, Drive Pins with Washers (HD), 3"-100s)
+//     // Formula: (PT pieces × 25 / 100) with +40% waste ⇒ ceil(...)
+//     {
+//       // Count PT pieces from the rows we already computed in this section
+//       const extPTpieces   = Math.ceil(exteriorRows.find(r => r.key === 'extBottomPT')?.qtyFinal || 0);
+//       const int2x6PTpcs   = Math.ceil(interiorRows.find(r => r.key === 'int2x6PT')?.qtyFinal || 0);
+//       const int2x4PTpcs   = Math.ceil(interiorRows.find(r => r.key === 'int2x4PT')?.qtyFinal || 0);
+//       const ptPiecesTotal = extPTpieces + int2x6PTpcs + int2x4PTpcs;
+//       // Boxes: each box is "100s"; we need (pieces * 25) / 100, then add 40% waste
+//       const qtyRaw   = (ptPiecesTotal * 25) / 100;
+//       const qtyFinal = Math.ceil(qtyRaw * 1.40);
+//       const unit      = getUnit(sel.nailsConcrete) || 'box';
+//       const item      = getItem(sel.nailsConcrete);
+//       const unitPrice = unitPriceFrom(item);
+//       const subtotal  = qtyFinal * (Number(unitPrice) || 0);
+//       out.push({
+//         key: 'nailsConcrete',
+//         label: 'Concrete nails',
+//         unit, qtyRaw, qtyFinal, unitPrice, subtotal,
+//         item,
+//         wastePct: 40
+//         });
+//     }
 
-    // Sheathing nails (Concord, Bright Ring Coil, 8D-2-3/8x.113-2.7M)
-    {
-      const qtyRaw = (Number(sheetsInThisSection) || 0) * 80 /2700;
-      const qtyFinal = Math.ceil(qtyRaw * 1.40);
-      const unit = getUnit(sel.nailsSheathing) || 'box';
-      const item = getItem(sel.nailsSheathing);
-      const unitPrice = unitPriceFrom(item);
-      const subtotal = qtyFinal * (Number(unitPrice) || 0);
+//     // Sheathing nails (Concord, Bright Ring Coil, 8D-2-3/8x.113-2.7M)
+//     {
+//       const qtyRaw = (Number(sheetsInThisSection) || 0) * 80 /2700;
+//       const qtyFinal = Math.ceil(qtyRaw * 1.40);
+//       const unit = getUnit(sel.nailsSheathing) || 'box';
+//       const item = getItem(sel.nailsSheathing);
+//       const unitPrice = unitPriceFrom(item);
+//       const subtotal = qtyFinal * (Number(unitPrice) || 0);
 
-      out.push({
-        key: 'nailsSheathing',
-        label: 'Sheathing nails',
-        unit, qtyRaw, qtyFinal, unitPrice, subtotal, item, wastePct: 40,
-      });
-    }
-    // Framing nails (G&P Warehouse, Bright Common Coil, 12D-3-1/4x.120-2.5M)
-    {
-      // Total plates in this section = sum of all plate PIECES (exterior + interior)
-      const ex = Object.fromEntries(exteriorRows.map(r => [r.key, r]));
-      const inr = Object.fromEntries(interiorRows.map(r => [r.key, r]));
-      const q = (obj, k) => Math.ceil(obj[k]?.qtyFinal || 0);
+//       out.push({
+//         key: 'nailsSheathing',
+//         label: 'Sheathing nails',
+//         unit, qtyRaw, qtyFinal, unitPrice, subtotal, item, wastePct: 40,
+//       });
+//     }
+//     // Framing nails (G&P Warehouse, Bright Common Coil, 12D-3-1/4x.120-2.5M)
+//     {
+//       // Total plates in this section = sum of all plate PIECES (exterior + interior)
+//       const ex = Object.fromEntries(exteriorRows.map(r => [r.key, r]));
+//       const inr = Object.fromEntries(interiorRows.map(r => [r.key, r]));
+//       const q = (obj, k) => Math.ceil(obj[k]?.qtyFinal || 0);
 
-      const totalPlatePieces  =
-        q(ex, 'extBottomPT')  +
-        q(ex, 'extTopPlate')  +
-        q(ex, 'secondBottom') +
-        q(inr, 'int2x6PT')    +
-        q(inr, 'int2x6Plate') +
-        q(inr, 'int2x4PT')    +
-        q(inr, 'int2x4Plate') ;
+//       const totalPlatePieces  =
+//         q(ex, 'extBottomPT')  +
+//         q(ex, 'extTopPlate')  +
+//         q(ex, 'secondBottom') +
+//         q(inr, 'int2x6PT')    +
+//         q(inr, 'int2x6Plate') +
+//         q(inr, 'int2x4PT')    +
+//         q(inr, 'int2x4Plate') ;
 
-      // Math: pieces * 25 / 2500 + 40% waste
-      const qtyRaw   = (totalPlatePieces * 25) / 2500;
-      const qtyFinal = Math.ceil(qtyRaw * 1.40);
+//       // Math: pieces * 25 / 2500 + 40% waste
+//       const qtyRaw   = (totalPlatePieces * 25) / 2500;
+//       const qtyFinal = Math.ceil(qtyRaw * 1.40);
 
-      const unit      = getUnit(sel.nailsFraming) || 'box';
-      const item      = getItem(sel.nailsFraming);
-      const unitPrice = unitPriceFrom(item);
-      const subtotal  = qtyFinal * (Number(unitPrice) || 0);
+//       const unit      = getUnit(sel.nailsFraming) || 'box';
+//       const item      = getItem(sel.nailsFraming);
+//       const unitPrice = unitPriceFrom(item);
+//       const subtotal  = qtyFinal * (Number(unitPrice) || 0);
 
-      out.push({
-        key: 'nailsFraming',
-        label: 'Framing nails',
-        unit, qtyRaw, qtyFinal, unitPrice, subtotal,
-        item,
-        wastePct: 40,
-});
-    }
+//       out.push({
+//         key: 'nailsFraming',
+//         label: 'Framing nails',
+//         unit, qtyRaw, qtyFinal, unitPrice, subtotal,
+//         item,
+//         wastePct: 40,
+// });
+//     }
 
-    // Temporary Bracing
-    {
-      const allPanels = Number(totalPanelsAllLevels || 0);
-      const lvlCount  = Math.max(1, Number(levelsCount || 1));
-      const qtyRaw    = (allPanels * 3) / lvlCount;
-      const qtyFinal  = Math.ceil(qtyRaw);   // whole-count
-      const unit      = getUnit(sel.tempBracing) || 'pcs';
-      const item      = getItem(sel.tempBracing);
-      const unitPrice = unitPriceFrom(item);
-      const subtotal  = qtyFinal * (Number(unitPrice) || 0);
+//     // Temporary Bracing
+//     {
+//       const allPanels = Math.max(0, Number(totalPanelsAllLevels ?? 0));
+//       const qtyRaw    = allPanels * 3;
+//       const qtyFinal  = Math.ceil(qtyRaw);   // whole-count
+//       const unit      = getUnit(sel.tempBracing) || 'pcs';
+//       const item      = getItem(sel.tempBracing);
+//       const unitPrice = unitPriceFrom(item);
+//       const subtotal  = qtyFinal * (Number(unitPrice) || 0);
 
-      out.push({
-        key: 'tempBracing',
-        label: 'Temporary Bracing',
-        unit, qtyRaw, qtyFinal, unitPrice, subtotal,
-        item,
-        wastePct: 0
-      });
-    }
+//       out.push({
+//         key: 'tempBracing',
+//         label: 'Temporary Bracing',
+//         unit, qtyRaw, qtyFinal, unitPrice, subtotal,
+//         item,
+//         wastePct: 0
+//       });
+//     }
     
-    return out;
-  }, [
-    sel,
-    sheetsInThisSection, wallsLFTotal,
-    generalInputs.platePiecesTotal,
-    exteriorRows, interiorRows,
-    totalPanelsAllLevels,
-    levelsCount,
-  ]);
+//     return out;
+//   }, [
+//     sel,
+//     sheetsInThisSection, wallsLFTotal,
+//     generalInputs.platePiecesTotal,
+//     exteriorRows, interiorRows,
+//     totalPanelsAllLevels,
+//     levelsCount,
+//   ]);
+
+//   // --- Bracing preview numbers (used in hint + math) ---
+//   const panelsAll = useMemo(
+//     () => Math.max(0, Number(totalPanelsAllLevels ?? 0)),
+//     [totalPanelsAllLevels]
+//     );
+//   const bracingQtyPreview = Math.ceil(panelsAll * 3);
 
   const sectionSubtotal = useMemo(() => {
     const a = exteriorRows.reduce((s,r)=>s+(r.subtotal||0),0);
     const b = interiorRows.reduce((s,r)=>s+(r.subtotal||0),0);
-    const c = generalRows.reduce((s,r)=>s+(r.subtotal||0),0);
-    return a + b + c;
-  }, [exteriorRows, interiorRows, generalRows]);
+//     const c = generalRows.reduce((s,r)=>s+(r.subtotal||0),0);
+    return a + b;
+  }, [exteriorRows, interiorRows]);
 
   const gridCols =
     'minmax(220px,1.3fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 1.6fr 0.8fr';
@@ -965,112 +1015,16 @@ export default function LoosePanelMaterials({
 
         {/* General inputs (plate pieces for bracing) */}
         <div className="controls4" style={{ marginBottom: 12 }}>
-          <label>
+          {/* <label>
             <span className="ew-subtle">Total plate pieces (from panel groups)</span>
             <input className="ew-input focus-anim" type="number" inputMode="decimal"
               value={generalInputs.platePiecesTotal}
               onChange={e => setGeneralInputs(v => ({ ...v, platePiecesTotal: Number(e.target.value) }))}
             />
-          </label>
+          </label> */}
           <div></div>
           <div></div>
-        </div>
-
-        {/* General header */}
-        <div className="ew-grid ew-head" style={{ '--cols': gridCols }}>
-          <div>Item</div>
-          <div>Vendor · Family · Size</div>
-          <div className="ew-right">Qty</div>
-          <div className="ew-right">Waste %</div>
-          <div className="ew-right">Final qty</div>
-          <div className="ew-right">Unit</div>
-          <div className="ew-right">Unit price</div>
-          <div className="ew-right">Subtotal</div>
-          <div>Notes</div>
-          <div></div>
-        </div>
-
-        <div className="ew-rows">
-          {/* Concrete nails */}
-          <Row
-            gridCols={gridCols}
-            label="Concrete nails"
-            noteKey="loose:nailsConcrete"
-            noteApi={{ getNote, toggleOpen, setNote }}
-            picker={(
-              <ItemPicker
-                compact
-                onSelect={setPick('nailsConcrete')}
-                defaultVendor="Home Depot"
-                defaultFamilyLabel="Drive Pins with Washers (HD)"
-                defaultSizeLabel={`3"-100s`}
-              />
-            )}
-            row={generalRows.find(r => r.key === 'nailsConcrete')}
-          />
-
-          {/* Sheathing nails */}
-          <Row
-            gridCols={gridCols}
-            label="Sheathing nails"
-            noteKey="loose:nailsSheathing"
-            noteApi={{ getNote, toggleOpen, setNote }}
-            picker={(
-              <ItemPicker
-                compact
-                onSelect={setPick('nailsSheathing')}
-                defaultVendor="Concord"
-                defaultFamilyLabel="Bright Ring Coil"
-                defaultSizeLabel={`8D-2-3/8x.113-2.7M`}
-              />
-            )}
-            row={generalRows.find(r => r.key === 'nailsSheathing')}
-          />
-
-          {/* Framing nails */}
-          <Row
-            gridCols={gridCols}
-            label="Framing nails"
-            noteKey="loose:nailsFraming"
-            noteApi={{ getNote, toggleOpen, setNote }}
-            picker={(
-              <ItemPicker
-                compact
-                onSelect={setPick('nailsFraming')}
-                defaultVendor="Concord"
-                defaultFamilyLabel="Bright Common Coil"
-                defaultSizeLabel={`12D-3-1/4x.120-2.5M`}
-              />
-            )}
-            row={generalRows.find(r => r.key === 'nailsFraming')}
-          />
-
-          {/* Temporary Bracing */}
-          <Row
-            gridCols={gridCols}
-            label="Temporary Bracing"
-            noteKey="loose:tempBracing"
-            noteApi={{ getNote, toggleOpen, setNote }}
-            picker={(
-              <ItemPicker
-                compact
-                onSelect={setPick('tempBracing')}
-                defaultVendor="Gillies & Prittie Warehouse"
-                defaultFamilyLabel="SPF#2"
-                defaultSizeLabel={`2x4"-16'`}
-              />
-            )}
-            row={generalRows.find(r => r.key === 'tempBracing')}
-          />
-            <div className="ew-hint" style={{ alignSelf:'end' }}>
-              Temporary bracing uses: pieces × 3 ⇒ boards of 2×4″–16′ (+10% waste)
-            </div>
-        </div>
-
-        <div className="ew-footer">
-          <div className="ew-total">Section subtotal: {fmt(sectionSubtotal)}</div>
-        </div>
-      </div>
+        </div></div>
     </div>
   );
 }
