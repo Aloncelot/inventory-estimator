@@ -5,11 +5,13 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import ItemPicker from '@/components/ItemPicker';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import {
-  calcPlates, calcStuds, calcBlocking, calcSheathing,
-  calcHeader, calcPost, calcHeadersInfill,
-} from '@/domain/calculators';
+        calcPlates, calcStuds, calcBlocking, calcSheathing,
+        calcHeader, calcPost, calcHeadersInfill,
+        } from '@/domain/calculators';
 import { parseBoardLengthFt } from '@/domain/lib/parsing';
 import { isLVL, isVersaColumn, isLumberFamily, isInfillFamily } from '@/domain/lib/families';
+import AccordionSection from '@/components/ui/AccordionSection';
+import RemoveButton from '@/components/ui/RemoveButton';
 
 /* ──────────────────────────────────────────────────────────────────────────
    Helpers (kept in sync with Interior)
@@ -64,9 +66,6 @@ export default function ExteriorWallGroup({
   const getNote = k => notes[k] || { plan:'', comment:'', open:false };
   const setNote = (k, patch) => setNotes(prev => ({ ...prev, [k]: { ...getNote(k), ...patch }}));
   const toggleOpen = k => setNote(k, { open: !getNote(k).open });
-
-  /** Collapsed/expanded */
-  const [collapsed, setCollapsed] = useState(false);
 
   /* Board lengths */
 const _parsedBottom = parseBoardLengthFt(getSize(sel.bottomPlate));
@@ -342,43 +341,13 @@ const getFamily = (selLike) => {
     'minmax(180px,1.1fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 1.6fr 0.8fr';
 
   return (
-    <div className="ew-card">
-      {/* Header + collapse + remove */}
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <button
-          className="ew-btn"
-          onClick={() => setCollapsed(c => !c)}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Expand section' : 'Collapse section'}
-          title={collapsed ? 'Expand' : 'Collapse'}
-          style={{ padding:'4px 8px', lineHeight:1 }}
-        >
-          {collapsed ? '▶' : '🔽'}
-        </button>
-
-        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>
-        {onRemove && <button className="ew-btn" onClick={onRemove}>Remove section</button>}
-      </div>
-
-      {/* Collapsed summary (stay mounted) */}
-        <div
-          style={{
-            display: collapsed ? 'block' : 'none',
-            padding: 12,
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            marginTop: 8
-          }}
-          aria-hidden={!collapsed}
-        >
-          <div style={{ fontWeight: 700, color: '#f18d5b' }}>
-            Subtotal: {fmt(groupSubtotal)}
-          </div>
-        </div>
-
-        {/* Full content (stay mounted) */}
-        
-        <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12 }}>
+   <div className="ew-card">
+    <AccordionSection
+      title={title}
+      defaultOpen={true}
+      summary={<div style={{ textAlign:'right', fontWeight: 700, color: '#f18d5b' }}>Subtotal: {fmt(groupSubtotal)}</div>}
+      actions={onRemove ? <RemoveButton onClick={onRemove} title="Remove section" label="Remove section" /> : null}
+    >
           {/* Shared controls */}
           <div className="controls4" style={{ marginBottom: 12 }}>
             <label>
@@ -526,7 +495,7 @@ const getFamily = (selLike) => {
             {computedExtras.map(ex => {
               const noteKey = `extra:${ex.id}`;
               const n = getNote(noteKey);
-
+              
               return (
                 <Fragment key={ex.id}>
                   <div className="ew-grid ew-row" style={{ '--cols': gridCols }}>
@@ -535,7 +504,7 @@ const getFamily = (selLike) => {
                       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                         <span style={{ fontWeight: 600 }}>{ex.type}</span>
                         {ex.type !== 'Headers infill' && (
-                          <button className="ew-btn" onClick={() => removeExtra(ex.id)}>Remove</button>
+                          <RemoveButton onClick={onRemove} title="Remove section" label="Remove section" />
                         )}
                       </div>
                     </div>
@@ -547,7 +516,7 @@ const getFamily = (selLike) => {
                         onSelect={(item) => updateExtra(ex.id, { item })}
                         defaultVendor="Gillies & Prittie Warehouse"
                         defaultFamilyLabel={ex.type === 'Headers infill' ? 'CDX SE' : 'SPF#2'}
-                      />
+                        />
 
                       {/* Header params */}
                       {ex.type === 'Header' && (
@@ -687,10 +656,11 @@ const getFamily = (selLike) => {
           <div className="ew-footer">
             <button className="ew-btn" onClick={() => addExtra('Header')}>➕ Header</button>
             <button className="ew-btn" onClick={() => addExtra('Post')}>➕ Post</button>
-            <div className="ew-total">Group subtotal: {fmt(groupSubtotal)}</div>            
+            <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b'}}>
+              Group subtotal: {fmt(groupSubtotal)}
+            </div>      
           </div>
-        
-      </div>
+    </AccordionSection>     
     </div>
   );
 }

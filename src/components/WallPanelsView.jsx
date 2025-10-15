@@ -6,6 +6,7 @@ import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import Level from '@/components/Level';
 import PanelsManufactureEstimate from "@/components/PanelsManufactureEstimate";
 import NailsAndBracing from '@/components/NailsAndBracing';
+import AddButton from './ui/AddButton';
 
 function genLevel() {
   return { id: crypto?.randomUUID?.() || ('lvl-' + Math.random().toString(36).slice(2,8)), name: '' };
@@ -16,21 +17,23 @@ export default function WallPanelsView({ onGrandTotal}) {
  // Per-level general counts for Nails & Bracing (reported by LoosePanelMaterials)
   const [nailsStatsByLevel, setNailsStatsByLevel] = useState({});
   const handleLooseGeneralChange = useCallback(
-    ({ id, sheetsExt = 0, sheetsBand = 0, sheetsExtra = 0, platePiecesTotal = 0 }) => {
+    ({ id, sheetsExt = 0, sheetsBand = 0, sheetsExtra = 0, platePiecesTotal = 0, ptPieces = 0 }) => {
       const next = {
         sheetsExt: Number(sheetsExt) || 0,
         sheetsBand: Number(sheetsBand) || 0,
         sheetsExtra: Number(sheetsExtra) || 0,
         platePiecesTotal: Number(platePiecesTotal) || 0,
+        ptPieces: Number(ptPieces) || 0,
       };
       setNailsStatsByLevel(prev => {
         const p = prev[id];
         if (
           p &&
-         p.sheetsExt === next.sheetsExt &&
+          p.sheetsExt === next.sheetsExt &&
           p.sheetsBand === next.sheetsBand &&
           p.sheetsExtra === next.sheetsExtra &&
-          p.platePiecesTotal === next.platePiecesTotal
+          p.platePiecesTotal === next.platePiecesTotal &&
+          p.ptPieces === next.ptPieces
         ) {
           return prev; // no-op if identical
         }
@@ -101,6 +104,9 @@ export default function WallPanelsView({ onGrandTotal}) {
 
   const removeLevel = useCallback((id) => {
     setLevels(prev => prev.filter(l => l.id !== id));
+    setNailsStatsByLevel(prev => {
+      const copy = { ...prev }; delete copy[id]; return copy;
+    });
     setLooseByLevel(prev => {
       const copy = { ...prev };
       delete copy[id];
@@ -273,14 +279,17 @@ const panelLenFtInteriorBlocking = useMemo(() => {
   const sheetsBandAll  = useMemo(() => Object.values(nailsStatsByLevel).reduce((s, v) => s + (Number(v?.sheetsBand) || 0), 0), [nailsStatsByLevel]);
   const sheetsExtraAll = useMemo(() => Object.values(nailsStatsByLevel).reduce((s, v) => s + (Number(v?.sheetsExtra) || 0), 0), [nailsStatsByLevel]);
   const platePiecesAll = useMemo(() => Object.values(nailsStatsByLevel).reduce((s, v) => s + (Number(v?.platePiecesTotal) || 0), 0), [nailsStatsByLevel]);
+  const ptPiecesAll    = useMemo(() => Object.values(nailsStatsByLevel).reduce((s, v) => s + (Number(v?.ptPieces) || 0), 0), [nailsStatsByLevel]);
+
 
   const nailsTotals = useMemo(() => ({
    panelsAll: Number(panelsTotalAllSections || 0),
    platePiecesAll,
+   ptPiecesAll,
    sheetsExtAll,
    sheetsBandAll,
    sheetsExtraAll,
- }), [panelsTotalAllSections, platePiecesAll, sheetsExtAll, sheetsBandAll, sheetsExtraAll]);
+ }), [panelsTotalAllSections, platePiecesAll, sheetsExtAll, sheetsBandAll, sheetsExtraAll, ptPiecesAll]);
 
   return (
     <div className="app-content">
@@ -327,7 +336,7 @@ const panelLenFtInteriorBlocking = useMemo(() => {
       {/* Add level ABOVE the manufacture estimate */}
       <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div className="ew-subtle">Add another floor (mirrors functionality; you can input different quantities)</div>
-        <button className="ew-btn ew-btn--turq" onClick={addLevel}>+ Add level</button>
+        <AddButton onClick={addLevel} title="Add wall" label="Add wall" />
       </div>
     <div>
       {/* Global Nails & Bracing (single section for all levels) */}

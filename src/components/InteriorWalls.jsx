@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import InteriorWallGroup from '@/components/InteriorWallGroup';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
+import AddButton from './ui/AddButton';
 
 const genId = () => 'int-' + Math.random().toString(36).slice(2, 9);
 
@@ -115,8 +116,8 @@ export default function InteriorWalls({
   return (
     <div className="ew-stack">
       <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>
-        <button className="ew-btn ew-btn--turq" onClick={addSection}>+ Add interior wall section</button>
+        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>        
+        <AddButton onClick={addSection} title="Add wall" label="Add wall" />
       </div>
 
       {sections.map((sec, i) => (

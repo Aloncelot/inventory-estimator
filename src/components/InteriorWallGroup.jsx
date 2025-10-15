@@ -4,6 +4,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import ItemPicker from '@/components/ItemPicker';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
+import AccordionSection from '@/components/ui/AccordionSection';
+import RemoveButton from './ui/RemoveButton';
 
 // Shared calculators & helpers
 import {
@@ -53,9 +55,6 @@ export default function InteriorWallGroup({
   const [heightFt, setHeightFt]             = useState(12);
   const [studSpacingIn, setStudSpacingIn]   = useState(16);
   const [studMultiplier, setStudMultiplier] = useState(1);
-
-  /* Collapsed/expanded (mirror exterior) */
-  const [collapsed, setCollapsed] = useState(false);
 
   /* Per-row waste defaults (editable per row) */
   const [waste, setWaste] = useState({
@@ -367,49 +366,12 @@ export default function InteriorWallGroup({
 
   return (
     <div className="ew-card">
-      {/* Header + collapse + remove (mirror exterior) */}
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <button
-          className="ew-btn"
-          onClick={() => setCollapsed(c => !c)}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Expand section' : 'Collapse section'}
-          title={collapsed ? 'Expand' : 'Collapse'}
-          style={{ padding:'4px 8px', lineHeight:1 }}
-        >
-          {collapsed ? '▶' : '🔽'}
-        </button>
-
-        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>
-        {onRemove && <button className="ew-btn" onClick={onRemove}>Remove section</button>}
-      </div>
-
-      {/* Collapsed summary (stay mounted) */}
-      <div
-        style={{
-          display: collapsed ? 'block' : 'none',
-          padding: 12,
-          border: '1px solid var(--border)',
-          borderRadius: 10,
-          marginTop: 8
-        }}
-        aria-hidden={!collapsed}
-      >
-        <div style={{ fontWeight: 700, color: '#f18d5b' }}>
-          Subtotal: {fmt(groupSubtotal)}
-        </div>
-      </div>
-
-      {/* Full content (stay mounted) */}
-      <div
-        style={{
-          display: collapsed ? 'none' : 'block',
-          padding: 16,
-          border: '1px solid var(--border)',
-          borderRadius: 12
-        }}
-        aria-hidden={collapsed}
-      >        
+      <AccordionSection
+        title={title}
+        defaultOpen={true}
+        summary={<div style={{ textAlign:'right', fontWeight: 700, color: '#f18d5b' }}>Subtotal: {fmt(groupSubtotal)}</div>}
+        actions={onRemove ? <RemoveButton onClick={onRemove} title="Remove section" label="Remove section" /> : null}
+      >            
           {/* Controls row 1 */}
           <div className="controls4" style={{ marginBottom: 8 }}>
             <label>
@@ -605,7 +567,11 @@ export default function InteriorWallGroup({
                       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                         <span style={{ fontWeight: 600 }}>{ex.type}</span>
                         {ex.type !== 'Headers infill' && (
-                          <button className="ew-btn" onClick={()=>removeExtra(ex.id)}>Remove</button>
+                          <RemoveButton
+                            onClick={() => removeExtra(ex.id)}
+                            title={`Remove ${ex.type}`}
+                            label={`Remove ${ex.type}`}
+                          />
                         )}
                       </div>
                     </div>
@@ -800,10 +766,11 @@ export default function InteriorWallGroup({
             {showSheathing && (
               <button className='ew-btn' onClick={ () => addExtra('Extra sheathing')}>➕ Extra Sheathing</button>
             )}
-            <div className="ew-total">Group subtotal: {fmt(groupSubtotal)}</div>
+            <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b'}}>
+              Group subtotal: {fmt(groupSubtotal)}
+            </div>
           </div>
-        </div>
-      
-    </div>
+      </AccordionSection>
+    </div>      
   );
 }

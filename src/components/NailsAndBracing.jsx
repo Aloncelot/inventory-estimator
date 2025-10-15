@@ -12,6 +12,7 @@ import React, {
 } from 'react';
 import ItemPicker from '@/components/ItemPicker';
 import { unitPriceFrom } from '@/domain/lib/parsing';
+import AccordionSection from '@/components/ui/AccordionSection';
 
 const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const fmtMoney = (n) => moneyFmt.format(Number(n) || 0);
@@ -71,6 +72,7 @@ export default function NailsAndBracing({
   const {
     panelsAll = 0,
     platePiecesAll = 0,
+    ptPiecesAll = null,
     sheetsExtAll = 0,
     sheetsBandAll = 0,
     sheetsExtraAll = 0,
@@ -110,14 +112,15 @@ export default function NailsAndBracing({
 
   // Concrete nails: (PT pieces * 25 / 100) then +40% waste → ceil
   const concrete = useMemo(() => {
-    const qtyRaw = (Number(platePiecesAll) || 0) * 25 / 100;
+    const qtyRaw = basePieces * 25 / 100;
+    const basePieces = Number(ptPiecesAll ?? platePiecesAll) || 0;
     const qtyFinal = Math.ceil(qtyRaw * 1.4);
     const unit = getUnit(sel.nailsConcrete) || 'box';
     const item = getItem(sel.nailsConcrete);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
     return { qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: 40 };
-  }, [platePiecesAll, sel.nailsConcrete]);
+  }, [ptPiecesAll, platePiecesAll, sel.nailsConcrete]);
 
   // Sheathing nails: (all ZIP sheets * 80 / 2700) then +40% waste → ceil
   const sheathing = useMemo(() => {
@@ -230,10 +233,15 @@ export default function NailsAndBracing({
     [onBracingSelect]
   );
 
-  const concreteHint = useMemo(
-    () => `PT boards: ${platePiecesAll} → boxes = ceil((boards × 25 / 100) × 1.4)`,
-    [platePiecesAll]
-  );
+  const concreteHint = useMemo(() => {
+    const hasPT = ptPiecesAll != null;
+    const base = Number(hasPT ? ptPiecesAll : platePiecesAll) || 0;
+    const label = hasPT ? 'PT pieces' : 'Plate pieces';
+    const n = new Intl.NumberFormat('en-US').format(base);
+    return `${label}: ${n} → boxes = ceil((${label.toLowerCase()} × 25 / 100) × 1.4)`;
+  }, [ptPiecesAll, platePiecesAll]);
+
+
   const sheathingHint = useMemo(
     () =>
       `ZIP sheets = (ext: ${sheetsExtAll}) + (band: ${sheetsBandAll})` +
@@ -251,12 +259,11 @@ export default function NailsAndBracing({
 
   return (
     <div className="ew-card">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <h2 className="ew-h2" style={{ margin: 0 }}>
-          {title}
-        </h2>
-      </div>
-
+      <AccordionSection
+        title={title}
+        defaultOpen={true}
+        summary={<div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b'}}>Nails & Bracing subtotal: {fmtMoney(sectionTotal)}</div>}
+      >
       <div className="ew-grid ew-head" style={{ '--cols': GRID_COLS }}>
         <div>Item</div>
         <div>Vendor · Family · Size</div>
@@ -278,8 +285,9 @@ export default function NailsAndBracing({
       </div>
 
       <div className="ew-footer">
-        <div className="ew-total">Section subtotal: {fmtMoney(sectionTotal)}</div>
+        <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b'}}>Section subtotal: {fmtMoney(sectionTotal)}</div>
       </div>
+      </AccordionSection>
     </div>
   );
 }

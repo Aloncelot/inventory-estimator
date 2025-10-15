@@ -118,6 +118,7 @@ html, body {
 .ew-footer { display:flex; align-items:center; gap:8px; margin-top:12px; }
 .ew-total { margin-left:auto; font-weight:700; }
 .ew-right { text-align: right; }
+.ew-subtotalright { text-align: right; font-weight:700; }
 
 /* === Inputs / selects / buttons ======================================== */
 .ew-input, .ew-select{
@@ -527,4 +528,89 @@ input[type="number"] { -moz-appearance: textfield; }
 .ew-total-panels {
   color: #FF7A00;      /* bright orange */
   font-weight: 700;    /* optional: make it pop */
+}
+
+/* AccordionSection */
+.acc { margin: 0 0 12px 0; }
+.acc__header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px;
+}
+.acc__button {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 8px; line-height: 1;
+  background: var(--bg, transparent); border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer;
+}
+.acc__chev { width: 1.1em; }
+.acc__title { font: inherit; font-weight: 700; }
+.acc__actions { margin-left: auto; }
+.acc__summary {
+  padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+}
+.acc__body {
+  overflow: clip;           /* prevents scrollbars during animation */
+  transition: max-height .35s ease, opacity .2s ease;
+  max-height: 0; opacity: 0;
+  border: 1px solid var(--border); border-radius: 12px;
+}
+.acc__bodyInner { padding: 16px; }
+
+/* Reserve vertical scrollbar gutter so layout width never changes */
+html {
+  scrollbar-gutter: stable both-edges;   /* modern */
+}
+
+@supports not (scrollbar-gutter: stable) {
+  /* Fallback: always show a vertical scrollbar track */
+  html { overflow-y: scroll; }
+}
+
+:root {
+  /* Teal/Turquoise scale */
+  --turq-950: #021617;
+  --turq-900: #042023;
+  --turq-800: #073033;
+  --turq-700: #0a3e41;
+  --turq-600: #0d4f53;
+  --turq-500: #116367;
+  --turq-400: #158085;
+  --turq-300: #2fb7ad;  /* you already reference this */
+  --turq-200: #6fd8d0;
+  --turq-100: #b9f0ea;
+
+  /* App surfaces */
+  --bg:        var(--turq-900);
+  --card:      var(--turq-800);
+  --surface:   var(--turq-700);
+  --panel:     var(--turq-800);
+  --border:    #2fb7ad33;
+
+  /* Text & accents */
+  --text:      #e6fffb;
+  --text-weak: #bfe7e4;
+  --accent:    var(--turq-300);
+  --accent-strong: #19afa4;
+
+  color-scheme: dark;
+}
+
+/* Themed scrollbars (Firefox + WebKit) */
+* { scrollbar-width: thin; scrollbar-color: var(--turq-500) transparent; }         /* Firefox */
+::-webkit-scrollbar { width: 12px; height: 12px; }                                  /* WebKit */
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--turq-600);
+  border-radius: 8px;
+  border: 3px solid transparent;  /* creates a “pill” */
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--turq-400); }
+
+/* icon-only button */
+.ew-icon-btn {
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }

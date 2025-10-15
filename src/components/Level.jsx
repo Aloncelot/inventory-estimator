@@ -6,22 +6,24 @@ import ExteriorWalls from '@/components/ExteriorWalls';
 import InteriorWalls from '@/components/InteriorWalls';
 import LoosePanelMaterials from '@/components/LoosePanelMaterials';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
+import AccordionSection from '@/components/ui/AccordionSection';
+import RemoveButton from './ui/RemoveButton';
 
 // Compare only the fields that matter to avoid loops
-const sameExtTotals = (a, b) => {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  const keys = [
-    'extLengthSum',
-    'extZipSheetsSum',
-    'extPlatePieces',
-    'extPTLFSum',
-    'extMoneySum',
-    'panelsSubtotal',
-    'panelLenFtExterior',
-  ];
-  return keys.every(k => a[k] === b[k]);
-};
+// const sameExtTotals = (a, b) => {
+//   if (a === b) return true;
+//   if (!a || !b) return false;
+//   const keys = [
+//     'extLengthSum',
+//     'extZipSheetsSum',
+//     'extPlatePieces',
+//     'extPTLFSum',
+//     'extMoneySum',
+//     'panelsSubtotal',
+//     'panelLenFtExterior',
+//   ];
+//   return keys.every(k => a[k] === b[k]);
+// };
 
 export default function Level({
   id,           // required: stable per-level id
@@ -47,7 +49,7 @@ export default function Level({
   // UI (collapsed persisted per level)
   const [ui, setUi] = useLocalStorageJson(`inv:v1:level-ui:${id}`, { collapsed: false });
   const collapsed = !!ui.collapsed;
-  const toggleCollapsed = () => setUi(prev => ({ ...prev, collapsed: !prev.collapsed }));
+  const setCollapsed = (c) => setUi(prev => ({ ...prev, collapsed: !!c }));
 
   // Live totals reported by wrappers
   const [extTotals, setExtTotals] = useState(null);
@@ -59,9 +61,9 @@ export default function Level({
   const [looseSubtotal, setLooseSubtotal] = useState(0);
 
   // Stable handlers from child → level
-  const handleExtTotals = useCallback((t) => {
-    setExtTotals(prev => sameExtTotals(prev, t) ? prev : t);
-  }, []);
+  // const handleExtTotals = useCallback((t) => {
+  //   setExtTotals(prev => sameExtTotals(prev, t) ? prev : t);
+  // }, []);
 
   const handleIntTotals = useCallback((t) => {
     setIntTotals(t || {});
@@ -107,100 +109,82 @@ export default function Level({
   }, [id, levelTotal, onLevelTotal]);
 
   return (
-    <section className="ew-stack">
-      {/* Level header with collapser + total */}
-      <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+  <section className="ew-stack">
+    <AccordionSection
+      open={!collapsed}
+      onOpenChange={(o) => setCollapsed(!o)}
+      bar={({ open, toggle }) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
-            className="ew-btn"
-            onClick={toggleCollapsed}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? 'Expand level' : 'Collapse level'}
-            title={collapsed ? 'Expand' : 'Collapse'}
-            style={{ padding:'4px 8px', lineHeight:1 }}
+            className="acc__button"
+            onClick={toggle}
+            title={open ? 'Collapse' : 'Expand'}
+            aria-label={`${open ? 'Collapse' : 'Expand'} ${name}`}
           >
-            {collapsed ? '▶' : '🔽'}
+            <span className="acc__chev">{open ? '🔽' : '▶'}</span>
+            <span className="ew-head">{name}</span>
           </button>
-          <h2 className="ew-h2 ew-level-title" style={{ margin:0 }}>{name}</h2>
-        </div>
 
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <div
-            className="ew-chip"
-            style={{
-              fontWeight: 800,
-              fontSize: 16,
-              color: 'var(--turq-300)',
-              borderColor: 'rgba(47,183,173,.35)',
-              background: 'rgba(47,183,173,.15)',
-            }}
+            className="ew-right"
+            style={{ marginLeft: 'auto', fontWeight: 800, fontSize: 16, color: '#f18d5b' }}
             title="Level total (Panels + Loose)"
           >
             Level total: {fmt(levelTotal)}
           </div>
-          {onRemove && (
-            <button className="ew-btn" onClick={onRemove}>Remove level</button>
-          )}
+
+          {onRemove ? <RemoveButton onClick={onRemove} title="Remove level" label="Remove level" /> : null}
         </div>
-      </div>
+      )}
+    >
+      <ExteriorWalls
+        levelId={id}
+        onTotalsChange={(t) => setExtTotals(t)}
+        title={`${name} — Exterior walls`}
+        onLengthLFChange={(lf) => onExteriorLF?.({ id, lf })}
+        onPanelLenFtChange={handlePanelLenFromExterior}
+        isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
+      />
 
-      {/* Keep content mounted; just hide/show to preserve state instantly */}
-      <div style={{ display: collapsed ? 'none' : 'block' }} aria-hidden={collapsed}>
-        <ExteriorWalls
-          levelId={id}
-          onTotalsChange={(t) => setExtTotals(t)}
-          title={`${name} — Exterior walls`}
-          onLengthLFChange={(lf) => onExteriorLF?.({ id, lf })}
-          onPanelLenFtChange={handlePanelLenFromExterior}
-          isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
-        />
+      <InteriorWalls
+        levelId={id}
+        onTotalsChange={handleIntTotals}
+        title={`${name} — Interior walls`}
+        isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
+        onInteriorBearingLF={onInteriorBearingLF}
+        onBearingLFChange={(lfVal) => onInteriorBearingLF?.({ id, lf: Number(lfVal) || 0 })}
+        onPartitionLFChange={(lfVal) => onInteriorNonLoadLF?.({ id, lf: Number(lfVal) || 0 })}
+        onKneeLFChange={(lfVal) => onKneeWallLF?.({ id, lf: Number(lfVal) || 0 })}
+      />
 
-        <InteriorWalls
-          levelId={id}
-          onTotalsChange={handleIntTotals}
-          title={`${name} — Interior walls`}
-          isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
-          onInteriorBearingLF={onInteriorBearingLF}
-          onBearingLFChange={(lfVal) => 
-            onInteriorBearingLF?.({ id, lf: Number(lfVal) || 0 })
-          }
-          onPartitionLFChange={(lfVal) =>
-            onInteriorNonLoadLF?.({id, lf: Number(lfVal) || 0})
-          }
-          onKneeLFChange={(lfVal) => 
-            onKneeWallLF?.({ id, lf: Number(lfVal) || 0 })
-          }
-        />
-
-        <LoosePanelMaterials
-          title={`${name} — Loose materials (wall panels)`}
-          persistKey={`loose:${id}`}
-          onSubtotalChange={handleLooseSubtotal}
-          extLengthLF={Number(extTotals?.extLengthSum || 0)}
-          extZipSheetsFinal={Number(
-            extTotals?.extZipSheetsFinal ??
-            extTotals?.extZipSheetsSum ??
-            0
-          )}
-          extZipSheetsSum={extTotals?.extZipSheetsSum}
-          int2x6LF={Number(intTotals?.int2x6LF || 0)}
-          int2x4LF={Number(intTotals?.int2x4LF || 0)}
-          // for nails/bracing math (lets Loose use the real combined totals)
-          ptLFTotal={
-            Number(extTotals?.extPTLFSum || 0) +
-            Number(intTotals?.intPTLFSum || 0)
-          }
-          platePiecesTotal={
-            Number(extTotals?.extPlatePieces || 0) +
-            Number(intTotals?.intPlatePieces || 0)
-          }
-          totalPanelsAllLevels={Number(panelsTotalAllSections || 0)}
-          levelsCount={Number(levelsCount || 1)}
-          levelId={id}
-          onGeneralChange={onLooseGeneralChange}
-        />
-      </div>
-    </section>
-  );
-}
+      <LoosePanelMaterials
+        title={`${name} — Loose materials (wall panels)`}
+        persistKey={`loose:${id}`}
+        onSubtotalChange={handleLooseSubtotal}
+        extLengthLF={Number(extTotals?.extLengthSum || 0)}
+        extZipSheetsFinal={Number(
+          extTotals?.extZipSheetsFinal ??
+          extTotals?.extZipSheetsSum ??
+          0
+        )}
+        extZipSheetsSum={extTotals?.extZipSheetsSum}
+        int2x6LF={Number(intTotals?.int2x6LF || 0)}
+        int2x4LF={Number(intTotals?.int2x4LF || 0)}
+        // for nails/bracing math (lets Loose use the real combined totals)
+        ptLFTotal={
+          Number(extTotals?.extPTLFSum || 0) +
+          Number(intTotals?.intPTLFSum || 0)
+        }
+        platePiecesTotal={
+          Number(extTotals?.extPlatePieces || 0) +
+          Number(intTotals?.intPlatePieces || 0)
+        }
+        totalPanelsAllLevels={Number(panelsTotalAllSections || 0)}
+        levelsCount={Number(levelsCount || 1)}
+        levelId={id}
+        onGeneralChange={onLooseGeneralChange}
+      />
+    </AccordionSection>
+  </section>
+)};

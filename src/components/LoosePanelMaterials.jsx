@@ -5,6 +5,7 @@ import { Fragment, useMemo, useState, useEffect, useRef} from 'react';
 import { parseBoardLengthFt, unitPriceFrom } from '@/domain/lib/parsing';
 import ItemPicker from '@/components/ItemPicker';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
+import AccordionSection from '@/components/ui/AccordionSection';
 
 import {
   // exterior
@@ -53,9 +54,6 @@ export default function LoosePanelMaterials({
   );  
  
   const showZipTape = extSheets > 0;
-
-    // Collapsible
-  const [collapsed, setCollapsed] = useState(false);
 
   // Notes per row
   const [notes, setNotes] = useLocalStorageJson(`inv:v1:notes:${persistKey}`, {});
@@ -305,6 +303,13 @@ export default function LoosePanelMaterials({
     extZipSheetsFinal, extZipSheetsSum
   ]);
 
+  const ptPiecesLevel = useMemo(() => {
+    const extPT = Math.ceil(exteriorRows.find(r => r.key === 'extBottomPT')?.qtyFinal || 0);
+    const i6PT  = Math.ceil(interiorRows.find(r => r.key === 'int2x6PT')?.qtyFinal || 0);
+    const i4PT  = Math.ceil(interiorRows.find(r => r.key === 'int2x4PT')?.qtyFinal || 0);
+    return extPT + i6PT + i4PT;
+  }, [exteriorRows, interiorRows]);
+
   const lastGenSigRef = useRef('');
   const onGenRef = useRef(onGeneralChange);
   useEffect(() => { onGenRef.current = onGeneralChange; }, [onGeneralChange]);
@@ -316,6 +321,7 @@ export default function LoosePanelMaterials({
        Number(sheetsExtra) || 0,
        Number(platePiecesTotal) || 0,
        String(levelId || ''),
+       Number(ptPiecesLevel) || 0,
      ].join('|');
 
      if (sig !== lastGenSigRef.current) {
@@ -326,22 +332,10 @@ export default function LoosePanelMaterials({
          sheetsBand: Number(sheetsBand) || 0,
          sheetsExtra: Number(sheetsExtra) || 0,
          platePiecesTotal: Number(platePiecesTotal) || 0,
+         ptPieces: Number(ptPiecesLevel) || 0,
        });
     }
-   }, [sheetsExt, sheetsBand, sheetsExtra, platePiecesTotal, levelId]);
-
-  useEffect(() => {
-    if (typeof onGeneralChange === 'function') {
-      onGeneralChange({
-        id: levelId,
-        sheetsExt,
-        sheetsBand,
-        sheetsExtra,
-        platePiecesTotal: Number(platePiecesTotal || 0),
-      });
-    }
-  }, [onGeneralChange, levelId, sheetsExt, sheetsBand, sheetsExtra, platePiecesTotal]);
-
+   }, [sheetsExt, sheetsBand, sheetsExtra, platePiecesTotal, ptPiecesLevel, levelId]);
 
   // ── Build INTERIOR rows ────────────────────────────────────────
   const interiorRows = useMemo(() => {
@@ -438,132 +432,18 @@ export default function LoosePanelMaterials({
     effectiveInt2x6LF, effectiveInt2x4LF,
     intInputs.blockingLF,
     lenInt2x6PT, lenInt2x6Pl, lenInt2x4PT, lenInt2x4Pl
-  ]);
-
-  
+  ]);  
 
   // Totals for nails math
 
   const ptLFAll = Number(ptLFTotal ?? (effectiveExtLF + effectiveInt2x6LF + effectiveInt2x4LF));
   const wallsLFTotal = effectiveExtLF + effectiveInt2x6LF + effectiveInt2x4LF;
 
-//   // ── Build GENERAL (nails & bracing) rows ───────────────────────
-//   const generalRows = useMemo(() => {
-//     const out = [];
-
-//     // Concrete nails (Home Depot, Drive Pins with Washers (HD), 3"-100s)
-//     // Formula: (PT pieces × 25 / 100) with +40% waste ⇒ ceil(...)
-//     {
-//       // Count PT pieces from the rows we already computed in this section
-//       const extPTpieces   = Math.ceil(exteriorRows.find(r => r.key === 'extBottomPT')?.qtyFinal || 0);
-//       const int2x6PTpcs   = Math.ceil(interiorRows.find(r => r.key === 'int2x6PT')?.qtyFinal || 0);
-//       const int2x4PTpcs   = Math.ceil(interiorRows.find(r => r.key === 'int2x4PT')?.qtyFinal || 0);
-//       const ptPiecesTotal = extPTpieces + int2x6PTpcs + int2x4PTpcs;
-//       // Boxes: each box is "100s"; we need (pieces * 25) / 100, then add 40% waste
-//       const qtyRaw   = (ptPiecesTotal * 25) / 100;
-//       const qtyFinal = Math.ceil(qtyRaw * 1.40);
-//       const unit      = getUnit(sel.nailsConcrete) || 'box';
-//       const item      = getItem(sel.nailsConcrete);
-//       const unitPrice = unitPriceFrom(item);
-//       const subtotal  = qtyFinal * (Number(unitPrice) || 0);
-//       out.push({
-//         key: 'nailsConcrete',
-//         label: 'Concrete nails',
-//         unit, qtyRaw, qtyFinal, unitPrice, subtotal,
-//         item,
-//         wastePct: 40
-//         });
-//     }
-
-//     // Sheathing nails (Concord, Bright Ring Coil, 8D-2-3/8x.113-2.7M)
-//     {
-//       const qtyRaw = (Number(sheetsInThisSection) || 0) * 80 /2700;
-//       const qtyFinal = Math.ceil(qtyRaw * 1.40);
-//       const unit = getUnit(sel.nailsSheathing) || 'box';
-//       const item = getItem(sel.nailsSheathing);
-//       const unitPrice = unitPriceFrom(item);
-//       const subtotal = qtyFinal * (Number(unitPrice) || 0);
-
-//       out.push({
-//         key: 'nailsSheathing',
-//         label: 'Sheathing nails',
-//         unit, qtyRaw, qtyFinal, unitPrice, subtotal, item, wastePct: 40,
-//       });
-//     }
-//     // Framing nails (G&P Warehouse, Bright Common Coil, 12D-3-1/4x.120-2.5M)
-//     {
-//       // Total plates in this section = sum of all plate PIECES (exterior + interior)
-//       const ex = Object.fromEntries(exteriorRows.map(r => [r.key, r]));
-//       const inr = Object.fromEntries(interiorRows.map(r => [r.key, r]));
-//       const q = (obj, k) => Math.ceil(obj[k]?.qtyFinal || 0);
-
-//       const totalPlatePieces  =
-//         q(ex, 'extBottomPT')  +
-//         q(ex, 'extTopPlate')  +
-//         q(ex, 'secondBottom') +
-//         q(inr, 'int2x6PT')    +
-//         q(inr, 'int2x6Plate') +
-//         q(inr, 'int2x4PT')    +
-//         q(inr, 'int2x4Plate') ;
-
-//       // Math: pieces * 25 / 2500 + 40% waste
-//       const qtyRaw   = (totalPlatePieces * 25) / 2500;
-//       const qtyFinal = Math.ceil(qtyRaw * 1.40);
-
-//       const unit      = getUnit(sel.nailsFraming) || 'box';
-//       const item      = getItem(sel.nailsFraming);
-//       const unitPrice = unitPriceFrom(item);
-//       const subtotal  = qtyFinal * (Number(unitPrice) || 0);
-
-//       out.push({
-//         key: 'nailsFraming',
-//         label: 'Framing nails',
-//         unit, qtyRaw, qtyFinal, unitPrice, subtotal,
-//         item,
-//         wastePct: 40,
-// });
-//     }
-
-//     // Temporary Bracing
-//     {
-//       const allPanels = Math.max(0, Number(totalPanelsAllLevels ?? 0));
-//       const qtyRaw    = allPanels * 3;
-//       const qtyFinal  = Math.ceil(qtyRaw);   // whole-count
-//       const unit      = getUnit(sel.tempBracing) || 'pcs';
-//       const item      = getItem(sel.tempBracing);
-//       const unitPrice = unitPriceFrom(item);
-//       const subtotal  = qtyFinal * (Number(unitPrice) || 0);
-
-//       out.push({
-//         key: 'tempBracing',
-//         label: 'Temporary Bracing',
-//         unit, qtyRaw, qtyFinal, unitPrice, subtotal,
-//         item,
-//         wastePct: 0
-//       });
-//     }
-    
-//     return out;
-//   }, [
-//     sel,
-//     sheetsInThisSection, wallsLFTotal,
-//     generalInputs.platePiecesTotal,
-//     exteriorRows, interiorRows,
-//     totalPanelsAllLevels,
-//     levelsCount,
-//   ]);
-
-//   // --- Bracing preview numbers (used in hint + math) ---
-//   const panelsAll = useMemo(
-//     () => Math.max(0, Number(totalPanelsAllLevels ?? 0)),
-//     [totalPanelsAllLevels]
-//     );
-//   const bracingQtyPreview = Math.ceil(panelsAll * 3);
+  // ── Build GENERAL (nails & bracing) rows ───────────────────────
 
   const sectionSubtotal = useMemo(() => {
     const a = exteriorRows.reduce((s,r)=>s+(r.subtotal||0),0);
     const b = interiorRows.reduce((s,r)=>s+(r.subtotal||0),0);
-//     const c = generalRows.reduce((s,r)=>s+(r.subtotal||0),0);
     return a + b;
   }, [exteriorRows, interiorRows]);
 
@@ -582,47 +462,12 @@ export default function LoosePanelMaterials({
 
   return (
     <div className="ew-card">
-      {/* Header + collapse + remove */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button
-          className="ew-btn"
-          onClick={() => setCollapsed(c => !c)}
-          aria-expanded={!collapsed}
-          title={collapsed ? 'Expand' : 'Collapse'}
-          style={{ padding: '4px 8px', lineHeight: 1 }}
-        >
-          {collapsed ? '▶' : '🔽'}
-        </button>
-        <h2 className="ew-h2" style={{ margin: 0 }}>{title}</h2>
-        {onRemove && <button className="ew-btn" onClick={onRemove}>Remove section</button>}
-      </div>
-
-      {/* Collapsed summary */}
-      <div
-        style={{
-          display: collapsed ? 'block' : 'none',
-          padding: 12,
-          border: '1px solid var(--border)',
-          borderRadius: 10,
-          marginTop: 8
-        }}
-        aria-hidden={!collapsed}
-      >
-        <div style={{ fontWeight: 700, color: '#f18d5b' }}>
-          Subtotal: {fmt(sectionSubtotal)}
-        </div>
-      </div>
-
-      {/* Full content */}
-      <div
-        style={{
-          display: collapsed ? 'none' : 'block',
-          padding: 16,
-          border: '1px solid var(--border)',
-          borderRadius: 12
-        }}
-        aria-hidden={collapsed}
-      >
+      <AccordionSection
+        title={title}
+        defaultOpen={true}
+        summary={<div style={{ textAlign: 'right', fontWeight: 700, color: '#f18d5b' }}>Subtotal: {fmt(sectionSubtotal)}</div>}
+        actions={onRemove ? <button className="ew-btn" onClick={onRemove}>Remove section</button> : null}
+      >  
         {/* ───────────── Exterior walls ───────────── */}
         <h3 className="ew-h3" style={{ marginTop: 0, marginBottom: 6 }}>Exterior walls</h3>
 
@@ -703,7 +548,7 @@ export default function LoosePanelMaterials({
               <ItemPicker
                 compact
                 onSelect={setPick('extBottomPT')}
-                defaultVendor="Fastener Plus" /* vendor here doesn’t matter for lumber; use G&P if you prefer */
+                defaultVendor="Gillies & Prittie Warehouse"
                 defaultFamilyLabel="PT"
               />
             )}
@@ -1008,24 +853,9 @@ export default function LoosePanelMaterials({
             )}
             row={interiorRows.find(r => r.key === 'intCabinetBlocking')}
           />
-        </div>
-
-        {/* ───────────── General — nails & bracing ───────────── */}
-        <h3 className="ew-h3" style={{ marginTop: 16, marginBottom: 6 }}>General — Nails & bracing</h3>
-
-        {/* General inputs (plate pieces for bracing) */}
-        <div className="controls4" style={{ marginBottom: 12 }}>
-          {/* <label>
-            <span className="ew-subtle">Total plate pieces (from panel groups)</span>
-            <input className="ew-input focus-anim" type="number" inputMode="decimal"
-              value={generalInputs.platePiecesTotal}
-              onChange={e => setGeneralInputs(v => ({ ...v, platePiecesTotal: Number(e.target.value) }))}
-            />
-          </label> */}
-          <div></div>
-          <div></div>
-        </div></div>
-    </div>
+        </div>        
+    </AccordionSection>
+  </div>
   );
 }
 

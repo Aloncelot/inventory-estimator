@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import ExteriorWallGroup from '@/components/ExteriorWallGroup';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
+import AddButton from './ui/AddButton';
 
 const sameTotals = (a, b) => {
   if (a === b) return true;
@@ -114,8 +115,8 @@ export default function ExteriorWalls({
   return (
     <section className="ew-stack">
       <div className="ew-card" style={{ display:'flex', alignItems:'center', gap:12, justifyContent:'space-between' }}>
-        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>
-        <button className="ew-btn ew-btn--turq" onClick={addSection}>+ Add exterior wall section</button>
+        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>        
+        <AddButton onClick={addSection} title="Add wall" label="Add wall" />
       </div>
 
       {sections.length === 0 && (
