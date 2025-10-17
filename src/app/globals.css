@@ -53,6 +53,7 @@ html, body {
   box-shadow: var(--shadow);
   padding: 16px;
   margin-bottom: 20px;
+  overflow: visible;
 }
 
 .ew-stack { margin-top: 20px; }
@@ -298,14 +299,82 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 /* Dropdown menu uses the same theme vars as native <select> */
 .combo-list{
-  position:absolute; inset:auto 0 auto 0; margin-top:4px;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: max(100%, 240px);
+
   background: var(--dropdown-bg);
-  color: var(--dropdown-fg);
-  border: 1px solid var(--dropdown-border);
-  border-radius:8px;
-  max-height:240px; overflow:auto;
-  z-index:9999;
-  box-shadow: 0 8px 30px rgba(0,0,0,.08);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.25);
+
+  padding: 6px;
+  margin: 0;
+
+  display: none;                     /* shown when expanded (see below) */
+  max-height: min(320px, 45vh);
+  overflow: auto;
+
+  /* subtle inertial feel */
+  transform-origin: top;
+}
+.combo[aria-expanded="true"] .combo-list {
+  display: block;
+  animation: dropdown-enter .22s ease forwards;
+}
+/* list items */
+.combo .combo-option {
+  list-style: none;
+  padding: 8px 10px;
+  margin: 2px 0;
+  border-radius: 8px;
+  color: var(--text-100);
+  line-height: 1.25rem;
+  cursor: pointer;
+  background: transparent;
+
+  /* start hidden for stagger effect */
+  opacity: 0;
+  transform: translateY(4px);
+  animation: dropdown-item-enter .22s ease forwards;
+}
+/* stagger like the menu demo (first few items) */
+.combo .combo-option:nth-child(1) { animation-delay: .00s; }
+.combo .combo-option:nth-child(2) { animation-delay: .04s; }
+.combo .combo-option:nth-child(3) { animation-delay: .08s; }
+.combo .combo-option:nth-child(4) { animation-delay: .12s; }
+.combo .combo-option:nth-child(5) { animation-delay: .16s; }
+
+/* hover/active/selected states */
+.combo .combo-option:hover,
+.combo .combo-option[aria-selected="true"],
+.combo .combo-option[data-active="true"] {
+  background: var(--turq-400);
+}
+/* optional tiny divider style if you use them */
+.combo .combo-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
+/* search input (if your dropdown has one at the top) */
+.combo .combo-filter,
+.combo .combo input[type="search"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 4px 0 6px 0;
+  background: var(--bg-700);
+  color: var(--text-100);
+  outline: none;
+}
+.combo .combo-filter:focus,
+.combo .combo input[type="search"]:focus {
+  border-color: var(--turq-300);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--turq-300) 35%, transparent);
 }
 .combo-option{
   padding:8px 10px; cursor:pointer; line-height:1.25;
@@ -554,6 +623,13 @@ input[type="number"] { -moz-appearance: textfield; }
   max-height: 0; opacity: 0;
   border: 1px solid var(--border); border-radius: 12px;
 }
+
+/* But if a combobox is expanded inside, allow overflow so the menu can escape */
+.acc__body:has(.combo[aria-expanded="true"]) {
+  overflow: visible;
+}
+
+
 .acc__bodyInner { padding: 16px; }
 
 /* Reserve vertical scrollbar gutter so layout width never changes */
@@ -613,4 +689,23 @@ html {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Animations */
+@keyframes dropdown-enter {
+  from { opacity: 0; transform: scaleY(.98) translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dropdown-item-enter {
+  to { opacity: 1; transform: none; }
+}
+
+/* Optional: pretty scrollbar for the dropdown only */
+.combo .combo-list::-webkit-scrollbar { width: 10px; }
+.combo .combo-list::-webkit-scrollbar-track { background: transparent; }
+.combo .combo-list::-webkit-scrollbar-thumb {
+  background: var(--turq-600);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }

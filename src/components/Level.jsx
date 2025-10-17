@@ -1,13 +1,14 @@
 // src/components/Level.jsx
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import ExteriorWalls from '@/components/ExteriorWalls';
 import InteriorWalls from '@/components/InteriorWalls';
 import LoosePanelMaterials from '@/components/LoosePanelMaterials';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import AccordionSection from '@/components/ui/AccordionSection';
 import RemoveButton from './ui/RemoveButton';
+import PanelNails from '@/components/PanelNails';
 
 // Compare only the fields that matter to avoid loops
 // const sameExtTotals = (a, b) => {
@@ -41,29 +42,26 @@ export default function Level({
   levelsCount,
   panelsTotalAllSections,
   onLooseGeneralChange,
-}) {
-  const handlePanelLenFromExterior = useCallback((len) => {
-    onExteriorPanelLenChange?.({ id, len: Number(len) || 0 });
-  }, [onExteriorPanelLenChange, id]);
-
+}) {  
   // UI (collapsed persisted per level)
   const [ui, setUi] = useLocalStorageJson(`inv:v1:level-ui:${id}`, { collapsed: false });
   const collapsed = !!ui.collapsed;
   const setCollapsed = (c) => setUi(prev => ({ ...prev, collapsed: !!c }));
-
+  
   // Live totals reported by wrappers
   const [extTotals, setExtTotals] = useState(null);
   const [intTotals, setIntTotals] = useState({
     int2x6LF: 0, int2x4LF: 0, intPlatePieces: 0, intPTLFSum: 0,
-    panelsSubtotal: 0, // sum of InteriorWallGroup groupSubtotal for this level
-    // (InteriorWalls should also provide shearLengthSum, shearPanelLenFt, bearingLengthSum)
+    panelsSubtotal: 0, // sum of InteriorWallGroup groupSubtotal for this level    
   });
   const [looseSubtotal, setLooseSubtotal] = useState(0);
-
-  // Stable handlers from child → level
-  // const handleExtTotals = useCallback((t) => {
-  //   setExtTotals(prev => sameExtTotals(prev, t) ? prev : t);
-  // }, []);
+  const [extPanelLenFt, setExtPanelLenFt] = useState(16);
+  
+  const handlePanelLenFromExterior = useCallback((len) => {
+    const val = Number(len) || 16;
+    setExtPanelLenFt(val);
+    onExteriorPanelLenChange?.({ id, len: val }); // still inform parent if desired
+  }, [id, onExteriorPanelLenChange]);
 
   const handleIntTotals = useCallback((t) => {
     setIntTotals(t || {});
@@ -107,6 +105,34 @@ export default function Level({
   useEffect(() => {
     onLevelTotal?.({ id, total: levelTotal });
   }, [id, levelTotal, onLevelTotal]);
+
+   const panelsPTBoards = useMemo(() => {
+    const extPTLF = Number(extTotals?.extPTLFSum || 0); // from ExteriorWalls Panels totals
+    const intPTLF = Number(intTotals?.intPTLFSum || 0); // from InteriorWalls Panels totals
+    const len     = Math.max(Number(extPanelLenFt || 16), 1);
+    // 5% waste per group BEFORE ceiling, then sum the two
+    const extBoards = Math.ceil((extPTLF * 1.05) / len);
+    const intBoards = Math.ceil((intPTLF * 1.05) / len);
+    return extBoards + intBoards;
+  }, [extTotals?.extPTLFSum, intTotals?.intPTLFSum, extPanelLenFt]); 
+
+  useEffect(() => {
+    /* This should print a stable value when inputs truly change */
+    console.log('[Level]', name, 'panelsPTBoards =', panelsPTBoards, {
+      extPTLF: extTotals?.extPTLFSum,
+      intPTLF: intTotals?.intPTLFSum,
+      boardLenFt: extPanelLenFt,
+    });
+  }, [panelsPTBoards, extTotals?.extPTLFSum, intTotals?.intPTLFSum, extPanelLenFt, name]);
+
+  // ---- Panel-nails inputs (PER LEVEL) ---------------------------------
+const panelZipSheets = Number((extTotals?.extZipSheetsFinal ?? extTotals?.extZipSheetsSum) ?? 0);
+const panelPlatePieces = Number(extTotals?.extPlatePieces || 0) + Number(intTotals?.intPlatePieces || 0);
+const panelLF = Number(extTotals?.extLengthSum || 0) +
+                Number(intTotals?.int2x6LF || 0) +
+                Number(intTotals?.int2x4LF || 0);
+const panelPTPlatePieces = Number(extTotals?.extPTPlatePieces || 0) +
+                           Number(intTotals?.intPTPlatePieces || 0);
 
   return (
   <section className="ew-stack">
@@ -156,6 +182,14 @@ export default function Level({
         onBearingLFChange={(lfVal) => onInteriorBearingLF?.({ id, lf: Number(lfVal) || 0 })}
         onPartitionLFChange={(lfVal) => onInteriorNonLoadLF?.({ id, lf: Number(lfVal) || 0 })}
         onKneeLFChange={(lfVal) => onKneeWallLF?.({ id, lf: Number(lfVal) || 0 })}
+      />
+
+      <PanelNails
+        title={`${name} — Panel nails`}
+        persistKey={`panel-nails:${id}`}
+        extZipSheetsPanels={Number(panelZipSheets) || 0}
+        platePiecesPanels={Number(panelPlatePieces) || 0}
+        panelPtBoards={panelsPTBoards} 
       />
 
       <LoosePanelMaterials

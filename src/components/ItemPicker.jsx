@@ -39,15 +39,10 @@ export default function ItemPicker({
   const userClearedSize   = useRef(false);
 
   // Idempotent setters (avoid re-setting same value)
-  const setVendorIdIf = useCallback((val) => {
-    setVendorId(prev => (prev === val ? prev : val));
-  }, []);
-  const setFamilySlugIf = useCallback((val) => {
-    setFamilySlug(prev => (prev === val ? prev : val));
-  }, []);
-  const setSizeIdIf = useCallback((val) => {
-    setSizeId(prev => (prev === val ? prev : val));
-  }, []);
+  const setVendorIdIf = (val) => setVendorId(prev => (prev === toKey(val) ? prev : toKey(val)));
+  const setFamilySlugIf = (val) => setFamilySlug(prev => (prev === toKey(val) ? prev : toKey(val)));
+  const setSizeIdIf = (val) => setSizeId(prev => (prev === toKey(val) ? prev : toKey(val)));
+  const toKey = (v) => (v === '' || v == null) ? '' : String(v);
 
   // Emit guard + stable onSelect ref
   const lastEmitRef = useRef(''); // `${vendorId}|${familySlug}|${sizeId}` or 'null'
@@ -101,7 +96,10 @@ export default function ItemPicker({
     if (familySlug) setFamilySlugIf('');
     if (sizeId) setSizeIdIf('');
     setFamilies(prev => (prev.length ? [] : prev));
+    prevFamilyKeyRef.current = '';
     setSizes(prev => (prev.length ? [] : prev));
+    didAutoSizeForKey.current = '';
+    userClearedSize.current = false;
 
     // Tell parent selection is now null (once)
     if (hadSelection && onSelectRef.current && lastEmitRef.current !== 'null') {
@@ -151,6 +149,8 @@ export default function ItemPicker({
     const hadSize = !!sizeId;
     if (hadSize) setSizeIdIf('');
     setSizes(prev => (prev.length ? [] : prev));
+    didAutoSizeForKey.current = '';
+    userClearedSize.current = false;
 
     if (hadSize && onSelectRef.current && lastEmitRef.current !== 'null') {
       lastEmitRef.current = 'null';
@@ -207,8 +207,8 @@ export default function ItemPicker({
   // Build selected object for parent consumers
   const selected = useMemo(() => {
     if (!vendorId || !familySlug || !sizeId) return null;
-    const fam = families.find(f => f.slug === familySlug);
-    const itm = sizes.find(s => s.id === sizeId);
+    const fam = families.find(f => String(f.slug) === String(familySlug));
+    const itm = sizes.find(s => String(s.id) === String(sizeId));
     if (!fam || !itm) return null;
     return {
       vendorId,
@@ -254,18 +254,9 @@ export default function ItemPicker({
   }, [setSizeIdIf]);
 
   // ---- UI pieces (searchable) ------------------------------------------
-  const vendorOptions = useMemo(
-    () => vendors.map(v => ({ value: v.id,  label: v.displayName })),
-    [vendors]
-  );
-  const familyOptions = useMemo(
-    () => families.map(f => ({ value: f.slug, label: f.label })),
-    [families]
-  );
-  const sizeOptions = useMemo(
-    () => sizes.map(s => ({ value: s.id,   label: s.sizeLabel })),
-    [sizes]
-  );
+  const vendorOptions = useMemo(() => vendors.map(v => ({ value: String(v.id),  label: v.displayName })), [vendors]);
+  const familyOptions = useMemo(() => families.map(f => ({ value: String(f.slug), label: f.label })), [families]);
+  const sizeOptions   = useMemo(() => sizes.map(s => ({ value: String(s.id),   label: s.sizeLabel })), [sizes]);
 
   const VendorSelect = (
     <SearchableSelect

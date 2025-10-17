@@ -23,7 +23,7 @@ export default function SearchableSelect({
 
   // Current option for controlled value
   const selected = useMemo(
-    () => options.find(o => o.value === value) || null,
+    () => options.find(o => String(o.value) === String(value)),
     [options, value]
   );
 
@@ -75,6 +75,13 @@ export default function SearchableSelect({
     }
   }, [open, selected, query]);
 
+  // clear the filter and reset the active index so the list is selectable.
+  useEffect(() => {
+    setActiveIndex(0);
+    // If the list is open, make sure we show the full, fresh list.
+    if (open) setQuery('');
+  }, [options, open]);
+
   function handleInputFocus() {
     if (disabled) return;
     setOpen(true);
@@ -90,9 +97,9 @@ export default function SearchableSelect({
     if (!opt) return;
     if (opt.value === '__CLEAR__') {
       // Clear the selection and the query; close the list
-      onChange?.('');
-      setQuery('');
+      onChange?.(opt?.value ?? '');
       setOpen(false);
+      setQuery('');
       return;
     }
     if (opt.value !== value) onChange?.(opt.value);
@@ -167,14 +174,15 @@ export default function SearchableSelect({
               <li
                 key={`${o.value}-${idx}`}
                 role="option"
-                aria-selected={o.value !== '__CLEAR__' && value === o.value}
+                aria-selected={o.value !== '__CLEAR__' && String(value) === String(o.value)}
                 className={
                   'combo-option' +
                   (idx === activeIndex ? ' active' : '') +
                   (o.value === '__CLEAR__' ? ' danger' : '')
                 }
-                onMouseDown={(e) => { e.preventDefault(); commitSelection(o); }}
+                onPointerDown={(e) => { e.preventDefault(); commitSelection(o); }}               
                 onMouseEnter={() => setActiveIndex(idx)}
+                onMouseDown={(e) => { e.preventDefault(); }}                
                 title={o.label}
               >
                 {o.label}

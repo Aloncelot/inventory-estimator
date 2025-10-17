@@ -105,33 +105,33 @@ export default function NailsAndBracing({
   );
 
   // Derived totals
-  const allSheets = useMemo(
-    () => Number(sheetsExtAll) + Number(sheetsBandAll) + Number(sheetsExtraAll),
+  const allSheetsLoose = useMemo(
+    () => Number(sheetsBandAll) + Number(sheetsExtraAll),
     [sheetsExtAll, sheetsBandAll, sheetsExtraAll]
   );
 
   // Concrete nails: (PT pieces * 25 / 100) then +40% waste → ceil
   const concrete = useMemo(() => {
+    const basePieces = Number(ptPiecesAll) || 0;
     const qtyRaw = basePieces * 25 / 100;
-    const basePieces = Number(ptPiecesAll ?? platePiecesAll) || 0;
     const qtyFinal = Math.ceil(qtyRaw * 1.4);
     const unit = getUnit(sel.nailsConcrete) || 'box';
     const item = getItem(sel.nailsConcrete);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
     return { qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: 40 };
-  }, [ptPiecesAll, platePiecesAll, sel.nailsConcrete]);
+  }, [ptPiecesAll, sel.nailsConcrete]);
 
   // Sheathing nails: (all ZIP sheets * 80 / 2700) then +40% waste → ceil
   const sheathing = useMemo(() => {
-    const qtyRaw = (Number(allSheets) || 0) * 80 / 2700;
+    const qtyRaw = (Number(allSheetsLoose) || 0) * 80 / 2700;
     const qtyFinal = Math.ceil(qtyRaw * 1.4);
     const unit = getUnit(sel.nailsSheathing) || 'box';
     const item = getItem(sel.nailsSheathing);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
     return { qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: 40 };
-  }, [allSheets, sel.nailsSheathing]);
+  }, [allSheetsLoose, sel.nailsSheathing]);
 
   // Framing nails: (platePiecesAll * 25 / 2500) then +40% waste → ceil
   const framing = useMemo(() => {
@@ -234,27 +234,24 @@ export default function NailsAndBracing({
   );
 
   const concreteHint = useMemo(() => {
-    const hasPT = ptPiecesAll != null;
-    const base = Number(hasPT ? ptPiecesAll : platePiecesAll) || 0;
-    const label = hasPT ? 'PT pieces' : 'Plate pieces';
+    const base = Number(ptPiecesAll) || 0;
     const n = new Intl.NumberFormat('en-US').format(base);
-    return `${label}: ${n} → boxes = ceil((${label.toLowerCase()} × 25 / 100) × 1.4)`;
-  }, [ptPiecesAll, platePiecesAll]);
-
+    return `PT pieces: ${n} → boxes = pt pieces × 25 / 100 + 40% waste`;
+  }, [ptPiecesAll]);
 
   const sheathingHint = useMemo(
     () =>
-      `ZIP sheets = (ext: ${sheetsExtAll}) + (band: ${sheetsBandAll})` +
+      `Loose sheets = (band: ${sheetsBandAll})` +
       (sheetsExtraAll ? ` + (extra: ${sheetsExtraAll})` : ''),
-    [sheetsExtAll, sheetsBandAll, sheetsExtraAll]
+    [sheetsBandAll, sheetsExtraAll]
   );
   const framingHint = useMemo(
-    () => `Boards = ${platePiecesAll} → boxes = ceil((boards × 25 / 2500) × 1.4)`,
+    () => `Loose non-PT boards = ${platePiecesAll} → boxes = ceil((boards × 25 / 2500) × 1.4)`,
     [platePiecesAll]
   );
   const bracingHint = useMemo(
     () => `Bracing pieces = panels × 3 (panels: ${panelsAll})`,
-    [panelsAll]
+    [platePiecesAll]
   );
 
   return (

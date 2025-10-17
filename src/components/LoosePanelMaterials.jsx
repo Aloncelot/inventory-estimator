@@ -104,12 +104,6 @@ export default function LoosePanelMaterials({
     int2x4PT: null,
     int2x4Plate: null,
     intCabinetBlocking: null,
-
-    // General (nails & bracing)
-    // nailsConcrete: null,
-    // nailsSheathing: null,
-    // nailsFraming: null,
-    // tempBracing: null,
   });
   const setPick = key => item => setSel(prev => ({ ...prev, [key]: item }));
 
@@ -127,157 +121,172 @@ export default function LoosePanelMaterials({
 
 
   // Board lengths from sizes
-  const lenBottomPT      = parseBoardLengthFt(getSize(sel.extBottomPT)) || 12;
-  const lenTopPlate      = parseBoardLengthFt(getSize(sel.extTopPlate)) || 12;
-  const lenOpeningBlk    = parseBoardLengthFt(getSize(sel.openingsBlocking)) || 10;
-  const lenSecondBottom  = parseBoardLengthFt(getSize(sel.secondBottom)) || 12;
+  const lenBottomPT      = parseBoardLengthFt(getSize(sel.extBottomPT))       || 16;
+  const lenTopPlate      = parseBoardLengthFt(getSize(sel.extTopPlate))       || 16;
+  const lenOpeningBlk    = parseBoardLengthFt(getSize(sel.openingsBlocking))  || 10;
+  const lenSecondBottom  = parseBoardLengthFt(getSize(sel.secondBottom))      || 16;
   
-  const lenInt2x6PT      = parseBoardLengthFt(getSize(sel.int2x6PT)) || 12;
-  const lenInt2x6Pl      = parseBoardLengthFt(getSize(sel.int2x6Plate)) || 12;
-  const lenInt2x4PT      = parseBoardLengthFt(getSize(sel.int2x4PT)) || 12;
-  const lenInt2x4Pl      = parseBoardLengthFt(getSize(sel.int2x4Plate)) || 12;
+  const lenInt2x6PT      = parseBoardLengthFt(getSize(sel.int2x6PT))          || 16;
+  const lenInt2x6Pl      = parseBoardLengthFt(getSize(sel.int2x6Plate))       || 16;
+  const lenInt2x4PT      = parseBoardLengthFt(getSize(sel.int2x4PT))          || 16;
+  const lenInt2x4Pl      = parseBoardLengthFt(getSize(sel.int2x4Plate))       || 16;
   
   // ── Build EXTERIOR rows ────────────────────────────────────────
-  const exteriorRows = useMemo(() => {
-    const out = [];
+const exteriorRows = useMemo(() => {
+  const out = [];
 
+  // PT Bottom Plates – Loose
+  {
+    const res = looseExtBottomPlates({
+      lengthLF: Number(effectiveExtLF) || 0,
+      boardLenFt: Math.max(Number(lenBottomPT) || 0, 1),
+      item: getItem(sel.extBottomPT),
+      unit: getUnit(sel.extBottomPT),
+    });
+    out.push({
+      key: 'extBottomPT',
+      label: 'PT Bottom Plates – Loose',
+      ...res,
+      item: getItem(sel.extBottomPT),
+      wastePct: 5,
+    });
+  }
 
+  // Top Plates – Loose
+  {
+    const res = looseExtTopPlates({
+      lengthLF: Number(effectiveExtLF) || 0,
+      boardLenFt: Math.max(Number(lenTopPlate) || 0, 1),
+      item: getItem(sel.extTopPlate),
+      unit: getUnit(sel.extTopPlate),
+    });
+    out.push({
+      key: 'extTopPlate',
+      label: 'Top Plates – Loose',
+      ...res,
+      item: getItem(sel.extTopPlate),
+      wastePct: 5,
+    });
+  }
 
-    // PT Bottom Plates – Loose
-    {
-      const res = looseExtBottomPlates({ 
-        lengthLF: effectiveExtLF, 
-        boardLenFt: lenBottomPT, 
-        item: getItem(sel.extBottomPT), 
-        unit: getUnit(sel.extBottomPT) 
-      });
-      out.push({ 
-        key: 'extBottomPT', 
-        label: 'PT Bottom Plates – Loose', ...res, 
-        item: getItem(sel.extBottomPT), 
-        wastePct: 5
-      });
-    }
-    
+  // Panel band sheathing (ZIP family by default)
+  {
+    const res = loosePanelBandSheathing({
+      panelBandLF: Number(extInputs.panelBandLF || 0),
+      bandHeightFt: 4, // 4' band ⇒ sheets ≈ LF / 8 (waste applied inside)
+      item: getItem(sel.panelBandSheathing),
+      unit: getUnit(sel.panelBandSheathing) || 'sheet',
+      wastePct: 20,
+    });
 
-    // Top Plates – Loose
-    {
-      const res = looseExtTopPlates({ 
-        lengthLF: effectiveExtLF, 
-        boardLenFt: lenTopPlate, item: getItem(sel.extTopPlate), 
-        unit: getUnit(sel.extTopPlate) 
-      });
-      out.push({ 
-        key: 'extTopPlate', 
-        label: 'Top Plates – Loose', ...res, 
-        item: getItem(sel.extTopPlate), 
-        wastePct: 5 
-      });
-    }
+    out.push({
+      key: 'panelBandSheathing',
+      label: 'Panel band sheathing',
+      ...res,
+      item: getItem(sel.panelBandSheathing),
+      wastePct: 20,
+    });
+  }
 
-    // Panel band sheathing (ZIP family by default)
-    {
-      const res = loosePanelBandSheathing({
-        panelBandLF: Number(extInputs.panelBandLF || 0),
-        bandHeightFt: 4, // 4' band ⇒ sheets ≈ LF / 8 (waste applied inside)
-        item: getItem(sel.panelBandSheathing),
-        unit: getUnit(sel.panelBandSheathing) || 'sheet',
-        wastePct: 20,
-      });
+  // Extra sheathing (optional)
+  if (include.extraSheathing) {
+    const res = looseExtraSheathing({
+      extLengthLF: Number(effectiveExtLF) || 0,
+      bandHeightFt: Number(extInputs.panelBandHeightFt || 4),
+      item: getItem(sel.extraSheathing),
+      unit: getUnit(sel.extraSheathing) || 'sheet',
+    });
+    out.push({
+      key: 'extraSheathing',
+      label: 'Extra sheathing (optional)',
+      ...res,
+      item: getItem(sel.extraSheathing),
+      wastePct: 10,
+    });
+  }
 
-      out.push({ 
-        key: 'panelBandSheathing', 
-        label: 'Panel band sheathing', ...res, 
-        item: getItem(sel.panelBandSheathing), 
-        wastePct: 20 
-      });
-    }
+  // Tape – ZIP system  (Rolls = total ZIP sheets ÷ 6; per-level)
+  if (showZipTape) {
+    const panelBandSheetsLocal = Number(out.find(r => r.key === 'panelBandSheathing')?.qtyFinal || 0);
+    const extraSheetsLocal = include.extraSheathing
+      ? Number(out.find(r => r.key === 'extraSheathing')?.qtyFinal || 0)
+      : 0;
 
-    // Extra sheathing (optional)
-    if (include.extraSheathing) {
-      // Treat as an extra layer across exterior length × band height (tweak if needed later)
-      const res = looseExtraSheathing({ 
-        extLengthLF: effectiveExtLF, 
-        bandHeightFt: Number(extInputs.panelBandHeightFt||4), 
-        item: getItem(sel.extraSheathing), 
-        unit: getUnit(sel.extraSheathing)||'sheet' 
-      });
-      out.push({ 
-        key: 'extraSheathing', 
-        label: 'Extra sheathing (optional)', ...res, 
-        item: getItem(sel.extraSheathing), 
-        wastePct: 10 
-      });
-    }
+    // extSheets must come from props/parent (e.g., extZipSheetsFinal),
+    // not computed from `out`, to avoid loops:
+    const totalSheets = Number(extSheets) + panelBandSheetsLocal + extraSheetsLocal;
 
-    // Tape – ZIP system  (Rolls = total ZIP sheets ÷ 6; per-level)
-    {
-      if (showZipTape) {
-      const panelBandSheetsLocal =
-      Number(out.find(r => r.key === 'panelBandSheathing')?.qtyFinal || 0);
-      const extraSheetsLocal =
-      include.extraSheathing ? Number(out.find(r => r.key === 'extraSheathing')?.qtyFinal || 0) : 0;
+    const qtyRaw = totalSheets / 6;
+    const qtyFinal = Math.ceil(qtyRaw); // whole rolls only
+    const unit = getUnit(sel.zipTape) || 'roll';
+    const item = getItem(sel.zipTape);
+    const unitPrice = unitPriceFrom(item);
+    const subtotal = qtyFinal * (Number(unitPrice) || 0);
 
-      const panelBandSheets = out.find(r => r.key === 'panelBandSheathing')?.qtyFinal || 0;
-      const extraSheets     = include.extraSheathing ? (out.find(r => r.key === 'extraSheathing')?.qtyFinal || 0) : 0;
-      const totalSheets =  Number(extSheets) + panelBandSheetsLocal + extraSheetsLocal;
+    out.push({
+      key: 'zipTape',
+      label: 'Tape – ZIP system',
+      unit,
+      qtyRaw,
+      qtyFinal,
+      unitPrice,
+      subtotal,
+      item,
+      wastePct: 0, // set to 0 if tape calc already fixes rolls; or keep 15, but update the comment
+    });
+  }
 
+  // Blocking at openings (LF ÷ board length)
+  {
+    const res = looseOpeningsBlocking({
+      openingsLF: Number(extInputs.openingsBlockingLF || 0),
+      boardLenFt: Math.max(Number(lenOpeningBlk) || 0, 1),
+      item: getItem(sel.openingsBlocking),
+      unit: getUnit(sel.openingsBlocking),
+    });
+    out.push({
+      key: 'openingsBlocking',
+      label: 'Blocking at openings',
+      ...res,
+      item: getItem(sel.openingsBlocking),
+      wastePct: 10,
+    });
+  }
 
-      const qtyRaw   = Number(totalSheets) / 6;
-      const qtyFinal = Math.ceil(qtyRaw);           // whole rolls only
-      const unit     = getUnit(sel.zipTape) || 'roll';
-      const item     = getItem(sel.zipTape);
-      const unitPrice = unitPriceFrom(item);
-      const subtotal  = qtyFinal * (Number(unitPrice) || 0);
+  // Second bottom plate (optional)
+  if (include.secondBottom) {
+    const res = looseSecondBottomPlate({
+      lengthLF: Number(effectiveExtLF) || 0,
+      boardLenFt: Math.max(Number(lenSecondBottom) || 0, 1),
+      item: getItem(sel.secondBottom),
+      unit: getUnit(sel.secondBottom),
+    });
+    out.push({
+      key: 'secondBottom',
+      label: 'Second bottom plate (optional)',
+      ...res,
+      item: getItem(sel.secondBottom),
+      wastePct: 5,
+    });
+  }
 
-      out.push({
-        key: 'zipTape',
-        label: 'Tape – ZIP system',
-        unit, qtyRaw, qtyFinal, unitPrice, subtotal,
-        item,
-        wastePct: 15, // explicit: rule has no waste factor
-      });
-    }}
-
-    // Blocking at openings (LF ÷ board length)
-    {
-      const res = looseOpeningsBlocking({ 
-        openingsLF: Number(extInputs.openingsBlockingLF||0), 
-        boardLenFt: lenOpeningBlk, 
-        item: getItem(sel.openingsBlocking), 
-        unit: getUnit(sel.openingsBlocking) 
-      });
-      out.push({ 
-        key: 'openingsBlocking', 
-        label: 'Blocking at openings', ...res, 
-        item: getItem(sel.openingsBlocking), 
-        wastePct: 10 
-      });
-    }
-
-    // Second bottom plate (optional)
-    if (include.secondBottom) {
-      const res = looseSecondBottomPlate({ 
-        lengthLF: effectiveExtLF, 
-        boardLenFt: lenSecondBottom, 
-        item: getItem(sel.secondBottom), 
-        unit: getUnit(sel.secondBottom) 
-      });
-      out.push({ 
-        key: 'secondBottom', 
-        label: 'Second bottom plate (optional)', ...res, 
-        item: getItem(sel.secondBottom), 
-        wastePct: 5 
-      });
-    }
-
-    return out;
-  }, [
-    sel, include,
-    effectiveExtLF, extZipSheetsFinal,
-    extInputs.panelBandLF, extInputs.panelBandHeightFt, extInputs.lfPerZipSheet, extInputs.tapeRollLenFt, extInputs.openingsBlockingLF,
-    lenBottomPT, lenTopPlate, lenOpeningBlk, lenSecondBottom, extSheets
-  ]);
+  return out;
+}, [
+  sel,
+  include,
+  effectiveExtLF,
+  extSheets,
+  extInputs.panelBandLF,
+  extInputs.panelBandHeightFt,
+  extInputs.lfPerZipSheet,
+  extInputs.tapeRollLenFt,
+  extInputs.openingsBlockingLF,
+  lenBottomPT,
+  lenTopPlate,
+  lenOpeningBlk,
+  lenSecondBottom,
+  showZipTape, 
+]);
 
   const rowsByKey = useMemo(
     () => Object.fromEntries(exteriorRows.map(r => [r.key, r])),
@@ -303,137 +312,165 @@ export default function LoosePanelMaterials({
     extZipSheetsFinal, extZipSheetsSum
   ]);
 
-  const ptPiecesLevel = useMemo(() => {
-    const extPT = Math.ceil(exteriorRows.find(r => r.key === 'extBottomPT')?.qtyFinal || 0);
-    const i6PT  = Math.ceil(interiorRows.find(r => r.key === 'int2x6PT')?.qtyFinal || 0);
-    const i4PT  = Math.ceil(interiorRows.find(r => r.key === 'int2x4PT')?.qtyFinal || 0);
-    return extPT + i6PT + i4PT;
-  }, [exteriorRows, interiorRows]);
-
-  const lastGenSigRef = useRef('');
-  const onGenRef = useRef(onGeneralChange);
-  useEffect(() => { onGenRef.current = onGeneralChange; }, [onGeneralChange]);
-
-  useEffect(() => {
-     const sig = [
-       Number(sheetsExt) || 0,
-       Number(sheetsBand) || 0,
-       Number(sheetsExtra) || 0,
-       Number(platePiecesTotal) || 0,
-       String(levelId || ''),
-       Number(ptPiecesLevel) || 0,
-     ].join('|');
-
-     if (sig !== lastGenSigRef.current) {
-       lastGenSigRef.current = sig;
-       onGenRef.current?.({
-         id: levelId,
-         sheetsExt: Number(sheetsExt) || 0,
-         sheetsBand: Number(sheetsBand) || 0,
-         sheetsExtra: Number(sheetsExtra) || 0,
-         platePiecesTotal: Number(platePiecesTotal) || 0,
-         ptPieces: Number(ptPiecesLevel) || 0,
-       });
-    }
-   }, [sheetsExt, sheetsBand, sheetsExtra, platePiecesTotal, ptPiecesLevel, levelId]);
-
   // ── Build INTERIOR rows ────────────────────────────────────────
-  const interiorRows = useMemo(() => {
-    const out = [];
+const interiorRows = useMemo(() => {
+  const out = [];
 
-    // Interior 2×6 — PT Plates – Loose
-    {
-      const res = looseInt2x6PTPlates({ 
-        lengthLF: effectiveInt2x6LF, 
-        boardLenFt: lenInt2x6PT, 
-        item: getItem(sel.int2x6PT), 
-        unit: getUnit(sel.int2x6PT),
-        wastePct: 5, 
-      });
-      out.push({ 
-        key: 'int2x6PT', 
-        label: 'Interior 2×6 — PT Plates – Loose', ...res, 
-        item: getItem(sel.int2x6PT), 
-        wastePct: 5
-      });
-    }
+  // Interior 2×6 — PT Plates – Loose
+  {
+    const res = looseInt2x6PTPlates({
+      lengthLF: Number(effectiveInt2x6LF) || 0,
+      boardLenFt: Math.max(Number(lenInt2x6PT) || 0, 1),
+      item: getItem(sel.int2x6PT),
+      unit: getUnit(sel.int2x6PT),
+      wastePct: 5,
+    });
+    out.push({
+      key: 'int2x6PT',
+      label: 'Interior 2×6 — PT Plates – Loose',
+      ...res,
+      item: getItem(sel.int2x6PT),
+      wastePct: 5,
+    });
+  }
 
-    // Interior 2×6 — Plates – Loose
-    {
-      const res = looseInt2x6Plates({ 
-        lengthLF: effectiveInt2x6LF, 
-        boardLenFt: lenInt2x6Pl, 
-        item: getItem(sel.int2x6Plate), 
-        unit: getUnit(sel.int2x6Plate),
-        wastePct: 5, 
-      });
-      out.push({ 
-        key: 'int2x6Plate', 
-        label: 'Interior 2×6 — Plates – Loose', ...res, 
-        item: getItem(sel.int2x6Plate), 
-        wastePct: 5
-      });
-    }
+  // Interior 2×6 — Plates – Loose (non-PT)
+  {
+    const res = looseInt2x6Plates({
+      lengthLF: Number(effectiveInt2x6LF) || 0,
+      boardLenFt: Math.max(Number(lenInt2x6Pl) || 0, 1),
+      item: getItem(sel.int2x6Plate),
+      unit: getUnit(sel.int2x6Plate),
+      wastePct: 5,
+    });
+    out.push({
+      key: 'int2x6Plate',
+      label: 'Interior 2×6 — Plates – Loose',
+      ...res,
+      item: getItem(sel.int2x6Plate),
+      wastePct: 5,
+    });
+  }
 
-    // Interior 2×4 — PT Plates – Loose
-    {
-      const res = looseInt2x4PTPlates({ 
-        lengthLF: effectiveInt2x4LF, 
-        boardLenFt: lenInt2x4PT, 
-        item: getItem(sel.int2x4PT), 
-        unit: getUnit(sel.int2x4PT),
-        wastePct: 5,
-      });
-      out.push({ 
-        key: 'int2x4PT', 
-        label: 'Interior 2×4 — PT Plates – Loose', ...res, 
-        item: getItem(sel.int2x4PT), 
-        wastePct: 5 
-      });
-    }
+  // Interior 2×4 — PT Plates – Loose
+  {
+    const res = looseInt2x4PTPlates({
+      lengthLF: Number(effectiveInt2x4LF) || 0,
+      boardLenFt: Math.max(Number(lenInt2x4PT) || 0, 1),
+      item: getItem(sel.int2x4PT),
+      unit: getUnit(sel.int2x4PT),
+      wastePct: 5,
+    });
+    out.push({
+      key: 'int2x4PT',
+      label: 'Interior 2×4 — PT Plates – Loose',
+      ...res,
+      item: getItem(sel.int2x4PT),
+      wastePct: 5,
+    });
+  }
 
-    // Interior 2×4 — Plates – Loose
-    {
-      const res = looseInt2x4Plates({ 
-        lengthLF: effectiveInt2x4LF, 
-        boardLenFt: lenInt2x4Pl, 
-        item: getItem(sel.int2x4Plate), 
-        unit: getUnit(sel.int2x4Plate),
-        wastePct: 5,
-      });
-      out.push({ 
-        key: 'int2x4Plate', 
-        label: 'Interior 2×4 — Plates – Loose', ...res, 
-        item: getItem(sel.int2x4Plate), 
-        wastePct: 5 
-      });
-    }
+  // Interior 2×4 — Plates – Loose (non-PT)
+  {
+    const res = looseInt2x4Plates({
+      lengthLF: Number(effectiveInt2x4LF) || 0,
+      boardLenFt: Math.max(Number(lenInt2x4Pl) || 0, 1),
+      item: getItem(sel.int2x4Plate),
+      unit: getUnit(sel.int2x4Plate),
+      wastePct: 5,
+    });
+    out.push({
+      key: 'int2x4Plate',
+      label: 'Interior 2×4 — Plates – Loose',
+      ...res,
+      item: getItem(sel.int2x4Plate),
+      wastePct: 5,
+    });
+  }
 
-    // Walls (general) — Blocking for Bathroom & Kitchen
-    {
-      const blkLen = parseBoardLengthFt(getSize(sel.intCabinetBlocking)) || 8;
-      const res = looseCabinetBlocking({ 
-        blockingLF: Number(intInputs.blockingLF||0), 
-        boardLenFt: blkLen, item: getItem(sel.intCabinetBlocking), 
-        unit: getUnit(sel.intCabinetBlocking) 
-      });
-      out.push({
-        key: 'intCabinetBlocking',
-        label: 'Walls (general) — Blocking for Bathroom & Kitchen',
-        ...res,
-        item: getItem(sel.intCabinetBlocking),
-        wastePct: 10
-      });
-    }
-    
-    return out;
-  }, [
-    sel,
-    effectiveInt2x6LF, effectiveInt2x4LF,
-    intInputs.blockingLF,
-    lenInt2x6PT, lenInt2x6Pl, lenInt2x4PT, lenInt2x4Pl
-  ]);  
+  // Walls (general) — Blocking for Bathroom & Kitchen
+  {
+    const blkLen = parseBoardLengthFt(getSize(sel.intCabinetBlocking)) || 8;
+    const res = looseCabinetBlocking({
+      blockingLF: Number(intInputs.blockingLF || 0),
+      boardLenFt: Math.max(blkLen, 1),
+      item: getItem(sel.intCabinetBlocking),
+      unit: getUnit(sel.intCabinetBlocking),
+    });
+    out.push({
+      key: 'intCabinetBlocking',
+      label: 'Walls (general) — Blocking for Bathroom & Kitchen',
+      ...res,
+      item: getItem(sel.intCabinetBlocking),
+      wastePct: 10,
+    });
+  }
 
+  return out;
+}, [
+  sel,
+  effectiveInt2x6LF, effectiveInt2x4LF,
+  lenInt2x6PT, lenInt2x6Pl, lenInt2x4PT, lenInt2x4Pl,
+  intInputs.blockingLF,
+]);
+
+// 2) Aggregates (computed AFTER exteriorRows + interiorRows exist)
+const nonPTPiecesLevel = useMemo(() => {
+  const extTop = Math.ceil(exteriorRows.find(r => r.key === 'extTopPlate')?.qtyFinal || 0);
+  const second = Math.ceil(exteriorRows.find(r => r.key === 'secondBottom')?.qtyFinal || 0);
+  const int6Pl = Math.ceil(interiorRows.find(r => r.key === 'int2x6Plate')?.qtyFinal || 0);
+  const int4Pl = Math.ceil(interiorRows.find(r => r.key === 'int2x4Plate')?.qtyFinal || 0);
+  return extTop + second + int6Pl + int4Pl;
+}, [exteriorRows, interiorRows]);
+
+// If you use per-group LF with 5% waste for PT pieces (recommended):
+const ptPiecesLevel = useMemo(() => {
+  const parts = [
+    { lf: Number(effectiveExtLF)    || 0, len: Math.max(Number(lenBottomPT)   || 0, 1) },
+    { lf: Number(effectiveInt2x6LF) || 0, len: Math.max(Number(lenInt2x6PT)   || 0, 1) },
+    { lf: Number(effectiveInt2x4LF) || 0, len: Math.max(Number(lenInt2x4PT)   || 0, 1) },
+  ];
+  return parts.reduce((sum, { lf, len }) => sum + Math.ceil((lf * 1.05) / len), 0);
+}, [
+  effectiveExtLF, effectiveInt2x6LF, effectiveInt2x4LF,
+  lenBottomPT, lenInt2x6PT, lenInt2x4PT,
+]);
+
+// 3) Emit up (top-level hooks; do NOT place them inside a useMemo)
+const lastGenSigRef = useRef('');
+const onGenRef = useRef(onGeneralChange);
+useEffect(() => { onGenRef.current = onGeneralChange; }, [onGeneralChange]);
+
+useEffect(() => {
+  const sig = [
+    Number(sheetsExt) || 0,
+    Number(sheetsBand) || 0,
+    Number(sheetsExtra) || 0,
+    Number(nonPTPiecesLevel) || 0,
+    String(levelId || ''),
+    Number(ptPiecesLevel) || 0,
+  ].join('|');
+
+  if (sig !== lastGenSigRef.current) {
+    lastGenSigRef.current = sig;
+    onGenRef.current?.({
+      id: levelId,
+      sheetsExt: Number(sheetsExt) || 0,
+      sheetsBand: Number(sheetsBand) || 0,
+      sheetsExtra: Number(sheetsExtra) || 0,
+      platePiecesTotal: Number(nonPTPiecesLevel) || 0, // Loose-only non-PT
+      ptPieces: Number(ptPiecesLevel) || 0,            // PT pieces (per-group 5% waste)
+    });
+  }
+}, [sheetsExt, sheetsBand, sheetsExtra, nonPTPiecesLevel, ptPiecesLevel, levelId]);
+
+
+
+
+
+
+
+  
   // Totals for nails math
 
   const ptLFAll = Number(ptLFTotal ?? (effectiveExtLF + effectiveInt2x6LF + effectiveInt2x4LF));
@@ -550,6 +587,7 @@ export default function LoosePanelMaterials({
                 onSelect={setPick('extBottomPT')}
                 defaultVendor="Gillies & Prittie Warehouse"
                 defaultFamilyLabel="PT"
+                defaultSizeLabel={`2x6"-16'`}
               />
             )}
             row={exteriorRows.find(r => r.key === 'extBottomPT')}
@@ -567,6 +605,7 @@ export default function LoosePanelMaterials({
                 onSelect={setPick('extTopPlate')}
                 defaultVendor="Gillies & Prittie Warehouse"
                 defaultFamilyLabel="SPF#2"
+                defaultSizeLabel={`2x6"-16'`}
               />
             )}
             row={exteriorRows.find(r => r.key === 'extTopPlate')}
@@ -789,6 +828,7 @@ export default function LoosePanelMaterials({
                 onSelect={setPick('int2x6PT')}
                 defaultVendor="Gillies & Prittie Warehouse"
                 defaultFamilyLabel="PT"
+                defaultSizeLabel={`2x6"-16'`}
               />
             )}
             row={interiorRows.find(r => r.key === 'int2x6PT')}
@@ -804,6 +844,7 @@ export default function LoosePanelMaterials({
                 onSelect={setPick('int2x6Plate')}
                 defaultVendor="Gillies & Prittie Warehouse"
                 defaultFamilyLabel="SPF#2"
+                defaultSizeLabel={`2x6"-16'`}
               />
             )}
             row={interiorRows.find(r => r.key === 'int2x6Plate')}
@@ -819,6 +860,7 @@ export default function LoosePanelMaterials({
                 onSelect={setPick('int2x4PT')}
                 defaultVendor="Gillies & Prittie Warehouse"
                 defaultFamilyLabel="PT"
+                defaultSizeLabel={`2x4"-16'`}
               />
             )}
             row={interiorRows.find(r => r.key === 'int2x4PT')}
@@ -834,6 +876,7 @@ export default function LoosePanelMaterials({
                 onSelect={setPick('int2x4Plate')}
                 defaultVendor="Gillies & Prittie Warehouse"
                 defaultFamilyLabel="SPF#2"
+                defaultSizeLabel={`2x4"-16'`}
               />
             )}
             row={interiorRows.find(r => r.key === 'int2x4Plate')}
@@ -847,8 +890,9 @@ export default function LoosePanelMaterials({
               <ItemPicker
                 compact
                 onSelect={setPick('intCabinetBlocking')}
-                defaultVendor="Gillies & Prittie Warehouse"
+                defaultVendor="Fairway Lumber"
                 defaultFamilyLabel="SPF#2"
+                defaultSizeLabel={`2x10"-16'`}
               />
             )}
             row={interiorRows.find(r => r.key === 'intCabinetBlocking')}
