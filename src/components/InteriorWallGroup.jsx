@@ -212,6 +212,18 @@ export default function InteriorWallGroup({
     () => Object.fromEntries((baseRows || []).map(r => [r.key, r])),
     [baseRows]
   );
+
+  // helper: detect PT family
+const isPTFamily = (fam) => /(^|\b)pt(\b|$)|pressure/i.test(String(fam || ''));
+
+// PT boards used on PANELS (bottom plate only, when family is PT)
+const panelPtBoards = useMemo(() => {
+  const fam = getFamily(sel.bottomPlate);
+  const isPT = isPTFamily(fam);
+  const qty = Math.ceil(Number(rowByKey.bottomPlate?.qtyFinal || 0));
+  return isPT ? qty : 0;
+}, [sel.bottomPlate, rowByKey.bottomPlate?.qtyFinal]);
+
   const platePieces =
     (rowByKey.bottomPlate?.qtyFinal ?? 0) +
     (rowByKey.topPlate?.qtyFinal ?? 0);
@@ -220,14 +232,14 @@ export default function InteriorWallGroup({
   const sizeLabel = getSize(sel.studs) || getSize(sel.bottomPlate) || '';
   const is2x6 = /(^|\D)2\s*[x×]\s*6(\D|$)/i.test(sizeLabel);
   const wallKind = is2x6 ? 'int-2x6' : 'int-2x4';
-
-
+  
   /* Extras (Header/Post + auto Headers infill) */
   const [extras, setExtras] = useState([]);
   const seq = useRef(1);
   const addExtra    = type => setExtras(prev => ([...prev, { id:`x${seq.current++}`, type, item:null, wastePct:5, inputs:{} }]));
   const removeExtra = id   => setExtras(prev => prev.filter(r=>r.id!==id));
   const updateExtra = (id, patch) => setExtras(prev => prev.map(r => r.id===id ? { ...r, ...patch } : r));
+  
 
   // Auto-add/remove "Headers infill" based on Σ(Header LF) from qualifying lumber families
   useEffect(() => {
@@ -353,8 +365,9 @@ export default function InteriorWallGroup({
       isPartition: kind === 'partition',
       isKnee: kind === 'knee',
       bottomBoardLenFt: Number(rowByKey.bottomPlate?.boardLenFt ?? bottomLen ?? 0), 
+      panelPtBoards,
     });
-  }, [persistKey, kind, wallKind, lengthLF, platePieces, ptLF, groupSubtotal, bottomLen, rowByKey.bottomPlate?.boardLenFt]);
+  }, [persistKey, kind, wallKind, panelPtBoards, lengthLF, platePieces, ptLF, groupSubtotal, bottomLen, rowByKey.bottomPlate?.boardLenFt]);
 
   /* ────────────────────────────────────────────────────────────────────────
      Render

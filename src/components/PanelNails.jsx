@@ -73,13 +73,12 @@ function PanelNails({
 }) {
   useEffect(() => {
     console.log('[PanelNails] got panelPtBoards =', panelPtBoards);
-  }, [panelPtBoards]);
+  }, [panelPtBoards]);  
 
-  // normalize PT boards prop so either name works
-  const ptBoards = useMemo(
-    () => Number(ptPlatePiecesPanels ?? panelPtBoards ?? 0),
-    [ptPlatePiecesPanels, panelPtBoards]
-  );
+const ptBoards = useMemo(
+  () => Number(ptPlatePiecesPanels ?? panelPtBoards ?? 0),
+  [ptPlatePiecesPanels, panelPtBoards]
+);
 
   // local item selections only
   const [sel, setSel] = useState({
@@ -113,7 +112,7 @@ function PanelNails({
 
   // Framing 8D from PT boards (PANELS): boxes = ceil( (boards*25/2700) * (1 + waste%) )
   const rowFrame8d = useMemo(() => {
-    const boards   = Number(panelPtBoards) || 0;
+    const boards   = ptBoards;
     const qtyRaw   = boards * 25 / 2700;
     const pct      = Number(waste.frame8d ?? 40);
     const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
@@ -122,7 +121,7 @@ function PanelNails({
     const unitPrice= unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
     return { boards, qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
-  }, [panelPtBoards, sel.nailsFrame8d, waste.frame8d]);
+}, [ptBoards, sel.nailsFrame8d, waste.frame8d]);  
 
   // Framing 12D from non-PT boards (PANELS): boxes = ceil( (boards*25/2500) * (1 + waste%) )
   const rowFrame12d = useMemo(() => {

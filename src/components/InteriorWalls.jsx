@@ -1,7 +1,7 @@
 // src/components/InteriorWalls.jsx
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import InteriorWallGroup from '@/components/InteriorWallGroup';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import AddButton from './ui/AddButton';
@@ -14,8 +14,6 @@ export default function InteriorWalls({
   onTotalsChange,                    // ({ int2x6LF, int2x4LF, intPlatePieces, intPTLFSum }) => void
   isLevelOne = false,
   onBearingLFChange,
-  onShearLFChange,
-  onShearPanelLenChange,
   onPartitionLFChange,
   onKneeLFChange,
 }) {
@@ -69,6 +67,9 @@ export default function InteriorWalls({
     // shearing walls-only aggregates
     const shearArr = arr.filter(s => !!s?.isShear);
     const shearLengthSum = shearArr.reduce((sum, s) => sum + (Number(s?.lengthLF) || 0), 0);
+    const intPanelPtBoards = arr.reduce(
+      (a, b) => a + (Number(b?.panelPtBoards) || 0), 0
+    );
     // majority-vote panel length from shear groups’ bottom plates
     let shearPanelLenFt = 8;
     {
@@ -99,19 +100,28 @@ export default function InteriorWalls({
       int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, panelsSubtotal, 
       shearLengthSum, shearPanelLenFt, 
       bearingLengthSum, bearingPanelLenFt,
-      partitionLengthSum, kneeLengthSum, 
+      partitionLengthSum, kneeLengthSum, intPanelPtBoards,
     };
   }, [stats]);
 
   // Emit to parent (Level.jsx)
-  useEffect(() => {
-    onTotalsChange?.(totals);
-    onBearingLFChange?.(Number(totals?.bearingLengthSum) || 0);    
-    onPartitionLFChange?.(Number(totals?.partitionLengthSum) || 0);
-    onKneeLFChange?.(Number(totals?.kneeLengthSum) || 0);
-    
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totals]);
+  const lastSigRef = useRef('');
+    useEffect(() => {
+      const payload = {
+        ...totals,
+        bearingLengthSum: Number(totals?.bearingLengthSum) || 0,
+        partitionLengthSum: Number(totals?.partitionLengthSum) || 0,
+        kneeLengthSum: Number(totals?.kneeLengthSum) || 0,
+      };
+      const sig = JSON.stringify(payload);
+      if (sig !== lastSigRef.current) {
+        lastSigRef.current = sig;
+        onTotalsChange?.(totals);
+        onBearingLFChange?.(payload.bearingLengthSum);
+        onPartitionLFChange?.(payload.partitionLengthSum);
+        onKneeLFChange?.(payload.kneeLengthSum);
+      }
+    }, [totals, onTotalsChange, onBearingLFChange, onPartitionLFChange, onKneeLFChange]);
 
   return (
     <div className="ew-stack">

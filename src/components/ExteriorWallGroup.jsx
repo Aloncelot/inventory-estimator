@@ -217,6 +217,12 @@ const getFamily = (selLike) => {
     [baseRows]
   );
 
+  const bottomIsPT = /pt/i.test(getFamily(sel.bottomPlate));
+  // How many PT boards are used on PANELS in this section?
+  const panelPtBoards = bottomIsPT
+    ? Math.ceil(Number(rowByKey?.bottomPlate?.qtyFinal || 0))
+    : 0;
+
   // after you build `rows` (the same array you map in JSX):
   const sheathingRow = (baseRows ?? []).find(r => (r.key === 'sheathing') || /sheathing/i.test(r.label || ''));
   const isZip = /zip/.test(getFamily(sheathingRow?.item));
@@ -327,9 +333,10 @@ const getFamily = (selLike) => {
       ptLF: Number(lengthLF || 0),
       groupSubtotal,
       bottomBoardLenFt,
+      panelPtBoards,
     });   
 
-  }, [persistKey, lengthLF, zipSheetsFinal, platePieces, groupSubtotal, bottomBoardLenFt]);  
+  }, [persistKey, lengthLF, zipSheetsFinal, platePieces, groupSubtotal, bottomBoardLenFt, panelPtBoards]);  
 
   /* ────────────────────────────────────────────────────────────────────────
      Render

@@ -16,7 +16,8 @@ const sameTotals = (a, b) => {
     a.extPTLFSum          === b.extPTLFSum &&
     a.extMoneySum         === b.extMoneySum &&
     a.panelsSubtotal      === b.panelsSubtotal &&
-    a.panelLenFtExterior  === b.panelLenFtExterior
+    a.panelLenFtExterior  === b.panelLenFtExterior &&
+    a.extPanelPtBoards    === b.extPanelPtBoards
   );
 };
 
@@ -79,6 +80,7 @@ export default function ExteriorWalls({
     const extPTLFSum      = arr.reduce((sum, s) => sum + (Number(s.ptLF)           || 0), 0);
     const extMoneySum     = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
     const panelsSubtotal  = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
+    const extPanelPtBoards= arr.reduce((sum, s) => sum + (Number(s.panelPtBoards)  || 0), 0);
     
     return { 
       extLengthSum, 
@@ -87,7 +89,8 @@ export default function ExteriorWalls({
       extPlatePieces, 
       extPTLFSum, 
       extMoneySum, 
-      panelsSubtotal, 
+      panelsSubtotal,
+      extPanelPtBoards,
     };
   }, [statsById]);
 

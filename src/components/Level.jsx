@@ -54,8 +54,21 @@ export default function Level({
     int2x6LF: 0, int2x4LF: 0, intPlatePieces: 0, intPTLFSum: 0,
     panelsSubtotal: 0, // sum of InteriorWallGroup groupSubtotal for this level    
   });
+
+  // derive once per level
+const panelPtBoards = useMemo(() =>
+  Math.ceil(Number(extTotals?.extPanelPtBoards || 0)) +
+  Math.ceil(Number(intTotals?.intPanelPtBoards || 0)),
+  [extTotals?.extPanelPtBoards, intTotals?.intPanelPtBoards]
+);
+
+  useEffect(() => {
+    // Debug: verify numbers climbing when you change panel sizes/families
+    console.log(`[Level ${name}] panel PT boards (panels only):`, panelPtBoards);
+  }, [panelPtBoards, name]);
+
   const [looseSubtotal, setLooseSubtotal] = useState(0);
-  const [extPanelLenFt, setExtPanelLenFt] = useState(16);
+  const [extPanelLenFt, setExtPanelLenFt] = useState(0);
   
   const handlePanelLenFromExterior = useCallback((len) => {
     const val = Number(len) || 16;
@@ -189,7 +202,7 @@ const panelPTPlatePieces = Number(extTotals?.extPTPlatePieces || 0) +
         persistKey={`panel-nails:${id}`}
         extZipSheetsPanels={Number(panelZipSheets) || 0}
         platePiecesPanels={Number(panelPlatePieces) || 0}
-        panelPtBoards={panelsPTBoards} 
+        ptPlatePiecesPanels={panelPtBoards}
       />
 
       <LoosePanelMaterials
