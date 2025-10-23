@@ -1,3 +1,4 @@
+// src/lib/firebase.js
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
@@ -16,4 +17,4 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-console.log('Firebase apiKey prefix:', (process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '').slice(0,5));
+// console.log('Firebase apiKey prefix:', (process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '').slice(0,5));

@@ -1,3 +1,4 @@
+// src/components/ui/RemoveButton.jsx
 'use client';
 
 export default function RemoveButton({

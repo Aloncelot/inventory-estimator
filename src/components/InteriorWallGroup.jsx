@@ -213,6 +213,13 @@ export default function InteriorWallGroup({
     [baseRows]
   );
 
+  // Calculate sheets used ON PANELS (only if shear wall)
+  const panelSheets = useMemo(() => {
+    if (!showSheathing) return 0; // Only count if sheathing row exists
+    const sheathingRow = baseRows.find(r => r.key === 'sheathing');
+    return Math.ceil(Number(sheathingRow?.qtyFinal || 0));
+  }, [baseRows, showSheathing]);
+
   // helper: detect PT family
 const isPTFamily = (fam) => /(^|\b)pt(\b|$)|pressure/i.test(String(fam || ''));
 
@@ -352,22 +359,39 @@ const panelPtBoards = useMemo(() => {
     return b + x;
   }, [baseRows, computedExtras]);
 
+  // Ref to store the last sent signature
+  const lastSentSigRef = useRef('');
+
+  // Emit stats up
     useEffect(() => {
-    onStatsChange?.({
-      id: persistKey,
-      kind: wallKind,
-      lengthLF: Number(lengthLF || 0),
-      platePieces,
-      ptLF: Number(lengthLF||0),
-      groupSubtotal,
-      isShear: kind === 'shear',
-      isBearing: kind === 'bearing',
-      isPartition: kind === 'partition',
-      isKnee: kind === 'knee',
-      bottomBoardLenFt: Number(rowByKey.bottomPlate?.boardLenFt ?? bottomLen ?? 0), 
-      panelPtBoards,
-    });
-  }, [persistKey, kind, wallKind, panelPtBoards, lengthLF, platePieces, ptLF, groupSubtotal, bottomLen, rowByKey.bottomPlate?.boardLenFt]);
+    // Create the stats object to be sent
+    const currentStats = {
+        id: persistKey,
+        kind: wallKind,
+        lengthLF: Number(lengthLF || 0),
+        platePieces: Math.ceil(platePieces),
+        bottomPlatePiecesPanel: Math.ceil(rowByKey.bottomPlate?.qtyFinal || 0),
+        ptLF: ptLF,
+        groupSubtotal,
+        isShear: kind === 'shear',
+        isBearing: kind === 'bearing',
+        isPartition: kind === 'partition',
+        isKnee: kind === 'knee',
+        bottomBoardLenFt: bottomBoardLenFt,
+        panelPtBoards,
+        panelSheets,
+    };
+
+  // Create a signature (stringified version)
+    const currentSig = JSON.stringify(currentStats);
+
+  // Only call onStatsChange if the signature has changed
+    if (currentSig !== lastSentSigRef.current) {
+        lastSentSigRef.current = currentSig; // Update the ref with the new signature
+        onStatsChange?.(currentStats);
+    }
+
+  }, [persistKey, kind, wallKind, panelPtBoards, panelSheets, lengthLF, platePieces, rowByKey.bottomPlate?.qtyFinal, ptLF, groupSubtotal, bottomBoardLenFt, onStatsChange]);
 
   /* ────────────────────────────────────────────────────────────────────────
      Render

@@ -1,3 +1,4 @@
+// src/components/ui/table.jsx
 "use client"
 
 import * as React from "react"

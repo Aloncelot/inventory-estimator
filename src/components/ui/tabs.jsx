@@ -1,3 +1,4 @@
+// src/components/ui/tabs.jsx
 "use client"
 
 import * as React from "react"

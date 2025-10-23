@@ -1,3 +1,4 @@
+// src/components/AuthGate.jsx
 'use client';
 import { useEffect, useState } from 'react';
 import { auth, googleProvider } from '@/lib/firebase';

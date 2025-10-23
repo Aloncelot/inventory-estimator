@@ -10,20 +10,25 @@ const sameTotals = (a, b) => {
   if (a === b) return true;
   if (!a || !b) return false;
   return (
-    a.extLengthSum        === b.extLengthSum &&
-    a.extZipSheetsSum     === b.extZipSheetsSum &&
-    a.extPlatePieces      === b.extPlatePieces &&
-    a.extPTLFSum          === b.extPTLFSum &&
-    a.extMoneySum         === b.extMoneySum &&
-    a.panelsSubtotal      === b.panelsSubtotal &&
-    a.panelLenFtExterior  === b.panelLenFtExterior &&
-    a.extPanelPtBoards    === b.extPanelPtBoards
+    a.extLengthSum              === b.extLengthSum &&
+    a.extZipSheetsSum           === b.extZipSheetsSum &&
+    a.extPanelSheets            === b.extPanelSheets &&
+    a.extPlatePieces            === b.extPlatePieces &&
+    a.extBottomPlatePiecesPanel === b.extBottomPlatePiecesPanel &&
+    a.extPTLFSum                === b.extPTLFSum &&
+    a.extMoneySum               === b.extMoneySum &&
+    a.panelsSubtotal            === b.panelsSubtotal &&
+    a.panelLenFtExterior        === b.panelLenFtExterior &&
+    a.extPanelPtBoards          === b.extPanelPtBoards
   );
 };
 
 function genId() {
   return 'ex-' + Math.random().toString(36).slice(2, 8) + '-' + Date.now().toString(36);
 }
+
+const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const fmt = n => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : '—');
 
 export default function ExteriorWalls({
   onTotalsChange,
@@ -76,7 +81,9 @@ export default function ExteriorWalls({
     const arr = Object.values(statsById);
     const extLengthSum    = arr.reduce((sum, s) => sum + (Number(s.lengthLF)       || 0), 0);
     const extZipSheetsSum = arr.reduce((sum, s) => sum + (Number(s.zipSheetsFinal) || 0), 0);
+    const extPanelSheets  = arr.reduce((sum, s) => sum + (Number(s.panelSheets)    || 0), 0);
     const extPlatePieces  = arr.reduce((sum, s) => sum + (Number(s.platePieces)    || 0), 0);
+    const extBottomPlatePiecesPanel = arr.reduce((sum, s) => sum + (Number(s.bottomPlatePiecesPanel) || 0), 0);
     const extPTLFSum      = arr.reduce((sum, s) => sum + (Number(s.ptLF)           || 0), 0);
     const extMoneySum     = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
     const panelsSubtotal  = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
@@ -85,8 +92,10 @@ export default function ExteriorWalls({
     return { 
       extLengthSum, 
       extZipSheetsSum, 
+      extPanelSheets,
       extZipSheetsFinal: extZipSheetsSum,
-      extPlatePieces, 
+      extPlatePieces,
+      extBottomPlatePiecesPanel, 
       extPTLFSum, 
       extMoneySum, 
       panelsSubtotal,
@@ -115,12 +124,16 @@ export default function ExteriorWalls({
     onPanelLenFtChange?.(panelLenFtExterior);
   }, [totals, panelLenFtExterior, onTotalsChange, onLengthLFChange, onPanelLenFtChange]);
 
+   const exteriorTotalSubtotal = totals.panelsSubtotal;
+
   return (
-    <section className="ew-stack">
-      <div className="ew-card" style={{ display:'flex', alignItems:'center', gap:12, justifyContent:'space-between' }}>
-        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>        
-        <AddButton onClick={addSection} title="Add wall" label="Add wall" />
+  <section className="ew-stack">
+    <div className="ew-card" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+      <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>
+      <div className="ew-right" title="Sum of all exterior wall section subtotals for this level" style={{ fontWeight: 700 }}>
+        Total: {fmt(exteriorTotalSubtotal)}
       </div>
+    </div>
 
       {sections.length === 0 && (
         <div className="ew-card">
@@ -141,6 +154,11 @@ export default function ExteriorWalls({
           bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
         />
       ))}
+
+      <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop: '1rem' /* Optional margin */ }}>
+        <div className="ew-subtle">Add another exterior wall section to this level.</div>
+        <AddButton onClick={addSection} title="Add Section" label="Add Section" />
+       </div>
     </section>
   );
 }

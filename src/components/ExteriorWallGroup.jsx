@@ -31,7 +31,7 @@ const deref = x => (x && x.item ? deref(x.item) : x);
 const getItem   = selLike => deref(selLike);
 const getUnit   = selLike => deref(selLike)?.unit || deref(selLike)?.raw?.unit || 'pcs';
 const getSize   = selLike => deref(selLike)?.sizeDisplay || deref(selLike)?.sizeLabel || deref(selLike)?.raw?.sizeDisplay || '';
-const getFamily = selLike => deref(selLike)?.raw?.familyDisplay || deref(selLike)?.familyDisplay || deref(selLike)?.raw?.family || selLike?.familyLabel || '';
+// const getFamily = selLike => deref(selLike)?.raw?.familyDisplay || deref(selLike)?.familyDisplay || deref(selLike)?.raw?.family || selLike?.familyLabel || '';
 
 /* ──────────────────────────────────────────────────────────────────────────
    Component
@@ -45,6 +45,8 @@ export default function ExteriorWallGroup({
   bottomDefaultFamily = 'SPF#2',
 }) {
   /** Shared inputs */
+  const lastSentSigRef = useRef('');
+  
   const [lengthLF, setLengthLF]           = useState(0);
   const [heightFt, setHeightFt]           = useState(12);
   const [studSpacingIn, setStudSpacingIn] = useState(16);
@@ -217,6 +219,12 @@ const getFamily = (selLike) => {
     [baseRows]
   );
 
+  // Calculate sheets used ON PANELS in this group
+  const panelSheets = useMemo(() => {
+    const sheathingRow = baseRows.find(r => r.key === 'sheathing');
+    return Math.ceil(Number(sheathingRow?.qtyFinal || 0));
+  }, [baseRows]);
+
   const bottomIsPT = /pt/i.test(getFamily(sel.bottomPlate));
   // How many PT boards are used on PANELS in this section?
   const panelPtBoards = bottomIsPT
@@ -229,12 +237,12 @@ const getFamily = (selLike) => {
   const zipSheetsFinal = isZip ? Math.ceil(Number(sheathingRow?.qtyFinal || 0)) : 0;
 
   // family label can be in different places; normalize it
-  const getFam = (it) => String(
-    it?.familyLabel ??
-    it?.raw?.familyLabel ??
-    it?.family ??
-    ''
-  ).toLowerCase();
+  // const getFam = (it) => String(
+  //   it?.familyLabel ??
+  //   it?.raw?.familyLabel ??
+  //   it?.family ??
+  //   ''
+  // ).toLowerCase();
 
   const platePieces =
   (rowByKey?.bottomPlate?.qtyFinal ?? 0) +
@@ -324,19 +332,30 @@ const getFamily = (selLike) => {
 
     // lengthLF contributes to either 2x6 LF or 2x4 LF
   useEffect(() => {
-    onStatsChange?.({
-      id: persistKey, 
+    const currentStats = {
+      id: persistKey,
       kind: 'exterior',
       lengthLF: Number(lengthLF || 0),
-      zipSheetsFinal,
-      platePieces,
-      ptLF: Number(lengthLF || 0),
+      zipSheetsFinal, // Report the calculated ZIP sheets
+      panelSheets, // Sheets used on panels
+      platePieces: Math.ceil(platePieces), // Report whole pieces
+      bottomPlatePiecesPanel: Math.ceil(rowByKey.bottomPlate?.qtyFinal || 0), // <-- Add this
+      ptLF: ptLF, // Report PT LF used in panels
       groupSubtotal,
-      bottomBoardLenFt,
-      panelPtBoards,
-    });   
+      bottomBoardLenFt: bottomBoardLenFt, // Report actual parsed board length
+      panelPtBoards, // Report PT boards used on panels
+  };
 
-  }, [persistKey, lengthLF, zipSheetsFinal, platePieces, groupSubtotal, bottomBoardLenFt, panelPtBoards]);  
+     // Create a signature (stringified version)
+     const currentSig = JSON.stringify(currentStats);
+
+     // Only call onStatsChange if the signature has changed
+     if (currentSig !== lastSentSigRef.current) {
+         lastSentSigRef.current = currentSig; // Update the ref with the new signature
+         onStatsChange?.(currentStats);
+     }
+
+  }, [persistKey, lengthLF, zipSheetsFinal, panelSheets, platePieces, rowByKey.bottomPlate?.qtyFinal, ptLF, groupSubtotal, bottomBoardLenFt, panelPtBoards, onStatsChange]);
 
   /* ────────────────────────────────────────────────────────────────────────
      Render

@@ -10,22 +10,6 @@ import AccordionSection from '@/components/ui/AccordionSection';
 import RemoveButton from './ui/RemoveButton';
 import PanelNails from '@/components/PanelNails';
 
-// Compare only the fields that matter to avoid loops
-// const sameExtTotals = (a, b) => {
-//   if (a === b) return true;
-//   if (!a || !b) return false;
-//   const keys = [
-//     'extLengthSum',
-//     'extZipSheetsSum',
-//     'extPlatePieces',
-//     'extPTLFSum',
-//     'extMoneySum',
-//     'panelsSubtotal',
-//     'panelLenFtExterior',
-//   ];
-//   return keys.every(k => a[k] === b[k]);
-// };
-
 export default function Level({
   id,           // required: stable per-level id
   name,         // e.g. "Level 1"
@@ -62,10 +46,12 @@ const panelPtBoards = useMemo(() =>
   [extTotals?.extPanelPtBoards, intTotals?.intPanelPtBoards]
 );
 
-  useEffect(() => {
-    // Debug: verify numbers climbing when you change panel sizes/families
-    console.log(`[Level ${name}] panel PT boards (panels only):`, panelPtBoards);
-  }, [panelPtBoards, name]);
+// Sum of ALL bottom plate pieces used ON PANELS for this level
+  const totalBottomPlatePiecesPanel = useMemo(() =>
+    Math.ceil(Number(extTotals?.extBottomPlatePiecesPanel || 0)) +
+    Math.ceil(Number(intTotals?.intBottomPlatePiecesPanel || 0)),
+    [extTotals?.extBottomPlatePiecesPanel, intTotals?.intBottomPlatePiecesPanel]
+  );
 
   const [looseSubtotal, setLooseSubtotal] = useState(0);
   const [extPanelLenFt, setExtPanelLenFt] = useState(0);
@@ -77,22 +63,17 @@ const panelPtBoards = useMemo(() =>
   }, [id, onExteriorPanelLenChange]);
 
   const handleIntTotals = useCallback((t) => {
-    setIntTotals(t || {});
+    setIntTotals(t || null); // Store the whole object (or null)
     if (!t) return;
 
-    // forward interior shear LF
-    if (typeof onInteriorShearLF === 'function') {
-      onInteriorShearLF({ id, lf: Number(t.shearLengthSum) || 0 });
-    }
-    // forward interior shear panel length (derived from bottom plate in shear groups)
-    if (typeof onInteriorShearPanelLenChange === 'function') {
-      onInteriorShearPanelLenChange({ id, len: Number(t.shearPanelLenFt) || 8 });
-    }
-    // forward interior bearing LF (a.k.a. “blocking only / bearing walls”)
-    if (typeof onInteriorBearingLF === 'function') {
-      onInteriorBearingLF({ id, lf: Number(t.bearingLengthSum) || 0 });
-    }
-  }, [id, onInteriorShearLF, onInteriorShearPanelLenChange, onInteriorBearingLF]);
+    // Forward specific LF values if needed by parent (WallPanelsView)
+    onInteriorShearLF?.({ id, lf: Number(t.shearLengthSum) || 0 });
+    onInteriorShearPanelLenChange?.({ id, len: Number(t.shearPanelLenFt) || 8 });
+    onInteriorBearingLF?.({ id, lf: Number(t.bearingLengthSum) || 0 });
+    onInteriorNonLoadLF?.({ id, lf: Number(t.partitionLengthSum) || 0 }); // Assuming partition = non-load
+    onKneeWallLF?.({ id, lf: Number(t.kneeLengthSum) || 0 });
+
+  }, [id, onInteriorShearLF, onInteriorShearPanelLenChange, onInteriorBearingLF, onInteriorNonLoadLF, onKneeWallLF]);
 
   const handleLooseSubtotal = useCallback((payload) => {
     const sub = Number(payload?.subtotal) || 0;
@@ -102,12 +83,11 @@ const panelPtBoards = useMemo(() =>
 
   // Level total = exterior panels + interior panels + loose (for this level)
   const levelTotal = useMemo(() => {
-    const ext   = Number(extTotals?.panelsSubtotal) || 0;
-    const intl  = Number(intTotals?.panelsSubtotal) || 0;
-    const loose = Number(looseSubtotal)             || 0;
-    // console.log('extTotals', extTotals);
+    const ext   = Number(extTotals?.panelsSubtotal) || 0; // Cost from ExteriorWalls
+    const intl  = Number(intTotals?.panelsSubtotal) || 0; // Cost from InteriorWalls
+    const loose = Number(looseSubtotal)             || 0; // Cost from LoosePanelMaterials
     return ext + intl + loose;
-  }, [extTotals, intTotals, looseSubtotal]);
+  }, [extTotals?.panelsSubtotal, intTotals?.panelsSubtotal, looseSubtotal]);
 
   const moneyFmt = useMemo(
     () => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }),
@@ -119,33 +99,14 @@ const panelPtBoards = useMemo(() =>
     onLevelTotal?.({ id, total: levelTotal });
   }, [id, levelTotal, onLevelTotal]);
 
-   const panelsPTBoards = useMemo(() => {
-    const extPTLF = Number(extTotals?.extPTLFSum || 0); // from ExteriorWalls Panels totals
-    const intPTLF = Number(intTotals?.intPTLFSum || 0); // from InteriorWalls Panels totals
-    const len     = Math.max(Number(extPanelLenFt || 16), 1);
-    // 5% waste per group BEFORE ceiling, then sum the two
-    const extBoards = Math.ceil((extPTLF * 1.05) / len);
-    const intBoards = Math.ceil((intPTLF * 1.05) / len);
-    return extBoards + intBoards;
-  }, [extTotals?.extPTLFSum, intTotals?.intPTLFSum, extPanelLenFt]); 
-
-  useEffect(() => {
-    /* This should print a stable value when inputs truly change */
-    console.log('[Level]', name, 'panelsPTBoards =', panelsPTBoards, {
-      extPTLF: extTotals?.extPTLFSum,
-      intPTLF: intTotals?.intPTLFSum,
-      boardLenFt: extPanelLenFt,
-    });
-  }, [panelsPTBoards, extTotals?.extPTLFSum, intTotals?.intPTLFSum, extPanelLenFt, name]);
-
-  // ---- Panel-nails inputs (PER LEVEL) ---------------------------------
-const panelZipSheets = Number((extTotals?.extZipSheetsFinal ?? extTotals?.extZipSheetsSum) ?? 0);
 const panelPlatePieces = Number(extTotals?.extPlatePieces || 0) + Number(intTotals?.intPlatePieces || 0);
-const panelLF = Number(extTotals?.extLengthSum || 0) +
-                Number(intTotals?.int2x6LF || 0) +
-                Number(intTotals?.int2x4LF || 0);
-const panelPTPlatePieces = Number(extTotals?.extPTPlatePieces || 0) +
-                           Number(intTotals?.intPTPlatePieces || 0);
+
+// Calculate total sheets used ON PANELS for this level
+const panelSheetsAll = useMemo(() => {
+    const ext = Number(extTotals?.extPanelSheets || 0); // Use the corrected prop name
+    const ints = Number(intTotals?.intPanelSheets || 0); // Use the corrected prop name
+    return ext + ints;
+}, [extTotals?.extPanelSheets, intTotals?.intPanelSheets]); // Update dependencies
 
   return (
   <section className="ew-stack">
@@ -199,10 +160,13 @@ const panelPTPlatePieces = Number(extTotals?.extPTPlatePieces || 0) +
 
       <PanelNails
         title={`${name} — Panel nails`}
-        persistKey={`panel-nails:${id}`}
-        extZipSheetsPanels={Number(panelZipSheets) || 0}
-        platePiecesPanels={Number(panelPlatePieces) || 0}
+        // persistKey={`panel-nails:${id}`}
+        platePiecesPanels={Number( // This is NON-PT plates only, keep for 8D nails
+                         (extTotals?.extPlatePieces || 0) + (intTotals?.intPlatePieces || 0)
+                     ) - totalBottomPlatePiecesPanel}
         ptPlatePiecesPanels={panelPtBoards}
+        totalPanelSheets={panelSheetsAll}
+        totalBottomPlatePiecesPanel={totalBottomPlatePiecesPanel}
       />
 
       <LoosePanelMaterials

@@ -65,19 +65,25 @@ const Row = memo(
 function PanelNails({
   title = 'Panels — Nails (this level)',
   // strictly per-level numeric inputs (PANELS ONLY; nothing from Loose)
-  extZipSheetsPanels = 0,        // ZIP sheets count used on panels (not loose)
-  platePiecesPanels  = 0,        // non-PT plate boards used on panels
+  totalPanelSheets = 0,
+  totalBottomPlatePiecesPanel = 0,        // non-PT plate boards used on panels
   ptPlatePiecesPanels,           // PT plate boards used on panels (preferred prop)
   panelPtBoards,                 // legacy/alternate name — we'll normalize below
   onTotalChange,                 // optional
 }) {
-  useEffect(() => {
-    console.log('[PanelNails] got panelPtBoards =', panelPtBoards);
-  }, [panelPtBoards]);  
+  
+  // useEffect(() => {
+  //   console.log('[PanelNails] got panelPtBoards =', panelPtBoards);
+  // }, [panelPtBoards]);  
 
 const ptBoards = useMemo(
   () => Number(ptPlatePiecesPanels ?? panelPtBoards ?? 0),
   [ptPlatePiecesPanels, panelPtBoards]
+);
+
+const panelSheets = useMemo(
+  () => Number(totalPanelSheets || 0),
+  [totalPanelSheets]
 );
 
   // local item selections only
@@ -100,7 +106,7 @@ const ptBoards = useMemo(
   // ---- calcs (memo)
   // Sheathing: boxes = ceil( (sheets * 80 / 2700) * (1 + waste%) )
   const rowSheath = useMemo(() => {
-    const qtyRaw   = (Number(extZipSheetsPanels) || 0) * 80 / 2700;
+    const qtyRaw   = (Number(panelSheets) || 0) * 80 / 2700;
     const pct      = Number(waste.sheath ?? 40);
     const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
     const unit     = getUnit(sel.nailsSheath);
@@ -108,7 +114,7 @@ const ptBoards = useMemo(
     const unitPrice= unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
     return { qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
-  }, [extZipSheetsPanels, sel.nailsSheath, waste.sheath]);
+  }, [panelSheets, sel.nailsSheath, waste.sheath]);
 
   // Framing 8D from PT boards (PANELS): boxes = ceil( (boards*25/2700) * (1 + waste%) )
   const rowFrame8d = useMemo(() => {
@@ -125,8 +131,8 @@ const ptBoards = useMemo(
 
   // Framing 12D from non-PT boards (PANELS): boxes = ceil( (boards*25/2500) * (1 + waste%) )
   const rowFrame12d = useMemo(() => {
-    const boards   = Number(platePiecesPanels) || 0;
-    const qtyRaw   = boards * 25 / 2500;
+    const boards   = Number(totalBottomPlatePiecesPanel) || 0;
+    const qtyRaw   = boards * 80 / 2500;
     const pct      = Number(waste.frame12d ?? 40);
     const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
     const unit     = getUnit(sel.nailsFrame12d);
@@ -134,7 +140,7 @@ const ptBoards = useMemo(
     const unitPrice= unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
     return { boards, qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
-  }, [platePiecesPanels, sel.nailsFrame12d, waste.frame12d]);
+  }, [totalBottomPlatePiecesPanel, sel.nailsFrame12d, waste.frame12d]);
 
   // section subtotal (guarded emit)
   const sectionTotal = useMemo(
@@ -183,16 +189,16 @@ const ptBoards = useMemo(
 
   // hints
   const hintSheath = useMemo(
-    () => `ZIP sheets (panels): ${extZipSheetsPanels} → boxes = ceil(((sheets × 80) / 2700) × (1 + waste%))`,
-    [extZipSheetsPanels]
+    () => `Panel sheets (Ext + Int Shear): ${panelSheets} → boxes = ceil(((sheets × 80) / 2700) × (1 + waste%))`,
+    [panelSheets]
   );
   const hint8d = useMemo(
     () => `PT plate boards (panels): ${ptBoards} → boxes = ceil(((boards × 25) / 2700) × (1 + waste%))`,
     [ptBoards]
   );
   const hint12d = useMemo(
-    () => `Plate boards (panels): ${platePiecesPanels} → boxes = ceil(((boards × 25) / 2500) × (1 + waste%))`,
-    [platePiecesPanels]
+    () => `Bottom plate boards (panels): ${totalBottomPlatePiecesPanel} → boxes = ceil(((boards × 80) / 2500) × (1 + waste%))`, // <-- Update hint text and source variable
+      [totalBottomPlatePiecesPanel] 
   );
 
   return (
@@ -285,8 +291,8 @@ const ptBoards = useMemo(
 
 // prevent re-renders when numbers didn't change
 export default memo(PanelNails, (a, b) =>
-  a.extZipSheetsPanels   === b.extZipSheetsPanels &&
-  a.platePiecesPanels    === b.platePiecesPanels &&
-  (a.ptPlatePiecesPanels ?? a.panelPtBoards ?? 0) === (b.ptPlatePiecesPanels ?? b.panelPtBoards ?? 0) &&
+  a.totalPanelSheets     === b.totalPanelSheets   &&
+  a.platePiecesPanels    === b.platePiecesPanels  &&
+  (a.ptPlatePiecesPanels ??  a.panelPtBoards      ?? 0) === (b.ptPlatePiecesPanels ?? b.panelPtBoards ?? 0) &&
   a.title                === b.title
 );

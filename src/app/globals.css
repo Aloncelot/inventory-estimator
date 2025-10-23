@@ -709,3 +709,77 @@ html {
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+
+/* Add these overrides to your globals.css */
+
+/* Reduce padding on rows and headers */
+.ew-row,
+.ew-head,
+.ew-rowhead,
+.tbl th,
+.tbl td {
+  padding-top: 6px;    /* Reduced from 10px or 8px */
+  padding-bottom: 6px; /* Reduced from 10px or 8px */
+}
+
+/* Reduce padding on inputs, selects, and buttons */
+.ew-input,
+.ew-select,
+.ew-btn {
+  padding-top: 5px;    /* Reduced from 8px */
+  padding-bottom: 5px; /* Reduced from 8px */
+}
+.ew-btn {
+  padding-left: 10px;  /* Slightly reduced */
+  padding-right: 10px; /* Slightly reduced */
+}
+.ew-icon-btn {
+  padding: 4px 6px; /* Slightly tighter */
+}
+
+
+/* Slightly smaller base font size for cards/sections */
+.ew-card, .tbl {
+  font-size: 0.825rem; /* Slightly smaller than default small (0.875rem) */
+  /* If using Tailwind, you might use text-xs (0.75rem) or adjust base size */
+}
+
+/* Adjust title sizes if needed */
+.ew-title, .ew-h2, .ew-h3 {
+  font-size: 1rem; /* Adjust as needed */
+  margin-bottom: 8px; /* Slightly reduced */
+}
+
+/* Adjust hint text size */
+.ew-hint {
+  font-size: 0.7rem; /* Make hints even smaller */
+}
+
+/* Adjust chip size */
+.ew-chip {
+  padding: 1px 6px; /* Tighter padding */
+  font-size: 0.7rem; /* Smaller font */
+}
+
+/* Adjust Accordion button padding */
+.acc__button {
+    padding: 3px 6px;
+}
+
+/* Adjust ItemPicker/SearchableSelect input height */
+.ew-select.combo-input {
+  min-height: 32px; /* Adjust if needed, based on reduced padding */
+}
+
+/* Adjust Sidebar item height (optional) */
+/*
+.sidebar .menu .menu-item {
+  height: 52px;
+}
+.sidebar .menu::after {
+  height: 52px;
+}
+.sidebar .menu {
+  style={{ ['--top']: `${activeIdx === 0 ? 0 : activeIdx * 52}px` }} // JS would need update too
+}
+*/

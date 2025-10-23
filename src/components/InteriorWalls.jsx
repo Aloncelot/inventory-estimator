@@ -6,6 +6,9 @@ import InteriorWallGroup from '@/components/InteriorWallGroup';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import AddButton from './ui/AddButton';
 
+const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const fmt = n => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : '—');
+
 const genId = () => 'int-' + Math.random().toString(36).slice(2, 9);
 
 export default function InteriorWalls({
@@ -61,10 +64,15 @@ export default function InteriorWalls({
     const int2x4LF = arr
       .filter(s => s?.kind === 'int-2x4')
       .reduce((a, b) => a + (Number(b?.lengthLF) || 0), 0);
+
+    //General sums  
     const intPlatePieces = arr.reduce((a, b) => a + (Number(b?.platePieces)   || 0), 0);
+    const intBottomPlatePiecesPanel = arr.reduce((a, b) => a + (Number(b?.bottomPlatePiecesPanel) || 0), 0);
     const intPTLFSum     = arr.reduce((a, b) => a + (Number(b?.ptLF)          || 0), 0);
+    const intPanelSheets = arr.reduce((a, b) => a + (Number(b?.panelSheets)   || 0), 0);
     const panelsSubtotal = arr.reduce((a, b) => a + (Number(b?.groupSubtotal) || 0), 0)
-    // shearing walls-only aggregates
+
+    // Shearing walls-only aggregates
     const shearArr = arr.filter(s => !!s?.isShear);
     const shearLengthSum = shearArr.reduce((sum, s) => sum + (Number(s?.lengthLF) || 0), 0);
     const intPanelPtBoards = arr.reduce(
@@ -98,9 +106,9 @@ export default function InteriorWalls({
 
     return { 
       int2x6LF, int2x4LF, intPlatePieces, intPTLFSum, panelsSubtotal, 
-      shearLengthSum, shearPanelLenFt, 
-      bearingLengthSum, bearingPanelLenFt,
-      partitionLengthSum, kneeLengthSum, intPanelPtBoards,
+      intPanelSheets, shearLengthSum, shearPanelLenFt, 
+      bearingLengthSum, bearingPanelLenFt, intBottomPlatePiecesPanel,
+      partitionLengthSum, kneeLengthSum, intPanelPtBoards, intPanelSheets,
     };
   }, [stats]);
 
@@ -108,38 +116,71 @@ export default function InteriorWalls({
   const lastSigRef = useRef('');
     useEffect(() => {
       const payload = {
-        ...totals,
-        bearingLengthSum: Number(totals?.bearingLengthSum) || 0,
-        partitionLengthSum: Number(totals?.partitionLengthSum) || 0,
-        kneeLengthSum: Number(totals?.kneeLengthSum) || 0,
-      };
+          int2x6LF: totals.int2x6LF,
+          int2x4LF: totals.int2x4LF,
+          intPlatePieces: totals.intPlatePieces,
+          intBottomPlatePiecesPanel: totals.intBottomPlatePiecesPanel,
+          intPTLFSum: totals.intPTLFSum,
+          intPanelSheets: totals.intPanelSheets,
+          panelsSubtotal: totals.panelsSubtotal,
+          shearLengthSum: totals.shearLengthSum,
+          shearPanelLenFt: totals.shearPanelLenFt,
+          bearingLengthSum: totals.bearingLengthSum,
+          bearingPanelLenFt: totals.bearingPanelLenFt,
+          partitionLengthSum: totals.partitionLengthSum,
+          kneeLengthSum: totals.kneeLengthSum,
+          intPanelPtBoards: totals.intPanelPtBoards,
+        };
       const sig = JSON.stringify(payload);
       if (sig !== lastSigRef.current) {
         lastSigRef.current = sig;
-        onTotalsChange?.(totals);
+        onTotalsChange?.(payload);
         onBearingLFChange?.(payload.bearingLengthSum);
         onPartitionLFChange?.(payload.partitionLengthSum);
         onKneeLFChange?.(payload.kneeLengthSum);
       }
     }, [totals, onTotalsChange, onBearingLFChange, onPartitionLFChange, onKneeLFChange]);
 
-  return (
-    <div className="ew-stack">
-      <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>        
-        <AddButton onClick={addSection} title="Add wall" label="Add wall" />
-      </div>
+    const interiorTotalSubtotal = totals.panelsSubtotal;
 
-      {sections.map((sec, i) => (
-        <InteriorWallGroup
-          key={sec.id}
-          title={`${title} — Section ${i + 1}`}
-          persistKey={`int:${levelId}:${sec.id}`}             // keep notes/selections per-level & per-section
-          onRemove={() => removeSection(sec.id)}
-          onStatsChange={(s) => updateStats(sec.id, s)}       // section → wrapper
-          bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
-        />
-      ))}
-    </div>
-  );
+  return (
+        <section className="ew-stack">
+            {/* Display Title at the top */}
+            <div className="ew-card" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>
+              <div className="ew-right" title="Sum of all interior wall section subtotals for this level" style={{ fontWeight: 700 }}>
+                Total: {fmt(interiorTotalSubtotal)}
+              </div>
+            </div>
+
+            {/* Placeholder message if no sections exist */}
+            {sections.length === 0 && (
+                <div className="ew-card">
+                    <div className="ew-subtle">No interior wall sections yet.</div>
+                    <div style={{ marginTop: 8 }}>
+                        {/* Button is now part of the moved card at the bottom */}
+                        <button className="ew-btn ew-btn--turq" onClick={addSection}>+ Add interior wall section</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Render each InteriorWallGroup section */}
+            {sections.map((sec, i) => (
+                <InteriorWallGroup
+                    key={sec.id}
+                    title={`${title} — Section ${i + 1}`}
+                    persistKey={`int:${levelId}:${sec.id}`}        // keep notes/selections per-level & per-section
+                    onRemove={() => removeSection(sec.id)}
+                    onStatsChange={(s) => updateStats(sec.id, s)}   // section → wrapper
+                    bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'} // Pass PT default based on level
+                />
+            ))}
+
+            {/* Moved card containing Add button to the bottom */}
+            <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop: '1rem' }}>
+                <div className="ew-subtle">Add another interior wall section to this level.</div>
+                <AddButton onClick={addSection} title="Add Section" label="Add Section" />
+            </div>
+        </section>
+    );
 }

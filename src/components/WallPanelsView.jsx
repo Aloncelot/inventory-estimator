@@ -188,7 +188,7 @@ export default function WallPanelsView({ onGrandTotal}) {
   });
 
   // ── Interior shear (LF + panel length) ──────────────────────
-  const [shearLfByLevel, setShearLfByLevel] = useState({});            // (kept if you use elsewhere)
+  // const [shearLfByLevel, setShearLfByLevel] = useState({});            // (kept if you use elsewhere)
   const [shearPanelLenByLevel, setShearPanelLenByLevel] = useState({}); // (kept if you use elsewhere)
 
   // interior shear LF per level (actual wiring)
