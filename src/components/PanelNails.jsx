@@ -11,7 +11,8 @@ import React, {
   memo,
 } from 'react';
 import ItemPicker from '@/components/ItemPicker';
-import AccordionSection from '@/components/ui/AccordionSection';
+import AccordionSection from './ui/AccordionSection';
+import { useLocalStorageJson } from '../hooks/useLocalStorageJson';
 import { unitPriceFrom } from '@/domain/lib/parsing';
 
 const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
@@ -62,101 +63,103 @@ const Row = memo(
   }
 );
 
-function PanelNails({
-  title = 'Panels — Nails (this level)',
-  // strictly per-level numeric inputs (PANELS ONLY; nothing from Loose)
-  totalPanelSheets = 0,
-  totalBottomPlatePiecesPanel = 0,        // non-PT plate boards used on panels
-  ptPlatePiecesPanels,           // PT plate boards used on panels (preferred prop)
-  panelPtBoards,                 // legacy/alternate name — we'll normalize below
-  onTotalChange,                 // optional
-}) {
-  
-  // useEffect(() => {
-  //   console.log('[PanelNails] got panelPtBoards =', panelPtBoards);
-  // }, [panelPtBoards]);  
+function PanelNailsComponent({ // Renamed temporarily to avoid conflict with memo export
+     title = 'Panels — Nails (this level)',
+     persistKey = 'panel-nails-default', // Added default persistKey
+     // strictly per-level numeric inputs (PANELS ONLY; nothing from Loose)
+     totalPanelSheets = 0, // Total sheets ON PANELS (Ext + Int Shear)
+     totalBottomPlatePiecesPanel = 0, // Total BOTTOM plates (PT+NonPT) on panels
+     ptPlatePiecesPanels,         // PT plate boards used on panels (preferred prop)
+     panelPtBoards,               // legacy/alternate name — we'll normalize below
+     onTotalChange,               // optional
+ }) {
+
+  // State for accordion collapse using local storage
+     const [uiState, setUiState] = useLocalStorageJson(`inv:v1:${persistKey}:ui`, { collapsed: true }); // Default to collapsed
+     const collapsed = !!uiState.collapsed;
+     const setCollapsed = useCallback((isCollapsed) => {
+         setUiState(prev => ({ ...prev, collapsed: !!isCollapsed }));
+     }, [setUiState]);
 
 const ptBoards = useMemo(
   () => Number(ptPlatePiecesPanels ?? panelPtBoards ?? 0),
   [ptPlatePiecesPanels, panelPtBoards]
 );
 
+// local item selections only
+const [sel, setSel] = useState({
+  nailsSheath:  null,  // Bright Ring Coil 8D-2-3/8x.113-2.7M
+  nailsFrame8d: null,  // Galvanized Ring Coil 8D-2-3/8"
+  nailsFrame12d:null,  // Bright Common Coil 12D-3-1/4x.120-2.5M
+});
+
+const pick = useCallback((k) => (v) => {
+  setSel((p) => (p[k] === v ? p : { ...p, [k]: v }));
+}, []);
+
+// per-row editable waste %
+const [waste, setWaste] = useState({
+  sheath:  40,
+  frame8d: 40,
+  frame12d:40,
+});
+
 const panelSheets = useMemo(
   () => Number(totalPanelSheets || 0),
   [totalPanelSheets]
 );
 
-  // local item selections only
-  const [sel, setSel] = useState({
-    nailsSheath:  null,  // Bright Ring Coil 8D-2-3/8x.113-2.7M
-    nailsFrame8d: null,  // Galvanized Ring Coil 8D-2-3/8"
-    nailsFrame12d:null,  // Bright Common Coil 12D-3-1/4x.120-2.5M
-  });
-  const pick = useCallback((k) => (v) => {
-    setSel((p) => (p[k] === v ? p : { ...p, [k]: v }));
-  }, []);
+  // ---- calcs (memo) ----
+     const rowSheath = useMemo(() => {
+         const qtyRaw   = (Number(totalPanelSheets) || 0) * 80 / 2700;
+         const pct      = Number(waste.sheath ?? 40);
+         const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
+         const unit     = getUnit(sel.nailsSheath);
+         const item     = getItem(sel.nailsSheath);
+         const unitPrice= unitPriceFrom(item);
+         const subtotal = qtyFinal * (Number(unitPrice) || 0);
+         return { qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
+     }, [totalPanelSheets, sel.nailsSheath, waste.sheath]);
 
-  // per-row editable waste %
-  const [waste, setWaste] = useState({
-    sheath:  40,
-    frame8d: 40,
-    frame12d:40,
-  });
+     const rowFrame8d = useMemo(() => {
+         const boards   = ptBoards;
+         const qtyRaw   = boards * 25 / 2700;
+         const pct      = Number(waste.frame8d ?? 40);
+         const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
+         const unit     = getUnit(sel.nailsFrame8d);
+         const item     = getItem(sel.nailsFrame8d);
+         const unitPrice= unitPriceFrom(item);
+         const subtotal = qtyFinal * (Number(unitPrice) || 0);
+         return { boards, qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
+     }, [ptBoards, sel.nailsFrame8d, waste.frame8d]);
 
-  // ---- calcs (memo)
-  // Sheathing: boxes = ceil( (sheets * 80 / 2700) * (1 + waste%) )
-  const rowSheath = useMemo(() => {
-    const qtyRaw   = (Number(panelSheets) || 0) * 80 / 2700;
-    const pct      = Number(waste.sheath ?? 40);
-    const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
-    const unit     = getUnit(sel.nailsSheath);
-    const item     = getItem(sel.nailsSheath);
-    const unitPrice= unitPriceFrom(item);
-    const subtotal = qtyFinal * (Number(unitPrice) || 0);
-    return { qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
-  }, [panelSheets, sel.nailsSheath, waste.sheath]);
+     const rowFrame12d = useMemo(() => {
+         const boards   = Number(totalBottomPlatePiecesPanel) || 0;
+         const qtyRaw   = boards * 80 / 2500;
+         const pct      = Number(waste.frame12d ?? 40);
+         const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
+         const unit     = getUnit(sel.nailsFrame12d);
+         const item     = getItem(sel.nailsFrame12d);
+         const unitPrice= unitPriceFrom(item);
+         const subtotal = qtyFinal * (Number(unitPrice) || 0);
+         return { boards, qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
+     }, [totalBottomPlatePiecesPanel, sel.nailsFrame12d, waste.frame12d]);
 
-  // Framing 8D from PT boards (PANELS): boxes = ceil( (boards*25/2700) * (1 + waste%) )
-  const rowFrame8d = useMemo(() => {
-    const boards   = ptBoards;
-    const qtyRaw   = boards * 25 / 2700;
-    const pct      = Number(waste.frame8d ?? 40);
-    const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
-    const unit     = getUnit(sel.nailsFrame8d);
-    const item     = getItem(sel.nailsFrame8d);
-    const unitPrice= unitPriceFrom(item);
-    const subtotal = qtyFinal * (Number(unitPrice) || 0);
-    return { boards, qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
-}, [ptBoards, sel.nailsFrame8d, waste.frame8d]);  
-
-  // Framing 12D from non-PT boards (PANELS): boxes = ceil( (boards*25/2500) * (1 + waste%) )
-  const rowFrame12d = useMemo(() => {
-    const boards   = Number(totalBottomPlatePiecesPanel) || 0;
-    const qtyRaw   = boards * 80 / 2500;
-    const pct      = Number(waste.frame12d ?? 40);
-    const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
-    const unit     = getUnit(sel.nailsFrame12d);
-    const item     = getItem(sel.nailsFrame12d);
-    const unitPrice= unitPriceFrom(item);
-    const subtotal = qtyFinal * (Number(unitPrice) || 0);
-    return { boards, qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
-  }, [totalBottomPlatePiecesPanel, sel.nailsFrame12d, waste.frame12d]);
-
-  // section subtotal (guarded emit)
-  const sectionTotal = useMemo(
-    () => (rowSheath.subtotal||0) + (rowFrame8d.subtotal||0) + (rowFrame12d.subtotal||0),
-    [rowSheath.subtotal, rowFrame8d.subtotal, rowFrame12d.subtotal]
-  );
-  const onTotalRef = useRef(onTotalChange);
-  useEffect(() => { onTotalRef.current = onTotalChange; }, [onTotalChange]);
-  const lastSentRef = useRef(null);
-  useEffect(() => {
-    const t = Number(sectionTotal) || 0;
-    if (t !== lastSentRef.current) {
-      lastSentRef.current = t;
-      onTotalRef.current?.({ total: t });
-    }
-  }, [sectionTotal]);
+     // section subtotal (guarded emit)
+     const sectionTotal = useMemo(
+         () => (rowSheath.subtotal||0) + (rowFrame8d.subtotal||0) + (rowFrame12d.subtotal||0),
+         [rowSheath.subtotal, rowFrame8d.subtotal, rowFrame12d.subtotal]
+     );
+     const onTotalRef = useRef(onTotalChange);
+     useEffect(() => { onTotalRef.current = onTotalChange; }, [onTotalChange]);
+     const lastSentRef = useRef(null);
+     useEffect(() => {
+         const t = Number(sectionTotal) || 0;
+         if (t !== lastSentRef.current) {
+             lastSentRef.current = t;
+             onTotalRef.current?.({ total: t });
+         }
+     }, [sectionTotal]);
 
   // memo pickers (stable nodes)
   const pickerSheath = useMemo(() => (
@@ -188,111 +191,137 @@ const panelSheets = useMemo(
   ), [pick]);
 
   // hints
-  const hintSheath = useMemo(
-    () => `Panel sheets (Ext + Int Shear): ${panelSheets} → boxes = ceil(((sheets × 80) / 2700) × (1 + waste%))`,
-    [panelSheets]
-  );
-  const hint8d = useMemo(
-    () => `PT plate boards (panels): ${ptBoards} → boxes = ceil(((boards × 25) / 2700) × (1 + waste%))`,
-    [ptBoards]
-  );
-  const hint12d = useMemo(
-    () => `Bottom plate boards (panels): ${totalBottomPlatePiecesPanel} → boxes = ceil(((boards × 80) / 2500) × (1 + waste%))`, // <-- Update hint text and source variable
-      [totalBottomPlatePiecesPanel] 
-  );
+     const hintSheath = useMemo(
+         () => `Panel sheets (Ext + Int Shear): ${totalPanelSheets} → boxes = ceil(((sheets × 80) / 2700) × (1 + waste%))`,
+         [totalPanelSheets]
+     );
+     const hint8d = useMemo(
+         () => `PT plate boards (panels): ${ptBoards} → boxes = ceil(((boards × 25) / 2700) × (1 + waste%))`,
+         [ptBoards]
+     );
+     const hint12d = useMemo(
+         () => `Bottom plate boards (panels): ${totalBottomPlatePiecesPanel} → boxes = ceil(((boards × 80) / 2500) × (1 + waste%))`,
+         [totalBottomPlatePiecesPanel]
+     );
 
   return (
-    <div className="ew-card">
-      <AccordionSection
-        title={title}
-        open={true}
-        summary={
-          <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b' }}>
-            Subtotal: {fmtMoney(sectionTotal)}
-          </div>
-        }
-      >
-        <div className="ew-grid ew-head" style={{ '--cols': 'minmax(220px,1.3fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 1.6fr 0.8fr' }}>
-          <div>Item</div>
-          <div>Vendor · Family · Size</div>
-          <div className="ew-right">Qty</div>
-          <div className="ew-right">Waste %</div>
-          <div className="ew-right">Final qty</div>
-          <div className="ew-right">Unit</div>
-          <div className="ew-right">Unit price</div>
-          <div className="ew-right">Subtotal</div>
-          <div></div>
-          <div></div>
-        </div>
+         <div className="ew-card">
+             {/* Use AccordionSection */}
+             <AccordionSection
+                 open={!collapsed}
+                 onOpenChange={(isOpen) => setCollapsed(!isOpen)}
+                 // Use bar prop for header
+                 bar={({ open, toggle }) => (
+                     <div style={{ display:'flex', alignItems:'center', gap: 8, width: '100%', }}>
+                         {/* Button with image indicator */}
+                         <button
+                             type="button"
+                             className="acc__button"
+                             onClick={toggle}
+                             aria-expanded={open}
+                             title={open ? "Collapse" : "Expand"}
+                         >
+                              <img
+                                 src={open ? '/icons/minimize.png' : '/icons/down.png'}
+                                 alt={open ? 'Collapse section' : 'Expand section'}
+                                 width={16}
+                                 height={16}
+                                 className="acc__chev"
+                                 style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                             />
+                         </button>
+                         {/* Title */}
+                         <span className="ew-head">{title}</span> {/* Use ew-head for consistent title style */}
+                         {/* Total */}
+                         <div style={{ marginLeft: 'auto' }} />
+                         <div className="ew-right" style={{ color: '#f18d5b', fontWeight: 700 }}> {/* Use ew-right if ew-chip removed */}
+                             Subtotal: {fmtMoney(sectionTotal)}
+                         </div>
+                     </div>
+                 )}
+             >
+                 {/* Content goes inside the AccordionSection */}
+                 <div className="ew-grid ew-head" style={{ '--cols': 'minmax(220px,1.3fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 1.6fr 0.8fr'}}>
+                     <div>Item</div>
+                     <div>Vendor · Family · Size</div>
+                     <div className="ew-right">Qty</div>
+                     <div className="ew-right">Waste %</div>
+                     <div className="ew-right">Final qty</div>
+                     <div className="ew-right">Unit</div>
+                     <div className="ew-right">Unit price</div>
+                     <div className="ew-right">Subtotal</div>
+                     <div></div>
+                     <div></div>
+                 </div>
 
-        <div className="ew-rows">
-          <Row
-            label="Framing nails (8D)"
-            row={rowFrame8d}
-            picker={picker8d}
-            hint={hint8d}
-            wasteEditor={
-              <input
-                className="ew-input focus-anim"
-                type="number"
-                inputMode="decimal"
-                value={waste.frame8d}
-                onChange={(e) => setWaste((w) => ({ ...w, frame8d: Number(e.target.value) || 0 }))}
-                style={{ width: 80, padding: 6, textAlign: 'right' }}
-                title="Waste %"
-              />
-            }
-          />
-          <Row
-            label="Sheathing nails"
-            row={rowSheath}
-            picker={pickerSheath}
-            hint={hintSheath}
-            wasteEditor={
-              <input
-                className="ew-input focus-anim"
-                type="number"
-                inputMode="decimal"
-                value={waste.sheath}
-                onChange={(e) => setWaste((w) => ({ ...w, sheath: Number(e.target.value) || 0 }))}
-                style={{ width: 80, padding: 6, textAlign: 'right' }}
-                title="Waste %"
-              />
-            }
-          />
-          <Row
-            label="Framing nails (12D)"
-            row={rowFrame12d}
-            picker={picker12d}
-            hint={hint12d}
-            wasteEditor={
-              <input
-                className="ew-input focus-anim"
-                type="number"
-                inputMode="decimal"
-                value={waste.frame12d}
-                onChange={(e) => setWaste((w) => ({ ...w, frame12d: Number(e.target.value) || 0 }))}
-                style={{ width: 80, padding: 6, textAlign: 'right' }}
-                title="Waste %"
-              />
-            }
-          />
-        </div>
+                 <div className="ew-rows">
+                     <Row
+                         label="Framing nails (8D)"
+                         row={rowFrame8d}
+                         picker={picker8d}
+                         hint={hint8d}
+                         wasteEditor={
+                             <input
+                                 className="ew-input focus-anim"
+                                 type="number"
+                                 inputMode="decimal"
+                                 value={waste.frame8d}
+                                 onChange={(e) => setWaste((w) => ({ ...w, frame8d: Number(e.target.value) || 0 }))}
+                                 style={{ width: 80, padding: 6, textAlign: 'right' }}
+                                 title="Waste %"
+                             />
+                         }
+                     />
+                     <Row
+                         label="Sheathing nails"
+                         row={rowSheath}
+                         picker={pickerSheath}
+                         hint={hintSheath}
+                         wasteEditor={
+                             <input
+                                 className="ew-input focus-anim"
+                                 type="number"
+                                 inputMode="decimal"
+                                 value={waste.sheath}
+                                 onChange={(e) => setWaste((w) => ({ ...w, sheath: Number(e.target.value) || 0 }))}
+                                 style={{ width: 80, padding: 6, textAlign: 'right' }}
+                                 title="Waste %"
+                             />
+                         }
+                     />
+                     <Row
+                         label="Framing nails (12D)"
+                         row={rowFrame12d}
+                         picker={picker12d}
+                         hint={hint12d}
+                         wasteEditor={
+                             <input
+                                 className="ew-input focus-anim"
+                                 type="number"
+                                 inputMode="decimal"
+                                 value={waste.frame12d}
+                                 onChange={(e) => setWaste((w) => ({ ...w, frame12d: Number(e.target.value) || 0 }))}
+                                 style={{ width: 80, padding: 6, textAlign: 'right' }}
+                                 title="Waste %"
+                             />
+                         }
+                     />
+                 </div>
+             </AccordionSection>
+         </div>
+     );
+ }
 
-        <div className="ew-footer">
-          <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b' }}>
-            Section subtotal: {fmtMoney(sectionTotal)}
-          </div>
-        </div>
-      </AccordionSection>
-    </div>
-  );
-}
+ // Export the memoized component with the original name
+ const PanelNails = memo(PanelNailsComponent, (a, b) =>
+     a.totalPanelSheets     === b.totalPanelSheets     &&
+     a.totalBottomPlatePiecesPanel === b.totalBottomPlatePiecesPanel &&
+     (a.ptPlatePiecesPanels ??  a.panelPtBoards      ?? 0) === (b.ptPlatePiecesPanels ?? b.panelPtBoards ?? 0) &&
+     a.title                === b.title &&
+     a.persistKey           === b.persistKey // Added persistKey check
+ );
 
-// prevent re-renders when numbers didn't change
-export default memo(PanelNails, (a, b) =>
-  a.totalPanelSheets     === b.totalPanelSheets   &&
-  a.platePiecesPanels    === b.platePiecesPanels  &&
-  (a.ptPlatePiecesPanels ??  a.panelPtBoards      ?? 0) === (b.ptPlatePiecesPanels ?? b.panelPtBoards ?? 0) &&
-  a.title                === b.title
-);
+ export default PanelNails;
+
+ 
+

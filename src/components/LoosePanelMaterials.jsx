@@ -487,6 +487,13 @@ useEffect(() => {
   const gridCols =
     'minmax(220px,1.3fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 1.6fr 0.8fr';
 
+  const subtotalStyle = {
+    fontFamily: "'Nova Flat', cursive",
+    color: '#f18d5b', // Orange color used elsewhere
+    fontWeight: 700,
+    marginLeft: 'auto' // Align to the right
+  };
+
   // Notify parent (Level) with Loose-materials subtotal
   useEffect(() => {
     if (typeof onSubtotalChange === 'function') {
@@ -502,8 +509,37 @@ useEffect(() => {
       <AccordionSection
         title={title}
         defaultOpen={true}
-        summary={<div style={{ textAlign: 'right', fontWeight: 700, color: '#f18d5b' }}>Subtotal: {fmt(sectionSubtotal)}</div>}
+        // summary={<div style={{ textAlign: 'right', fontWeight: 700, color: '#f18d5b' }}>Subtotal: {fmt(sectionSubtotal)}</div>}
         actions={onRemove ? <button className="ew-btn" onClick={onRemove}>Remove section</button> : null}
+        bar={({ open, toggle }) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+            <button
+              type="button"
+              className="acc__button"
+              onClick={toggle}
+              aria-expanded={open}
+              title={open ? "Collapse" : "Expand"}
+            >
+            <img
+              src={open ? '/icons/minimize.png' : '/icons/down.png'}
+              alt={open ? 'Collapse section' : 'Expand section'}
+              width={16}
+              height={16}
+              className="acc__chev"
+              style={{ display: 'inline-block', verticalAlign: 'middle' }}
+            />
+            </button>
+              <span className="ew-head">{title}</span> 
+              <div style={subtotalStyle}>
+                Subtotal: {fmt(sectionSubtotal)}
+              </div>
+              {onRemove && (
+              <div style={{ marginLeft: '8px' }}> 
+                <button className="ew-btn" onClick={onRemove}>Remove section</button>
+              </div>
+            )}
+          </div>
+        )}
       >  
         {/* ───────────── Exterior walls ───────────── */}
         <h3 className="ew-h3" style={{ marginTop: 0, marginBottom: 6 }}>Exterior walls</h3>

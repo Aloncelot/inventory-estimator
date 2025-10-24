@@ -294,8 +294,12 @@ const panelLenFtInteriorBlocking = useMemo(() => {
   return (
     <div className="app-content">
       <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <h1 className="ew-h2" style={{ margin:0 }}>Wall Panels</h1>
-        <div className="ew-chip" title="Sum of all levels (panels + loose)">
+        <h1 className="ew-h2 nova-flat-turquoise" style={{ margin: 0, flexShrink: 0 }}>Wall Panels</h1>
+        <div
+          className="ew-right nova-flat-turquoise" 
+          style={{ fontSize: '1.25rem' }}
+          title="Sum of all levels (panels + loose)"
+        >
           Grand total: {fmt(grandTotal)}
         </div>
       </div>

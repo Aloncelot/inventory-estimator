@@ -47,9 +47,10 @@ export default function ExteriorWallGroup({
   /** Shared inputs */
   const lastSentSigRef = useRef('');
   
-  const [lengthLF, setLengthLF]           = useState(0);
-  const [heightFt, setHeightFt]           = useState(12);
-  const [studSpacingIn, setStudSpacingIn] = useState(16);
+  const [lengthLF, setLengthLF]             = useState(0);
+  const [inputValueLF, setInputValueLF]     = useState(String(lengthLF));
+  const [heightFt, setHeightFt]             = useState(12);
+  const [studSpacingIn, setStudSpacingIn]   = useState(16);
   const [studMultiplier, setStudMultiplier] = useState(1);
 
   /** Per-row waste (editable per row) */
@@ -74,10 +75,27 @@ const _parsedBottom = parseBoardLengthFt(getSize(sel.bottomPlate));
 const bottomLen = _parsedBottom ?? 12;
 const bottomBoardLenFt = Number.isFinite(_parsedBottom) ? _parsedBottom : 0;
 
+useEffect(() => {
+  setInputValueLF(String(lengthLF));
+}, [lengthLF]);
+
+// Function to commit the input value to the calculation state
+const commitLengthLF = () => {
+const newValue = Number(inputValueLF) || 0; 
+  setLengthLF(newValue);
+};
+
+// Handle Enter key press
+const handleKeyDownLF = (e) => {
+  if (e.key === 'Enter') {
+  commitLengthLF();
+  e.target.blur(); 
+  }
+};
+
 const topLen   = parseBoardLengthFt(getSize(sel.topPlate))    ?? 12;
 const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
 
-// put near your other helpers:
 const deref = x => (x && x.item ? deref(x.item) : x);
 const getFamily = (selLike) => {
   const it = deref(selLike);
@@ -379,7 +397,11 @@ const getFamily = (selLike) => {
             <label>
               <span className="ew-subtle">Length (LF)</span>
               <input className="ew-input focus-anim" type="number" inputMode="decimal"
-                value={lengthLF} onChange={e=>setLengthLF(Number(e.target.value))} />
+                value={inputValueLF} // Bind to local input state
+                onChange={e => setInputValueLF(e.target.value)} // Update only local state on change
+                onKeyDown={handleKeyDownLF} // Handle Enter key
+                onBlur={commitLengthLF} // Commit value on blur (click away) 
+                />
             </label>
             <label>
               <span className="ew-subtle">Height (ft)</span>

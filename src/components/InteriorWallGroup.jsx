@@ -52,6 +52,7 @@ export default function InteriorWallGroup({
 
   /* Shared inputs */
   const [lengthLF, setLengthLF]             = useState(0);
+  const [inputValueLF, setInputValueLF]     = useState(String(lengthLF));
   const [heightFt, setHeightFt]             = useState(12);
   const [studSpacingIn, setStudSpacingIn]   = useState(16);
   const [studMultiplier, setStudMultiplier] = useState(1);
@@ -82,6 +83,24 @@ export default function InteriorWallGroup({
   /* Visibility (interior-specific) */
   const showBlocking  = kind === 'bearing';
   const showSheathing = kind === 'shear';
+
+  useEffect(() => {
+    setInputValueLF(String(lengthLF));
+  }, [lengthLF]);
+
+  // Function to commit the input value to the calculation state
+  const commitLengthLF = () => {
+    const newValue = Number(inputValueLF) || 0; // Parse and default to 0 if invalid
+    setLengthLF(newValue);
+  };
+
+  // Handle Enter key press
+  const handleKeyDownLF = (e) => {
+    if (e.key === 'Enter') {
+      commitLengthLF();
+      e.target.blur(); // Optional: remove focus after Enter
+    }
+  };
 
   /* Base rows */
   const baseRows = useMemo(() => {
@@ -417,8 +436,10 @@ const panelPtBoards = useMemo(() => {
                 className="ew-input focus-anim"
                 type="number"
                 inputMode="decimal"
-                value={lengthLF}
-                onChange={e=>setLengthLF(Number(e.target.value))}
+                value={inputValueLF} // Bind to local input state
+                onChange={e => setInputValueLF(e.target.value)} // Update only local state on change
+                onKeyDown={handleKeyDownLF} // Handle Enter key
+                onBlur={commitLengthLF} // Commit value on blur
               />
             </label>
             <label>

@@ -51,15 +51,15 @@ html, body {
   border:1px solid var(--border);
   border-radius: 14px;
   box-shadow: var(--shadow);
-  padding: 16px;
-  margin-bottom: 20px;
+  padding: 10px;
+  margin-bottom: 10px;
   overflow: visible;
 }
 
-.ew-stack { margin-top: 20px; }
+.ew-stack { margin-top: 10px; }
 
 .ew-title{
-  margin: 0 0 12px;
+  margin: 0 0 5px;
   font-weight: 700;
   letter-spacing:.2px;
 }
@@ -400,30 +400,36 @@ input[type="number"] { -moz-appearance: textfield; }
 
 .app-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--sidebar-w) 1fr; /* Defines sidebar and main columns */
   min-height: 100dvh;
   background: var(--bg-900);
+  /* Ensure transition for smoother collapse/expand */
+  transition: grid-template-columns 0.3s ease;
 }
 
-.app-main { min-width: 0; }
-.app-content { display: grid; gap: 16px; padding: 18px; }
+.app-main {
+  min-width: 0; /* Crucial: Allows main content to shrink */
+  /* overflow-x: hidden; */ /* Optional: Prevents accidental horizontal scroll */
+}
+.app-content { display: grid; gap: 0px; padding: 15px; }
 
 /* === Sidebar (screenshot style) ========================================== */
 .sidebar {
-  position: sticky;
+  position: sticky; /* Keeps sidebar in view while scrolling */
   top: 24px;
-  align-self: start;
+  align-self: start; /* Aligns to top of grid area */
   height: calc(100dvh - 48px);
-  margin: 24px 0 24px 24px;
+  margin: 24px 0 24px 0;
   display: flex;
   flex-direction: column;
-  width: var(--sidebar-w);
+  width: var(--sidebar-w); /* Width controlled by variable */
   border-radius: 16px;
-  background: rgb(0 0 0 / 40%);         /* glassy */
+  background: rgb(0 0 0 / 40%);    /* glassy */
   border: 1px solid var(--border);
   backdrop-filter: blur(20px);
   box-shadow: var(--shadow);
-  z-index: 90; /* below .combo-list (2000) */
+  z-index: 90; /* Make sure this doesn't conflict strangely */
+  transition: width 0.3s ease; /* Add transition for width change */
 }
 
 /* header: burger + logo */
@@ -451,6 +457,10 @@ input[type="number"] { -moz-appearance: textfield; }
   position: relative;
   display: grid;
   padding: 6px;
+  transition: opacity 0.15s ease; /* Controls how fast the label fades in/out */
+  opacity: 1; /* Default opacity when potentially visible */
+  white-space: nowrap; /* Prevent wrapping during transition */
+  overflow: hidden; /* Hide overflow during transition */
 }
 
 /* the animated selection bar */
@@ -494,11 +504,27 @@ input[type="number"] { -moz-appearance: textfield; }
 
 /* icon + label */
 .sidebar .menu .menu-ico { width: 20px; text-align: center; font-style: normal; }
-.sidebar .menu .menu-label { text-transform: capitalize; }
+.sidebar .menu .menu-label { 
+  font-family: 'Nova Flat', cursive;
+  color: #40E0D0; /* Bright turquoise */
+  transition: opacity 0.15s ease;
+  opacity: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-transform: capitalize;}
 
 /* icons-only when collapsed */
 .app-shell.sb-collapsed .sidebar .menu .menu-item { justify-content: center; }
-.app-shell.sb-collapsed .sidebar .menu .menu-label { display: none; }
+.app-shell.sb-collapsed .sidebar .menu .menu-label {
+  display: none;}
+
+/* Styles for the label when sidebar IS NOT collapsed (i.e., expanded or expanding) */
+.app-shell:not(.sb-collapsed) .sidebar .menu .menu-label {
+  opacity: 1; /* Make it visible */
+  /* Delay the fade-in: start slightly after the sidebar expansion begins */
+  /* Adjust 0.15s delay to sync with sidebar width transition */
+  transition-delay: 0.15s;
+}
 
 /* keep our combobox list on top */
 .combo-list { z-index: 2000; }
@@ -740,7 +766,8 @@ html {
 
 /* Slightly smaller base font size for cards/sections */
 .ew-card, .tbl {
-  font-size: 0.825rem; /* Slightly smaller than default small (0.875rem) */
+  font-size: 0.825rem;
+  /* Slightly smaller than default small (0.875rem) */
   /* If using Tailwind, you might use text-xs (0.75rem) or adjust base size */
 }
 
@@ -771,15 +798,18 @@ html {
   min-height: 32px; /* Adjust if needed, based on reduced padding */
 }
 
-/* Adjust Sidebar item height (optional) */
-/*
-.sidebar .menu .menu-item {
-  height: 52px;
+
+.nova-flat-turquoise {
+  font-family: 'Nova Flat', cursive;
+  color: #40E0D0; 
 }
-.sidebar .menu::after {
-  height: 52px;
+
+.ew-h2.nova-flat-turquoise {
+  /* You might add !important if needed, but try without first */
+  /* color: #40E0D0 !important; */
 }
-.sidebar .menu {
-  style={{ ['--top']: `${activeIdx === 0 ? 0 : activeIdx * 52}px` }} // JS would need update too
+
+.ew-chip.nova-flat-turquoise {
+   font-weight: 700; /* Ensure it stays bold if needed */
+   /* Add other specific overrides for the chip if necessary */
 }
-*/

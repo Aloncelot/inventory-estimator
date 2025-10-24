@@ -38,6 +38,7 @@ export default function Level({
     int2x6LF: 0, int2x4LF: 0, intPlatePieces: 0, intPTLFSum: 0,
     panelsSubtotal: 0, // sum of InteriorWallGroup groupSubtotal for this level    
   });
+  const [panelNailsSubtotal, setPanelNailsSubtotal] = useState(0);
 
   // derive once per level
 const panelPtBoards = useMemo(() =>
@@ -81,13 +82,21 @@ const panelPtBoards = useMemo(() =>
     onLooseTotal?.({ id, subtotal: sub });
   }, [id, onLooseTotal]);
 
+  // Callback for PanelNails subtotal
+  const handlePanelNailsSubtotal = useCallback((payload) => {
+    const sub = Number(payload?.total) || 0; // PanelNails sends { total: ... }
+    setPanelNailsSubtotal(sub);
+    // Note: No need to report this specific subtotal up further unless required
+  }, []);
+
   // Level total = exterior panels + interior panels + loose (for this level)
   const levelTotal = useMemo(() => {
     const ext   = Number(extTotals?.panelsSubtotal) || 0; // Cost from ExteriorWalls
     const intl  = Number(intTotals?.panelsSubtotal) || 0; // Cost from InteriorWalls
     const loose = Number(looseSubtotal)             || 0; // Cost from LoosePanelMaterials
-    return ext + intl + loose;
-  }, [extTotals?.panelsSubtotal, intTotals?.panelsSubtotal, looseSubtotal]);
+    const nails = Number(panelNailsSubtotal)      || 0; // <-- Include nails subtotal
+    return ext + intl + loose + nails;
+  }, [extTotals?.panelsSubtotal, intTotals?.panelsSubtotal, looseSubtotal, panelNailsSubtotal]);
 
   const moneyFmt = useMemo(
     () => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }),
@@ -108,13 +117,15 @@ const panelSheetsAll = useMemo(() => {
     return ext + ints;
 }, [extTotals?.extPanelSheets, intTotals?.intPanelSheets]); // Update dependencies
 
+const novaMonoStyle = { fontFamily: "'Nova Mono', monospace" };
+
   return (
   <section className="ew-stack">
     <AccordionSection
       open={!collapsed}
       onOpenChange={(o) => setCollapsed(!o)}
       bar={({ open, toggle }) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ ...novaMonoStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
             className="acc__button"
@@ -122,7 +133,14 @@ const panelSheetsAll = useMemo(() => {
             title={open ? 'Collapse' : 'Expand'}
             aria-label={`${open ? 'Collapse' : 'Expand'} ${name}`}
           >
-            <span className="acc__chev">{open ? '🔽' : '▶'}</span>
+            <img
+              src={open ? '/icons/down.png' : '/icons/minimize.png'}
+              alt={open ? 'Collapse section' : 'Expand section'}
+              width={16} // Adjust size if needed
+              height={16} // Adjust size if needed
+              className="acc__chev" // Keep class if needed for styling
+              style={{ display: 'inline-block', verticalAlign: 'middle' }}
+            />
             <span className="ew-head">{name}</span>
           </button>
 
@@ -160,13 +178,14 @@ const panelSheetsAll = useMemo(() => {
 
       <PanelNails
         title={`${name} — Panel nails`}
-        // persistKey={`panel-nails:${id}`}
+        persistKey={`panel-nails:${id}`}
         platePiecesPanels={Number( // This is NON-PT plates only, keep for 8D nails
-                         (extTotals?.extPlatePieces || 0) + (intTotals?.intPlatePieces || 0)
-                     ) - totalBottomPlatePiecesPanel}
+          (extTotals?.extPlatePieces || 0) + (intTotals?.intPlatePieces || 0)
+          ) - totalBottomPlatePiecesPanel}
         ptPlatePiecesPanels={panelPtBoards}
         totalPanelSheets={panelSheetsAll}
         totalBottomPlatePiecesPanel={totalBottomPlatePiecesPanel}
+        onTotalChange={handlePanelNailsSubtotal}
       />
 
       <LoosePanelMaterials

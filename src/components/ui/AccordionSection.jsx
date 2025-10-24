@@ -55,7 +55,7 @@ export default function AccordionSection({
   return (
     <section className={`acc ${open ? 'acc--open' : ''} ${className}`}>
       {barNode ? (
-        // 🔁 One unified row for both states (same wrapper)
+        // One unified row for both states (same wrapper)
         <div className="acc__summary">{barNode}</div>
       ) : (
         <>
@@ -73,7 +73,14 @@ export default function AccordionSection({
                     onClick={toggle}
                     title={open ? 'Collapse' : 'Expand'}
                   >
-                    <span className="acc__chev">{open ? '🔽' : '▶'}</span>
+                    <img
+                      src={open ? '/icons/down.png' : '/icons/minimize.png'} 
+                      alt={open ? 'Collapse section' : 'Expand section'} 
+                      width={16} 
+                      height={16} 
+                      className="acc__chev"
+                      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                    />
                     <span className="acc__title">{title}</span>
                   </button>
                 )}
