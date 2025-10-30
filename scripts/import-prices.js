@@ -125,6 +125,10 @@ function loadDataMap(dataCsvPath) {
   return map;
 }
 
+// --- Global maps/sets for lookup data ---
+const uniqueFamilies = new Map(); // Map<familySlug, familyDisplay>
+const itemVendorMap = new Map(); // Map<itemLookupId, Set<vendorId>>
+
 // ---------- import a single prices CSV ----------
 async function importPricesCsv(pricesCsvPath, dataMap) {
   const file = path.resolve(process.cwd(), pricesCsvPath);
@@ -176,14 +180,20 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
         : null;
 
     const { vendorId, displayName } = canonicalVendorName(supplierRaw);
-    const docId = slug(joinKey);
+
+    // --- Prepare slugs and IDs ---
+    const familySlug = slug(family);
+    const sizeSlug = slug(size);
+    const docId = slug(joinKey); // ID within vendor's items subcollection
+    const itemLookupId = `${familySlug}_${sizeSlug}`; // Unique ID for the item across vendors
+
 
     const data = {
       familyDisplay: family,
       sizeDisplay:   size,
       joinKey,
-      familySlug: slug(family),
-      sizeSlug:   slug(size),
+      familySlug: familySlug,
+      sizeSlug:   sizeSlug,
       unit: unit || '',
       supplierName: displayName,
       vendorId,
@@ -195,6 +205,16 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       source: 'sheet:PRICES',
     };
+
+    if (familySlug && !uniqueFamilies.has(familySlug)) {
+             uniqueFamilies.set(familySlug, family); // Store slug -> display name
+         }
+         if (familySlug && sizeSlug) {
+             if (!itemVendorMap.has(itemLookupId)) {
+                 itemVendorMap.set(itemLookupId, new Set());
+             }
+             itemVendorMap.get(itemLookupId).add(vendorId); 
+         }
 
     try {
       // ensure vendor doc
@@ -211,15 +231,70 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       await db.collection('priceLists').doc(vendorId).collection('items').doc(docId).set(data, { merge: true });
 
       written++;
-      if (written % 250 === 0) console.log(`…written ${written}`);
+      if (written % 250 === 0) console.log(`...processed ${written}`);
     } catch (e) {
-      console.error(`Failed row "${description}":`, e.message);
+      console.error(`Failed row "${description}" for vendor "${vendorId}":`, e.message);
       skipped++;
     }
   }
 
-  console.log(`[import] Done ${path.basename(file)}. Written: ${written}, Skipped: ${skipped}`);
-  return { written, skipped };
+  console.log(`[import] Done ${path.basename(file)}. Written to priceLists: ${written}, Skipped: ${skipped}`);
+     return { written, skipped };
+}
+
+// --- Function to write lookup collections ---
+async function writeLookupCollections() {
+    console.log('\n[import] Writing lookup collections...');
+    const batchSize = 400; // Firestore batch limit is 500
+    let batch = db.batch();
+    let count = 0;
+    let batchNum = 1;
+
+    // Write Families
+    console.log(`[import] Writing ${uniqueFamilies.size} unique families to /families...`);
+    count = 0;
+    batchNum = 1;
+    for (const [slug, label] of uniqueFamilies.entries()) {
+        const docRef = db.collection('families').doc(slug);
+        batch.set(docRef, { label: label, slug: slug }, { merge: true });
+        count++;
+        if (count >= batchSize) {
+            await batch.commit();
+            console.log(`...committed family batch ${batchNum} (${count} docs)`);
+            batch = db.batch();
+            count = 0;
+            batchNum++;
+        }
+    }
+    if (count > 0) {
+        await batch.commit();
+        console.log(`...committed final family batch ${batchNum} (${count} docs)`);
+    }
+
+    // Write Item-Vendor Lookups
+    console.log(`[import] Writing ${itemVendorMap.size} item-vendor lookups to /itemVendorLookup...`);
+    batch = db.batch(); // Reset batch
+    count = 0;
+    batchNum = 1;
+    for (const [itemLookupId, vendorSet] of itemVendorMap.entries()) {
+        if (vendorSet.size > 0) {
+            const docRef = db.collection('itemVendorLookup').doc(itemLookupId);
+            batch.set(docRef, { vendorIds: Array.from(vendorSet) }, { merge: true }); // Store as an array
+            count++;
+            if (count >= batchSize) {
+                await batch.commit();
+                console.log(`...committed item-vendor batch ${batchNum} (${count} docs)`);
+                batch = db.batch();
+                count = 0;
+                batchNum++;
+            }
+        }
+    }
+    if (count > 0) {
+        await batch.commit();
+        console.log(`...committed final item-vendor batch ${batchNum} (${count} docs)`);
+    }
+    console.log('[import] Finished writing lookup collections.');
 }
 
 // ---------- main ----------
@@ -242,7 +317,9 @@ async function run() {
     totalS += skipped;
   }
 
-  console.log(`[import] ALL DONE. Total written: ${totalW}, total skipped: ${totalS}`);
+  await writeLookupCollections();
+
+  console.log(`\n[import] ALL DONE. Total items processed: ${totalW}, total skipped: ${totalS}`);
   process.exit(0);
 }
 

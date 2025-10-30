@@ -506,7 +506,7 @@ input[type="number"] { -moz-appearance: textfield; }
 .sidebar .menu .menu-ico { width: 20px; text-align: center; font-style: normal; }
 .sidebar .menu .menu-label { 
   font-family: 'Nova Flat', cursive;
-  color: #40E0D0; /* Bright turquoise */
+  color: var(--text-secondary);
   transition: opacity 0.15s ease;
   opacity: 1;
   white-space: nowrap;
@@ -812,4 +812,19 @@ html {
 .ew-chip.nova-flat-turquoise {
    font-weight: 700; /* Ensure it stays bold if needed */
    /* Add other specific overrides for the chip if necessary */
+}
+
+/* Style for ENABLED (not disabled) items */
+.sidebar .menu .menu-item:not(.disabled) .menu-label {
+  color: #40E0D0; /* Bright turquoise for enabled items */
+}
+
+/* Style for ACTIVE item */
+.sidebar .menu .menu-item.active .menu-label {
+  color: #ffffff; /* Make active label white (or brighter turquoise) */
+  opacity: 1; /* Ensure full opacity */
+}
+/* Ensure hover maintains brightness on enabled items */
+.sidebar .menu .menu-item:not(.disabled):hover .menu-label {
+  color: #6fffea; /* Slightly brighter turquoise on hover */
 }

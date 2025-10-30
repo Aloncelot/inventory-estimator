@@ -1,28 +1,17 @@
 // src/components/AuthGate.jsx
+// Simplified AuthGate.jsx (Optional - Only if needed for loading UI)
 'use client';
-import { useEffect, useState } from 'react';
-import { auth, googleProvider } from '@/lib/firebase';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { useAuth } from "@/AuthContext"; 
 
 export default function AuthGate({ children }) {
-  const [user, setUser] = useState(undefined);
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
-  if (user === undefined) return <div style={{padding:24}}>Loading…</div>;
-  if (!user) {
-    return (
-      <div style={{padding:24}}>
-        <h1>Inventory Estimator</h1>
-        <p>Sign in to continue.</p>
-        <button onClick={() => signInWithPopup(auth, googleProvider)}>Sign in with Google</button>
-      </div>
-    );
-  }
-  return (
-    <>
-      <div style={{padding:12, fontSize:12}}>
-        Signed in as {user.email} · <button onClick={() => signOut(auth)}>Sign out</button>
-      </div>
-      {children}
-    </>
-  );
+    const { loading } = useAuth(); // Only get loading state
+
+    if (loading) {
+        // Show a full-page loading indicator
+        return <div style={{ padding: 24, textAlign: 'center', marginTop: '50px' }}>Loading Authentication...</div>;
+    }
+
+    // Once loading is false, just render children
+    // page.jsx will handle showing LoginView or main content based on user state
+    return <>{children}</>;
 }

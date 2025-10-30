@@ -1,10 +1,9 @@
-'use client';
-import ExteriorWallGroup from '@/components/ExteriorWallGroup';
+// src/app/projects/[projectId]/page.jsx
+import ProjectClient from './client';
+export async function generateStaticParams() {
+  return [{ projectId: 'default' }];
+}
 
 export default function ProjectPage() {
-  return (
-    <main style={{ padding: 24 }}>
-      <ExteriorWallGroup />
-    </main>
-  );
+  return <ProjectClient />;
 }

@@ -1,4 +1,5 @@
- "use client";
+// src/components/PanelManufactureEstimate.jsx
+"use client";
 import { useMemo, useEffect, useState, useCallback } from "react";
 // Corrected import paths to use relative paths
 import AccordionSection from "./ui/AccordionSection";

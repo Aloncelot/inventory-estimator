@@ -1,7 +1,9 @@
 // src/app/layout.js
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import AuthGate from "@/components/AuthGate"; 
+import AuthGate from "@/components/AuthGate";
+import { AuthProvider } from "@/AuthContext";
+import { ProjectProvider } from "@/context/ProjectContext";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -21,7 +23,13 @@ export default function RootLayout({ children }) {
         <link href="https://fonts.googleapis.com/css2?family=Nova+Mono&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet" />
       </head>
-      <body>{children}</body>
+      <body>
+        <AuthProvider>
+          <ProjectProvider>
+            {children}
+          </ProjectProvider>
+        </AuthProvider>
+      </body>
     </html>
   );
 }
