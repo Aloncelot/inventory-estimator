@@ -453,9 +453,15 @@ const getFamily = (selLike) => {
                       defaultVendor="Gillies & Prittie Warehouse"
                       defaultFamilyLabel={
                         row.key === 'sheathing'   ?   'Green Zip':
-                        row.key === 'bottomPlate' ?   bottomDefaultFamily :
-                                                      'SPF#2'
-                      }                     
+                        row.key === 'bottomPlate' ?   bottomDefaultFamily : 'SPF#2'
+                      }
+                      defaultSizeLabel={
+                          row.key === 'sheathing' ? `4x8'-7/16"` :
+                          (row.key === 'bottomPlate' || row.key === 'topPlate' || row.key === 'blocking') ? `2x6"-8'` :
+                          row.key === 'stud' ? `2x6"-10'`:
+
+                          undefined
+                        }                     
                       preferredSeries={row.key === 'sheathing'  ? undefined: '2x6'}
                     />
 
@@ -563,7 +569,16 @@ const getFamily = (selLike) => {
                         compact
                         onSelect={(item) => updateExtra(ex.id, { item })}
                         defaultVendor="Gillies & Prittie Warehouse"
-                        defaultFamilyLabel={ex.type === 'Headers infill' ? 'CDX SE' : 'SPF#2'}
+                        defaultFamilyLabel={
+                          (ex.type === 'Headers infill' || ex.type === 'Extra sheathing')
+                          ? 'CDX SE' 
+                          : 'SPF#2'
+                        }
+                        defaultSizeLabel={
+                          (ex.type === 'Headers infill' || ex.type === 'Extra sheathing') ? `4x8'-1/2"` :
+                          (ex.type === 'Header' || ex.type === 'Post' || ex.type === 'Extra blocking') ? `2x10"-10'` :
+                          undefined
+                        }
                         />
 
                       {/* Header params */}

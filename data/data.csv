@@ -1,4 +1,4 @@
-MATERIAL,SIZE
+FAMILY,SIZE
 SE Advantec Sheathing Struct 1,"4x8'-1/2"""
 SE Advantec Sheathing Struct 1,"4x8'-5/8"""
 PT CDX,"4x8'-1/2"""
@@ -24,6 +24,9 @@ Green Zip,"4x8'x1-1/2""(R-6)"
 Green Zip,"4x8'x2""(R-9)"
 Green Zip,"4x8'x2-1/2""(R-12)"
 FRT LP Flameblock,"4x8'-1/2"""
+FRT CDX,"4x8'-19/32"""
+FRT LP Flameblock 2 sides,"4x8'-7/16"""
+FRT LP Flameblock 2 sides,"4x8'-1/2"""
 FRT PT Plywood,"4x8'-5/8"""
 FRT T&G CDX,"4x8'-3/4"""
 FRT CDX,"4x8'-3/4"""
@@ -755,3 +758,7 @@ Galvanized,JB210A
 Stainless Steel Screw (350),"1-5/8"""
 Top Flange Galvanized,HB5.50/11.88
 Galvanized,HU212-2TF
+PL PSL,"5-1/4""x16"""
+PL PSL,"5-1/4""x14"""
+Zinc Titen HD Screw Anchor,"1/2""x15"""
+Galvanized,HU11

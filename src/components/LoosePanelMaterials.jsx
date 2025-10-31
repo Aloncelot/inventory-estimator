@@ -660,6 +660,7 @@ useEffect(() => {
                   onSelect={setPick('panelBandSheathing')}
                   defaultVendor="Gillies & Prittie Warehouse"
                   defaultFamilyLabel="Green Zip"
+                  defaultSizeLabel={`4x8'-7/16"`}
                 />
                 <div className="ew-hint">Here: 4′ band ⇒ sheets ≈ (Exterior LF ÷ 8) + waste</div>
               </div>
@@ -682,6 +683,7 @@ useEffect(() => {
                     onSelect={setPick('zipTape')}
                     defaultVendor="Gillies & Prittie Warehouse"
                     defaultFamilyLabel="ZIP Flashing Tape"
+                    defaultSizeLabel="3.75in x 75ft"
                   />       
                   <div className="ew-hint">
                     ZIP sheets = (ext: {extSheets}) + (band: {bandSheets})
@@ -706,6 +708,7 @@ useEffect(() => {
                   onSelect={setPick('openingsBlocking')}
                   defaultVendor="Gillies & Prittie Warehouse"
                   defaultFamilyLabel="SPF#2"
+                  defaultSizeLabel={`2x6"-16'`}
                   />
                 <label style={{ minWidth: 170 }}>
                   <span className="ew-subtle">Openings blocking (LF)</span>
@@ -732,6 +735,7 @@ useEffect(() => {
                       onSelect={setPick('extraSheathing')}
                       defaultVendor="Gillies & Prittie Warehouse"
                       defaultFamilyLabel="CDX SE"
+                      defaultSizeLabel={`4x8'-1/2"`}
                     />
                     <button
                       type="button"
@@ -761,6 +765,7 @@ useEffect(() => {
                     onSelect={setPick('secondBottom')}
                     defaultVendor="Gillies & Prittie Warehouse"
                     defaultFamilyLabel="SPF#2"
+                    defaultSizeLabel={`2x6"-16'`}
                   />
                   <button
                     type="button"

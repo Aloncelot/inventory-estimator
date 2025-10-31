@@ -2,49 +2,65 @@
 'use client';
  import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
  import { doc, getDoc, setDoc, addDoc, collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
- import { db, auth } from '@/lib/firebase'; // Adjust path if needed
+ import { db, auth } from '@/lib/firebase'; 
  import { useAuth } from '@/AuthContext'; 
 
- // Helper to generate unique IDs for levels/sections if needed
+ // Helper to generate unique IDs
  const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
 
- const ProjectContext = createContext({
-    projectId: null,
-    projectData: null, // Holds the entire estimate structure
-    projectsList: [], // List of user's projects { id, name, updatedAt }
-    fetchProjectsList: async () => {}, // Function to load the list
-    createNewProject: async (name) => { return null; }, // Function to create a new project, returns new ID
-    loadProject: async () => {},
-    saveProject: async () => {},
-    updateEstimateData: (newData) => {}, // Function to update parts or all of estimateData
-    // Add more functions here to update specific parts (e.g., updateLevel, updateSection)
-    isLoaded: false,
-    isLoading: true,
-    isSaving: false,
-    isListLoading: false,
+ // 1. DEFINE THE DEFAULT BLANK STRUCTURE for a section, level, etc.
+ const blankSection = (props = {}) => ({
+  id: generateId('section-'),
+  lengthLF: 0,
+  heightFt: 12,
+  studSpacingIn: 16,
+  studMultiplier: 1,
+  kind: 'partition', // for interior
+  waste: { bottomPlate: 10, topPlate: 10, studs: 60, blocking: 10, sheathing: 20 },
+  sel: { bottomPlate:null, topPlate:null, studs:null, blocking:null, sheathing:null },
+  notes: {},
+  extras: [],
+  ...props,
  });
+
+ const blankLevel = (props = {}) => ({
+  id: generateId('level-'),
+  name: `Level ${props.index + 1 || 1}`,
+  exteriorSections: [blankSection({ kind: 'exterior' })],
+  interiorSections: [blankSection({ kind: 'partition' })],
+  looseMaterials: { /* ...any defaults for loose materials... */ },
+  panelNails: { /* ...any defaults for panel nails... */ },
+  // ... other level-specific data
+  ...props,
+ });
+
+ const blankEstimateData = () => ({
+  levels: [blankLevel({ index: 0 })],
+  manufactureEstimate: { /* ...defaults for manufacture... */ },
+  nailsAndBracing: { /* ...defaults for nails/bracing... */ },
+ });
+
+ const ProjectContext = createContext();
 
  export function ProjectProvider({ children, initialProjectId = null }) {
      const { user } = useAuth();
      const [projectId, setProjectId] = useState(initialProjectId);
-     const [projectData, setProjectData] = useState(null); // Data for the *currently loaded* project
-     const [projectsList, setProjectsList] = useState([]); // List of *all* user projects
-     const [isLoaded, setIsLoaded] = useState(false); // Is the *current* project loaded?
-     const [isLoading, setIsLoading] = useState(false); // Is the *current* project loading?
-     const [isListLoading, setIsListLoading] = useState(false); // Is the project *list* loading?
+     const [projectData, setProjectData] = useState(null); 
+     const [projectsList, setProjectsList] = useState([]); 
+     const [isLoaded, setIsLoaded] = useState(false); 
+     const [isLoading, setIsLoading] = useState(false); 
+     const [isListLoading, setIsListLoading] = useState(false); 
      const [isSaving, setIsSaving] = useState(false);
-     const [appId, setAppId] = useState(null); // Will be set by auth user
+     const [appId, setAppId] = useState(null); 
 
-     // --- App ID ---
+     // --- App ID (from auth user) ---
      useEffect(() => {
         if (user) {
-            // User is logged in, set the appId from their UID
             setAppId(user.uid);
         } else {
-            // User is logged out, reset the appId
             setAppId(null);
         }
-    }, [user]); // This effect runs whenever the user object changes
+    }, [user]);
 
      // --- Firestore Path ---
     const getProjectsCollectionPath = useCallback(() => {
@@ -52,7 +68,6 @@
             console.error("Cannot get projects collection path: Missing appId.");
             return null;
         };
-         // Using private user path
          return `artifacts/${appId}/projects`;
      }, [appId]);
 
@@ -60,13 +75,13 @@
         const collectionPath = getProjectsCollectionPath();
         if (!collectionPath || !pId) return null;
             return `artifacts/${appId}/projects/${pId}`;
-    }, [getProjectsCollectionPath]);
+    }, [getProjectsCollectionPath, appId]); // Added appId dependency
 
-    const fetchProjectsList = useCallback(async () => {
+    // --- Fetch Project List ---
+    const fetchProjectsList = useCallback(async (currentUserId) => {
         const collectionPath = getProjectsCollectionPath();
         if (!collectionPath || isListLoading) return;
-
-        console.log("Fetching projects list:", collectionPath);
+        
         setIsListLoading(true);
         try {
             const q = query(collection(db, collectionPath), orderBy('updatedAt', 'desc'));
@@ -74,90 +89,82 @@
             const list = querySnapshot.docs.map(doc => ({
                 id: doc.id,
                 name: doc.data().name || 'Untitled',
-                updatedAt: doc.data().updatedAt?.toDate() // Convert Firestore Timestamp to JS Date
+                updatedAt: doc.data().updatedAt?.toDate() 
             }));
             setProjectsList(list);
-            console.log("Projects list fetched:", list.length);
         } catch (error) {
             console.error("Error fetching projects list:", error);
-            setProjectsList([]); // Reset list on error
+            setProjectsList([]);
         } finally {
             setIsListLoading(false);
         }
-    }, [getProjectsCollectionPath, db]);
+    }, [getProjectsCollectionPath, isListLoading, db]); // db was missing
 
     // --- Create New Project ---
     const createNewProject = useCallback(async (name) => {
         const collectionPath = getProjectsCollectionPath();
-        if (!user || !collectionPath || isSaving) 
-            console.error("Cannot create project: User not logged in path or missing.");
+        if (!user || !collectionPath || isSaving) { // <-- Fix: Added {}
+            console.error("Cannot create project: User not logged in, path missing, or already saving.");
             return null;
+        }
 
-        console.log("Creating new project:", name);
-        setIsSaving(true); // Use isSaving flag for creation too
+        setIsSaving(true); 
         try {
             const newProjectData = {
                 name: name || "Untitled Project",
-                 ownerId: user.uid,
+                ownerId: user.uid,
                 createdAt: Timestamp.now(),
                 updatedAt: Timestamp.now(),
-                estimateData: { // Initial minimal estimate data
-                    levels: [{ id: generateId('level-'), name: 'Level 1' }],
-                    // Add other initial structures if needed
-                }
+                // 2. SET THE DEFAULT ESTIMATE DATA
+                estimateData: blankEstimateData(), 
             };
             const docRef = await addDoc(collection(db, collectionPath), newProjectData);
-            console.log("New project created with ID:", docRef.id);
-            // Optionally refresh the list or add locally
-            fetchProjectsList(); // Refresh the list
-            return docRef.id; // Return the new ID
+            fetchProjectsList(); 
+            return docRef.id; 
         } catch (error) {
             console.error("Error creating new project:", error);
             return null;
         } finally {
             setIsSaving(false);
         }
-    }, [user, getProjectsCollectionPath, db, fetchProjectsList]);
+    }, [user, getProjectsCollectionPath, isSaving, db, fetchProjectsList]); // db/fetchProjectsList missing
 
 
     // --- Load Project ---
     const loadProject = useCallback(async (pId) => {
         if (!pId || isLoading) return;
         const path = getProjectPath(pId);
-        if (!path) return; // Error logged in getProjectPath
+        if (!path) return; 
 
-        console.log("Loading project:", path);
         setIsLoading(true);
         setIsLoaded(false);
-        setProjectData(null); // Clear previous data
-        setProjectId(pId); // Set ID immediately
+        setProjectData(null); 
+        setProjectId(pId); 
 
         try {
             const docRef = doc(db, path);
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                // Ensure estimateData and levels exist
-                if (!data.estimateData) data.estimateData = {};
-                  if (!data.estimateData.levels || data.estimateData.levels.length === 0) {
-                     data.estimateData.levels = [{ id: generateId('level-'), name: 'Level 1' }];
-                  }
+                // 3. ENSURE DATA STRUCTURE ON LOAD
+                if (!data.estimateData) {
+                   data.estimateData = blankEstimateData();
+                }
+                if (!data.estimateData.levels || data.estimateData.levels.length === 0) {
+                   data.estimateData.levels = [blankLevel({ index: 0 })];
+                }
                   setProjectData(data);
-                  console.log("Project loaded:", pId);
             } else {
-                  console.log("No such project document! Cannot load:", pId);
-                  // Should not happen if created via createNewProject
-                  setProjectId(null); // Reset ID if load fails
+                  setProjectId(null); 
               }
         } catch (error) {
             console.error("Error loading project:", pId, error);
-            // Handle error state appropriately
-            setProjectId(null); // Reset ID on error
+            setProjectId(null); 
         } finally {
             setIsLoading(false);
-            setIsLoaded(true); // Mark as loaded even if data is null (indicates attempt finished)
+            setIsLoaded(true); 
         }
-    }, [ getProjectPath, db]);
+    }, [isLoading, getProjectPath, db]); // db was missing
 
      // --- Save Project ---
      const saveProject = useCallback(async (pId = projectId, data = projectData) => {
@@ -166,52 +173,49 @@
             return;
         }
          const path = getProjectPath(pId);
-          if (!path) return; // Error logged in getProjectPath
+          if (!path) return; 
 
-         console.log("Saving project:", path);
          setIsSaving(true);
          try {
              const docRef = doc(db, path);
              const saveData = {
                  ...data,
                  updatedAt: Timestamp.now(),
-                 createdAt: data.createdAt || Timestamp.now(), // Ensure createdAt exists
+                 createdAt: data.createdAt || Timestamp.now(), 
              };
-             await setDoc(docRef, saveData, { merge: true }); // Use merge: true to avoid overwriting fields unintentionally
+             await setDoc(docRef, saveData, { merge: true }); 
              setProjectData(saveData); // Update local state with new timestamp
-             console.log("Project saved successfully.");
              setProjectsList(list => list.map(p => p.id === pId ? {...p, updatedAt: saveData.updatedAt.toDate()} : p).sort((a,b) => b.updatedAt - a.updatedAt));
          } catch (error) {
              console.error("Error saving project:", error);
-             // Handle error state
          } finally {
              setIsSaving(false);
          }
-     }, [user, projectId, projectData, getProjectPath, db]);
+     }, [user, projectId, projectData, isSaving, getProjectPath, db]); // db was missing
 
-    // --- Update Estimate Data ---
-    // Provides a way for components to update parts of the estimate
-    // For complex updates (like adding/removing sections), might need more specific functions
-    const updateEstimateData = useCallback((newData) => {
+    // 4. NEW HELPER FUNCTION TO UPDATE PROJECT DATA
+    // This allows any component to update its part of the state
+    const updateProject = useCallback((newEstimateData) => {
          setProjectData(prev => {
              if (!prev) return null;
              return {
                  ...prev,
-                estimateData: {
-                    ...prev.estimateData,
-                    ...newData // Merges new data into estimateData
-                }
+                estimateData: newEstimateData
             };
         });
-        }, []); 
+    }, []); 
 
-    // --- Auto-fetch list on user change ---
+    // DEPRECATED: We will call updateProject directly
+    const updateEstimateData = updateProject;
+
+
+    // --- Auto-fetch list on user/appId change ---
     useEffect(() => {
-        if (appId) {
-            fetchProjectsList();
+        if (appId) { // <-- Fix: check for appId (not default)
+            fetchProjectsList(appId); // Pass appId
         } else {
-            setProjectsList([]); // Clear list if logged out or appId missing
-            setProjectData(null); // Clear current project
+            setProjectsList([]); 
+            setProjectData(null); 
             setProjectId(null);
         }
     }, [appId, fetchProjectsList]);
@@ -221,7 +225,6 @@
         if (initialProjectId && !projectData && !isLoading && user?.uid) {
             loadProject(initialProjectId);
         }
-        // Run only once when initialProjectId or user becomes available
      }, [initialProjectId, projectData, isLoading, user?.uid, loadProject]);
     
      // --- Context Value ---
@@ -235,20 +238,22 @@
          loadProject,
          saveProject,
          updateEstimateData,
+         updateProject, 
+         blankLevel,
+         blankSection,
          isLoaded,
          isLoading,
          isSaving,
          isListLoading
      }), [
-         projectId, projectData, projectsList, fetchProjectsList, createNewProject,
-         loadProject, saveProject, updateEstimateData,
+         projectId, projectData, projectsList, appId, fetchProjectsList, createNewProject,
+         loadProject, saveProject, updateEstimateData, updateProject,
          isLoaded, isLoading, isSaving, isListLoading
      ]);
 
      return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
  }
 
- // Custom hook to use the project context
  export const useProject = () => {
      return useContext(ProjectContext);
  };

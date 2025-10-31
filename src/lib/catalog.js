@@ -1,70 +1,102 @@
 // src/lib/catalog.js
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  limit,
-} from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, documentId } from 'firebase/firestore';
+import { db } from './firebase'; // Make sure this path is correct
 
-// --- Vendors -------------------------------------------------------------
-export async function listVendors() {
-  const snap = await getDocs(query(collection(db, 'priceLists'), orderBy('displayName')));
-  return snap.docs.map(d => ({
-    id: d.id,
-    displayName: d.data()?.displayName || d.id,
-  }));
+// Helper function (copied from your import-prices.js)
+function slug(s) {
+  return String(s || '')
+    .normalize('NFKD')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .toLowerCase();
 }
 
-// --- Families (distinct per vendor) -------------------------------------
-export async function listFamilies(vendorId) {
-  const itemsCol = collection(db, 'priceLists', vendorId, 'items');
-  const snap = await getDocs(query(itemsCol, orderBy('familySlug'), limit(5000)));
-
-  const seen = new Map(); // slug -> label
-  snap.forEach(doc => {
-    const x = doc.data() || {};
-    if (x.familySlug) seen.set(x.familySlug, x.familyDisplay || x.familySlug);
-  });
-
-  const out = Array.from(seen.entries()).map(([slug, label]) => ({ slug, label }));
-  out.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
-  return out;
+/**
+ * Step 1: Get all families
+ * @returns {Array<{ value: string, label: string }>}
+ */
+export async function getFamilies() {
+  try {
+    const snapshot = await getDocs(query(collection(db, 'families')));
+    return snapshot.docs.map(doc => ({
+      value: doc.id,
+      label: doc.data().label,
+    }));
+  } catch (e) {
+    console.error("Error fetching families:", e);
+    return [];
+  }
 }
 
-// --- Sizes for a vendor + familySlug ------------------------------------
-export async function listSizes(vendorId, familySlug) {
-  const q = query(
-    collection(db, 'priceLists', vendorId, 'items'),
-    where('familySlug', '==', familySlug)
-  );
-  const snap = await getDocs(q);
-
-  const sizes = snap.docs.map(d => {
-    const x = d.data() || {};
-    return {
-      id: d.id,
-      sizeSlug: x.sizeSlug || d.id,
-      sizeLabel: x.sizeDisplay || x.sizeSlug || d.id,
-      unit: x.unit || '',
-      supplierPrice: x.basePrice ?? null,
-      markupPct: x.markupPct ?? null,
-      priceWithMarkup: x.priceWithMarkup ?? null,
-      raw: x,
-    };
-  });
-
-  // de-dup by sizeSlug
-  const by = new Map();
-  for (const s of sizes) if (!by.has(s.sizeSlug)) by.set(s.sizeSlug, s);
-
-  return Array.from(by.values()).sort(
-    (a, b) => a.sizeLabel.localeCompare(b.sizeLabel, undefined, { numeric: true })
-  );
+/**
+ * Step 2: Get all sizes for a given family
+ * @param {string} familySlug
+ * @returns {Array<{ value: string, label: string, vendorIds: string[] }>}
+ */
+export async function getSizesForFamily(familySlug) {
+  if (!familySlug) return [];
+  try {
+    const q = query(collection(db, 'itemVendorLookup'), where('familySlug', '==', familySlug));
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        value: doc.id, // This is the itemLookupId (e.g., 'spf-2_2x6-8')
+        label: data.sizeDisplay, // The pretty name (e.g., '2x6"-8'')
+        vendorIds: data.vendorIds || [],
+      };
+    });
+  } catch (e) {
+    console.error("Error fetching sizes for family:", familySlug, e);
+    return [];
+  }
 }
 
-// --- Aliases to match ItemPicker imports --------------------------------
-export const loadVendorFamilies = listFamilies;
-export const loadVendorSizes = listSizes;
+/**
+ * Step 3: Get vendor details from a list of IDs
+ * @param {string[]} vendorIds
+ * @returns {Array<{ value: string, label: string }>}
+ */
+export async function getVendorsForIds(vendorIds) {
+  if (!vendorIds || vendorIds.length === 0) return [];
+  try {
+    const q = query(collection(db, 'priceLists'), where(documentId(), 'in', vendorIds));
+    
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      value: doc.id,
+      label: doc.data().displayName,
+    }));
+  } catch (e) {
+    // This can fail if vendorIds is empty, handle gracefully
+    if (e.code === 'invalid-argument') {
+      console.warn("getVendorsForIds: No vendor IDs provided or empty array.");
+      return [];
+    }
+    console.error("Error fetching vendors for IDs:", vendorIds, e);
+    return [];
+  }
+}
+
+/**
+ * Step 4: Get the final, priced item from the vendor's list
+ * @param {{ familyLabel: string, sizeLabel: string, vendorId: string }}
+ * @returns {object | null} The full item document
+ */
+export async function getFinalItem({ familyLabel, sizeLabel, vendorId }) {
+  if (!familyLabel || !sizeLabel || !vendorId) return null;
+
+  const joinKey = `${familyLabel}|${sizeLabel}`;
+  const docId = slug(joinKey);
+
+  try {
+    const docRef = doc(db, 'priceLists', vendorId, 'items', docId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? docSnap.data() : null;
+  } catch (e) {
+    console.error("Error fetching final item:", { vendorId, docId }, e);
+    return null;
+  }
+}

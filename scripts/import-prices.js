@@ -1,10 +1,4 @@
 // scripts/import-prices.js
-// Usage:
-//   node scripts/import-prices.js data/data.csv data/prices.csv [data/another_vendor.csv ...]
-//
-// - data.csv      : export of your "Data" sheet (A = FAMILY/MATERIAL, B = SIZE)
-// - prices*.csv   : export(s) of PRICES-like sheets (have DESCRIPTION, SUPPLIER, UNIT, Supplier Price, MARKUP%, CK PRICE with markup, MATERIAL TYPE, LINK, ...)
-
 const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse/sync');
@@ -49,7 +43,6 @@ function normalizeKey(s = '') {
     .replace(/\s+/g, ' ')
     .replace(/″/g, '"')
     .replace(/’/g, "'")
-    // keep hyphens!
     .trim();
 }
 
@@ -57,7 +50,6 @@ function escapeRe(s = '') {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// very safe fallback if a DESCRIPTION isn't found in the Data map
 function splitFamilySizeFallback(description, familyFromSheet) {
   const desc = normalizeKey(description);
   let family = String(familyFromSheet || '').trim();
@@ -66,7 +58,6 @@ function splitFamilySizeFallback(description, familyFromSheet) {
     const size = desc.replace(rx, '').trim();
     return { family, size };
   }
-  // allow digits in family like SPF#2
   const m = desc.match(/([A-Za-z0-9#]+(?:\s+[A-Za-z0-9#]+)*)$/);
   if (m) {
     family = m[1].trim();
@@ -76,26 +67,25 @@ function splitFamilySizeFallback(description, familyFromSheet) {
   return { family: desc, size: desc };
 }
 
-// Canonicalize vendor names so you don't get many IDs for the same supplier
 function canonicalVendorName(s = '') {
   const name = String(s).trim();
-
-  // Builders FirstSource (BFS)
   if (/builders?\s*first/i.test(name) || /\bbfs\b/i.test(name)) {
     return { vendorId: 'bfs', displayName: 'Builders FirstSource (BFS)' };
   }
-
-  // Gillies & Prittie Warehouse
   if (/gillies?.*prittie/i.test(name)) {
     return { vendorId: 'gillies_prittie_warehouse', displayName: 'Gillies & Prittie Warehouse' };
   }
-
-  // Home Depot
   if (/home\s*depot/i.test(name)) {
     return { vendorId: 'home_depot', displayName: 'The Home Depot' };
   }
-
-  // Fallback: slug of whatever is there
+  // Added HardFine from your screenshot
+  if (/hardfine/i.test(name)) {
+    return { vendorId: 'hardfine', displayName: 'HardFine' };
+  }
+  // Added Lowes from your screenshot
+  if (/lowes/i.test(name)) {
+    return { vendorId: 'lowes', displayName: 'Lowe\'s' };
+  }
   const id = slug(name || 'unknown_supplier');
   return { vendorId: id, displayName: name || 'Unknown Supplier' };
 }
@@ -108,16 +98,13 @@ function loadDataMap(dataCsvPath) {
   }
   const rows = parse(fs.readFileSync(file), { columns: true, skip_empty_lines: true });
 
-  // headers can be 'MATERIAL' or 'FAMILY' for column A, and 'SIZE' for column B
   const map = new Map();
   let count = 0;
-
   for (const row of rows) {
     const family = String(pick(row, 'MATERIAL', 'FAMILY')).trim();
     const size   = String(pick(row, 'SIZE')).trim();
     if (!family || !size) continue;
-
-    const desc = normalizeKey(`${size} ${family}`); // equals PRICES.DESCRIPTION (normalized)
+    const desc = normalizeKey(`${size} ${family}`); 
     map.set(desc, { family, size });
     count++;
   }
@@ -127,7 +114,7 @@ function loadDataMap(dataCsvPath) {
 
 // --- Global maps/sets for lookup data ---
 const uniqueFamilies = new Map(); // Map<familySlug, familyDisplay>
-const itemVendorMap = new Map(); // Map<itemLookupId, Set<vendorId>>
+const itemVendorMap = new Map(); // Map<itemLookupId, { vendorSet, familyDisplay, sizeDisplay, ... }>
 
 // ---------- import a single prices CSV ----------
 async function importPricesCsv(pricesCsvPath, dataMap) {
@@ -149,7 +136,7 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
     const unit          = pick(row, 'UNIT');
     const supplierRaw   = pick(row, 'SUPPLIER') || 'Unknown Supplier';
     const materialType  = pick(row, 'MATERIAL TYPE') || '';
-    const familySheet   = pick(row, 'ADV', 'FAMILY', 'MATERIAL', 'GROUP', 'TYPE');
+    const familySheet   = pick(row, 'SHEATHING', 'ADV', 'FAMILY', 'MATERIAL', 'GROUP', 'TYPE'); // Added 'SHEATHING' from screenshot
 
     const supplierPrice = money(pick(row, 'Supplier Price'));
     const markupPct     = pct(pick(row, 'MARKUP%', 'MARKUP %'));
@@ -172,7 +159,6 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
 
     const joinKey = `${family}|${size}`;
 
-    // Compute final price with markup (if needed)
     const priceWithMarkup = (priceWithSheet != null && Number.isFinite(priceWithSheet))
       ? priceWithSheet
       : (supplierPrice != null && markupPct != null)
@@ -181,12 +167,10 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
 
     const { vendorId, displayName } = canonicalVendorName(supplierRaw);
 
-    // --- Prepare slugs and IDs ---
     const familySlug = slug(family);
     const sizeSlug = slug(size);
     const docId = slug(joinKey); // ID within vendor's items subcollection
     const itemLookupId = `${familySlug}_${sizeSlug}`; // Unique ID for the item across vendors
-
 
     const data = {
       familyDisplay: family,
@@ -203,21 +187,28 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       markupPct:  (markupPct != null) ? Number(markupPct) : null,
       priceWithMarkup: (priceWithMarkup != null) ? Number(priceWithMarkup) : null,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      source: 'sheet:PRICES',
+      source: `sheet:${path.basename(pricesCsvPath)}`, // Store which file it came from
     };
 
     if (familySlug && !uniqueFamilies.has(familySlug)) {
-             uniqueFamilies.set(familySlug, family); // Store slug -> display name
+             uniqueFamilies.set(familySlug, family); 
          }
          if (familySlug && sizeSlug) {
              if (!itemVendorMap.has(itemLookupId)) {
-                 itemVendorMap.set(itemLookupId, new Set());
+                 // **MODIFIED:** Store an object with display names
+                 itemVendorMap.set(itemLookupId, {
+                    vendorSet: new Set(),
+                    familyDisplay: family,
+                    sizeDisplay: size,
+                    familySlug: familySlug,
+                    sizeSlug: sizeSlug
+                 });
              }
-             itemVendorMap.get(itemLookupId).add(vendorId); 
+             // **MODIFIED:** Add vendor to the Set within the object
+             itemVendorMap.get(itemLookupId).vendorSet.add(vendorId); 
          }
 
     try {
-      // ensure vendor doc
       const vendorDoc = {
         displayName,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -227,7 +218,6 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       }
       await db.collection('priceLists').doc(vendorId).set(vendorDoc, { merge: true });
 
-      // upsert item
       await db.collection('priceLists').doc(vendorId).collection('items').doc(docId).set(data, { merge: true });
 
       written++;
@@ -245,7 +235,7 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
 // --- Function to write lookup collections ---
 async function writeLookupCollections() {
     console.log('\n[import] Writing lookup collections...');
-    const batchSize = 400; // Firestore batch limit is 500
+    const batchSize = 400; 
     let batch = db.batch();
     let count = 0;
     let batchNum = 1;
@@ -273,13 +263,21 @@ async function writeLookupCollections() {
 
     // Write Item-Vendor Lookups
     console.log(`[import] Writing ${itemVendorMap.size} item-vendor lookups to /itemVendorLookup...`);
-    batch = db.batch(); // Reset batch
+    batch = db.batch(); 
     count = 0;
     batchNum = 1;
-    for (const [itemLookupId, vendorSet] of itemVendorMap.entries()) {
-        if (vendorSet.size > 0) {
+    // **MODIFIED:** Loop over new object structure
+    for (const [itemLookupId, data] of itemVendorMap.entries()) {
+        if (data.vendorSet.size > 0) {
             const docRef = db.collection('itemVendorLookup').doc(itemLookupId);
-            batch.set(docRef, { vendorIds: Array.from(vendorSet) }, { merge: true }); // Store as an array
+            // **MODIFIED:** Save the full object with display names
+            batch.set(docRef, { 
+                vendorIds: Array.from(data.vendorSet),
+                familyDisplay: data.familyDisplay,
+                sizeDisplay: data.sizeDisplay,
+                familySlug: data.familySlug,
+                sizeSlug: data.sizeSlug
+            }, { merge: true });
             count++;
             if (count >= batchSize) {
                 await batch.commit();
