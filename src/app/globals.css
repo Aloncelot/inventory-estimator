@@ -1,28 +1,39 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Tailwind Custom Variant (keep if used) */
 @custom-variant dark (&:is(.dark *));
 
-/* === Theme tokens ======================================================= */
-.dark{
+/* === Base Variables & Theme ============================================ */
+:root {
+  /* Base Palette */
+  --turq-950: #021617;
+  --turq-900: #042023;
+  --turq-800: #073033;
+  --turq-700: #0a3e41;
+  --turq-600: #0d4f53;
+  --turq-500: #116367;
+  --turq-400: #158085; /* Used for focus ring */
+  --turq-300: #2fb7ad; /* Accent */
+  --turq-200: #6fd8d0;
+  --turq-100: #b9f0ea;
+
   /* Surfaces & borders */
-  --bg-900:#0a0f1a;   /* page background */
-  --bg-800:#0e1624;   /* cards */
-  --bg-750:#111c2d;   /* row alt */
-  --bg-700:#13243a;   /* row hover */
-  --border:#1f344f;
-  --shadow: 0 10px 25px rgba(0,0,0,.35);
+  --bg-page: #0a0f1a;
+  --bg-card: #0e1624;
+  --bg-row-alt: #111c2d;
+  --bg-row-hover: #13243a;
+  --bg-input: #0b1524;
+  --border-color: #1f344f;
+  --border-accent: rgba(47, 183, 173, 0.25);
+  --shadow-default: 0 10px 25px rgba(0, 0, 0, 0.35);
 
   /* Text */
-  --text-100:#e6f1ff;
-  --text-300:#a9c1d9;
+  --text-primary: #e6f1ff;
+  --text-secondary: #a9c1d9;
+  --text-accent: var(--turq-300);
 
-  /* Brand / accents */
-  --turq-300:#59d2c8;
-  --turq-400:#2fb7ad;
-  --turq-500:#21a399;
-
-  /* Dropdown (applies to native <select> + SearchableSelect menu) */
+  /* Dropdown */
   --dropdown-bg: #0f172a;
   --dropdown-fg: #e2f1ee;
   --dropdown-active: #155e75;
@@ -34,159 +45,492 @@
   --ring-gap: 2px;
   --ring-speed: 2.2s;
 
-  /* Aliases for legacy refs found in file (avoid undefined fallbacks) */
-  --surface-2: var(--bg-800);
-  --text-1: var(--text-100);
-  --brand-6: var(--turq-400);
+  color-scheme: dark;
 }
 
-html, body {
-  background: var(--bg-900);
-  color: var(--text-100);
+/* === Base Styles ======================================================= */
+html,
+body {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-size: 13px; /* Slightly smaller base font overall */
 }
 
-/* === Cards / layout ===================================================== */
-.ew-card{
-  background: var(--bg-800);
-  border:1px solid var(--border);
+html {
+  scrollbar-gutter: stable both-edges;
+}
+@supports not (scrollbar-gutter: stable) {
+  html {
+    overflow-y: scroll;
+  }
+}
+
+/* === App Layout ======================================================== */
+.app-shell {
+  --sidebar-w: 260px;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100dvh;
+  background: var(--bg-page);
+  transition: grid-template-columns 0.3s ease;
+}
+.app-shell.sb-collapsed {
+  --sidebar-w: 72px;
+}
+
+.app-main {
+  min-width: 0;
+}
+
+.app-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px; /* Spacing BETWEEN cards/sections */
+  padding: 16px; /* Padding around the content area */
+}
+
+/* === Sidebar =========================================================== */
+.sidebar {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  height: calc(100dvh - 48px);
+  margin: 24px 0 24px 8px; /* Reduced left margin */
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-default);
+  z-index: 90;
+  transition: width 0.3s ease;
+}
+
+.sidebar header {
+  display: flex;
+  align-items: center;
+  height: 72px;
+  padding: 0 20px 0 12px;
+  background: rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.sidebar header button.sidebar-burger {
+  width: 58px;
+  height: 58px;
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar header img {
+  /* Logo image */
+  height: 24px;
+  margin-left: 8px;
+}
+
+.sidebar .menu {
+  position: relative;
+  display: grid;
+  row-gap: 0;
+  align-content: start;
+  padding: 6px;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.sidebar .menu::after {
+  /* Selector bar */
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 56px;
+  width: 6px;
+  background: var(--turq-400);
+  transform: translateY(var(--top, 0px));
+  transition: transform 0.3s ease;
+  border-radius: 0 4px 4px 0;
+}
+
+.sidebar .menu .menu-item {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  height: 56px;
+  width: 100%;
+  font-size: 14px; /* Adjusted font size */
+  padding: 0 22px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  border-radius: 12px;
+  text-align: left;
+  transition: background 0.2s, opacity 0.2s;
+  overflow: hidden;
+}
+.sidebar .menu .menu-item:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+.sidebar .menu .menu-item.active {
+  background: rgba(0, 0, 0, 0.28);
+  opacity: 1;
+}
+.sidebar .menu .menu-item.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sidebar .menu .menu-ico {
+  /* Icon image/container */
+  width: 20px;
+  height: 20px;
+  text-align: center;
+  font-style: normal;
+  flex-shrink: 0;
+}
+
+.sidebar .menu .menu-label {
+  font-family: "Nova Flat", cursive;
+  color: #40e0d0;
+  transition: opacity 0.15s ease;
+  opacity: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-transform: capitalize;
+}
+.app-shell:not(.sb-collapsed) .sidebar .menu .menu-label {
+  opacity: 1;
+  transition-delay: 0.15s;
+}
+.app-shell.sb-collapsed .sidebar .menu .menu-label {
+  opacity: 0;
+  transition-delay: 0s;
+  display: none;
+}
+
+.app-shell.sb-collapsed .sidebar .menu .menu-item {
+  justify-content: center;
+  padding: 0;
+}
+
+/* === General Components ================================================= */
+
+/* Cards - Let app-content handle margin/gap between cards */
+.ew-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
-  box-shadow: var(--shadow);
-  padding: 10px;
-  margin-bottom: 10px;
-  overflow: visible;
+  box-shadow: var(--shadow-default);
+  padding: 12px; /* Standard internal padding */
+  /* Removed margin-bottom */
 }
 
-.ew-stack { margin-top: 10px; }
-
-.ew-title{
-  margin: 0 0 5px;
+/* Headings */
+.ew-h2,
+.ew-h3 {
+  font-family: "Nova Mono", monospace;
+  color: #40e0d0;
+  font-size: 16px; /* Standard heading size */
+  margin: 0 0 8px; /* Only margin-bottom */
   font-weight: 700;
-  letter-spacing:.2px;
-}
-.ew-title span{ color: var(--turq-300); }
-
-/* Brighten ONLY the Level header card (it’s the one that contains the Level total chip) */
-.ew-card:has(.ew-chip[title="Level total (Panels + Loose)"]) .ew-h2 {
-  color: #00fcef;           /* brighter/darker for emphasis */
   letter-spacing: 0.2px;
 }
-
-/* Optional: subtle band so the Level start/stop is obvious */
-.ew-card:has(.ew-chip[title="Level total (Panels + Loose)"]) {
-  background: linear-gradient(to bottom, rgba(41, 94, 94, 0.986), transparent);
-  border-color: rgb(0, 255, 255);
+.ew-h2 {
+  font-size: 18px; /* Slightly larger H2 */
 }
 
+/* Section Stack (Spacing INSIDE a card, between logical groups) */
+.ew-stack {
+  margin-top: 12px;
+} /* Only margin-top */
 
-.ew-grid{
-  display:grid;
+/* Grids (for table-like layouts) */
+.ew-grid {
+  display: grid;
   grid-template-columns: var(--cols);
-  gap:10px;
-  align-items:center;
+  gap: 10px;
+  align-items: center;
 }
 
-/* Section/row headers (unify .ew-head and .ew-rowhead styles) */
-.ew-head, .ew-rowhead{
-  display:grid;
-  gap:10px;
-  align-items:center;
-  background: linear-gradient(180deg, rgba(47,183,173,.15), transparent 70%);
-  border-bottom:1px solid var(--border);
-  padding: 8px 10px;
-  border-radius: 8px;
+/* Grid Header Row Styling */
+.ew-grid-header {
+  background: linear-gradient(
+    180deg,
+    rgba(47, 183, 173, 0.15),
+    transparent 70%
+  );
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 10px; /* Reduced padding */
+  border-radius: 8px 8px 0 0;
   font-weight: 600;
-  color: var(--turq-300);
+  color: var(--text-accent);
+}
+/* Style children of the header directly if needed */
+.ew-grid-header > * {
+  /* Example: Right align numeric headers */
+  /* &.num { text-align: right; } */
 }
 
-/* Rows */
-.ew-rows{
-  border-radius: 10px; 
+/* Grid Rows Container */
+.ew-rows {
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
 }
-.ew-row{
-  padding: 10px;
-  border-bottom:1px solid var(--border);
-  background: var(--bg-800);
-  overflow: visible;
+
+/* Individual Grid Row */
+.ew-row {
+  padding: 6px 10px; /* Reduced padding */
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+  transition: background-color 0.15s ease;
 }
-.ew-row:nth-child(even){ background: var(--bg-750); }
-.ew-row:hover{ background: var(--bg-700); }
+.ew-rows .ew-row:last-child {
+  border-bottom: none;
+}
+.ew-rows .ew-row:nth-child(even) {
+  background: var(--bg-row-alt);
+}
+.ew-rows .ew-row:hover {
+  background: var(--bg-row-hover);
+}
 
 /* Utilities */
-.t-right { text-align: right; }            /* keep this; remove .ew-right usage */
-.ew-inline { display:flex; gap:8px; align-items:end; }
-.ew-h2, .ew-h3 { margin:0 0 10px; font-weight:700; letter-spacing:.2px; }
-.ew-hint { font-size:12px; color: var(--text-300); margin-top:4px; }
-.ew-footer { display:flex; align-items:center; gap:8px; margin-top:12px; }
-.ew-total { margin-left:auto; font-weight:700; }
-.ew-right { text-align: right; }
-.ew-subtotalright { text-align: right; font-weight:700; }
-
-/* === Inputs / selects / buttons ======================================== */
-.ew-input, .ew-select{
-  width:100%;
-  padding:8px 10px;
-  background:#0b1524;
-  color:var(--text-100);
-  border:1px solid var(--border);
-  border-radius:8px;
-  outline:none;
+.ew-right {
+  text-align: right;
 }
-.ew-input:focus, .ew-select:focus{
+.ew-inline {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+}
+.ew-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.ew-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ew-footer .ew-right,
+.acc__summary .ew-right, /* Target summary totals when collapsed */
+.ew-card > div > .ew-right, /* Target total in main WallPanelsView header if it uses ew-right */
+.ew-card > div > .ew-chip[title*="total"] /* Target totals using ew-chip if applicable */ {
+  font-family: "Nova Mono", monospace;
+  color: #f18d5b; /* Existing orange color for subtotals */
+  /* font-size: inherit; */ /* Inherit size from parent */
+  /* font-weight: 700; */ /* Ensure boldness if needed */
+}
+
+/* Specific style for Level Total (if different size needed) */
+.ew-card > div > .ew-right[title*="Level total"],
+.ew-card > div > .ew-chip[title*="Level total"] {
+  font-size: 16px; /* Example: Make level total slightly larger */
+  font-weight: 800;
+}
+
+/* Grand Total in WallPanelsView Header */
+/* This might already be handled by the .ew-card > div > .ew-right rule above */
+/* If you used a specific class or different structure, adjust selector */
+.ew-card > div > .ew-right.nova-flat-turquoise {
+  /* If you kept the previous class */
+  /* Overrides for Grand Total if needed - Currently Nova Flat */
+  /* font-family: 'Nova Mono', monospace; */
+  /* color: #f18d5b; */
+  /* font-size: 1.25rem; */ /* Keep larger size? */
+}
+.ew-subtle {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.ew-money {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chip */
+.ew-chip {
+  font-family: inherit;
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(47, 183, 173, 0.14);
+  color: var(--text-accent);
+  border: 1px solid var(--border-accent);
+  font-size: 11px;
+  cursor: default;
+}
+
+/* === Inputs / Selects / Buttons ======================================== */
+.ew-input,
+.ew-select {
+  width: 100%;
+  padding: 5px 10px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  outline: none;
+  font-size: 13px; /* Match base font */
+  min-height: 34px;
+}
+.ew-input:focus,
+.ew-select:focus {
   border-color: var(--turq-400);
-  box-shadow: 0 0 0 3px rgba(47,183,173,.18);
+  box-shadow: 0 0 0 3px rgba(47, 183, 173, 0.18);
 }
 
-.ew-btn{
-  padding:8px 12px;
-  border-radius:10px;
-  border:1px solid var(--border);
-  background: linear-gradient(180deg,#102036,#0f1b2e);
-  color:var(--text-100);
-  cursor:pointer;
-}
-.ew-btn:hover{ border-color:var(--turq-400); color:#fff; }
-.ew-btn--turq{
-  background: linear-gradient(180deg,#143a40,#113237);
-  border-color:#1b4f56;
-}
-.ew-subtle{ color:var(--text-300); font-size:12px; }
-
-/* Money / chip */
-.ew-money{ font-variant-numeric: tabular-nums; }
-.ew-chip{
-  display:inline-block; padding:2px 8px; border-radius:999px;
-  background: rgba(47,183,173,.14);
-  color: var(--turq-300);
-  border:1px solid rgba(47,183,173,.25);
-  font-size:12px;
+input[type="number"].ew-input {
+  text-align: right;
 }
 
-/* Responsive collapsing grid columns */
-@media (max-width: 980px){
-  .ew-grid[style*="--cols"]{ grid-template-columns: 1fr !important; }
+.ew-btn {
+  padding: 5px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: linear-gradient(180deg, #102036, #0f1b2e);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.25;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
-
-/* === Native <select> theming (kept for places you still use it) ========= */
-select {
-  background-color: var(--surface-2);
-  color: var(--text-1);
-  border: 1px solid var(--dropdown-border);
-}
-select option {
-  background-color: var(--dropdown-bg);
-  color: var(--dropdown-fg);
-}
-select option:checked,
-select option:hover {
-  background-color: var(--dropdown-active);
+.ew-btn:hover {
+  border-color: var(--turq-400);
   color: #fff;
 }
-select:focus {
-  outline: 2px solid var(--brand-6);
-  box-shadow: 0 0 0 3px rgba(20,184,166,0.25);
+
+.ew-icon-btn {
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
 }
 
-/* === Fancy focus ring (inputs/selects/buttons) ========================== */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* === SearchableSelect (Combobox) ======================================= */
+.combo {
+  position: relative;
+  z-index: 1;
+}
+.combo-input.ew-select {
+  padding-right: 28px;
+}
+.combo-caret {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--text-secondary);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.combo[aria-expanded="true"] {
+  z-index: 1000;
+}
+.combo[aria-expanded="true"] .combo-list {
+  z-index: 1001;
+}
+
+.combo-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: max(100%, 240px);
+  background: var(--dropdown-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  padding: 6px;
+  margin: 0;
+  display: none;
+  max-height: min(320px, 45vh);
+  overflow: auto;
+  transform-origin: top;
+}
+.combo[aria-expanded="true"] .combo-list {
+  display: block;
+  animation: dropdown-enter 0.22s ease forwards;
+}
+
+.combo .combo-option {
+  list-style: none;
+  padding: 6px 10px;
+  margin: 2px 0;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  background: transparent;
+  opacity: 0;
+  transform: translateY(4px);
+  animation: dropdown-item-enter 0.22s ease forwards;
+}
+.combo .combo-option:nth-child(1) {
+  animation-delay: 0s;
+}
+.combo .combo-option:nth-child(2) {
+  animation-delay: 0.04s;
+}
+.combo .combo-option:nth-child(3) {
+  animation-delay: 0.08s;
+}
+.combo .combo-option:nth-child(4) {
+  animation-delay: 0.12s;
+}
+.combo .combo-option:nth-child(5) {
+  animation-delay: 0.16s;
+}
+
+.combo .combo-option:hover,
+.combo .combo-option[aria-selected="true"],
+.combo .combo-option[data-active="true"] {
+  background: var(--turq-400);
+}
+
+.combo .combo-option.danger {
+  color: #f87171;
+}
+.combo .combo-option.danger:hover {
+  background: #b91c1c;
+  color: white;
+}
+
+.combo .combo-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border-color);
+}
+.combo-empty {
+  padding: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* === Fancy Focus Ring (Keep if used) ================================== */
 .focus-anim {
   position: relative;
   outline: none;
@@ -200,616 +544,220 @@ select:focus {
   inset: calc(var(--ring-gap) * -1);
   border-radius: inherit;
   padding: var(--ring-size);
-  background:
-    conic-gradient(from var(--ring-angle,0deg),
+  background: conic-gradient(
+    from var(--ring-angle, 0deg),
     transparent 0 330deg,
-    color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg);
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
+    color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
-          mask-composite: exclude;
+  mask-composite: exclude;
   animation: ring-spin var(--ring-speed) linear infinite;
   pointer-events: none;
   z-index: 1;
 }
 .focus-anim:focus-visible,
 .focus-anim:focus {
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--ring-color) 35%, #000 65%),
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ring-color) 35%, #000 65%),
     0 0 14px -2px color-mix(in oklab, var(--ring-color) 60%, #000 40%);
 }
-@keyframes ring-spin { to { --ring-angle: 360deg; } }
+@keyframes ring-spin {
+  to {
+    --ring-angle: 360deg;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .focus-anim:focus-visible::after,
   .focus-anim:focus::after {
-    animation: none;
-    background:
-      conic-gradient(from 0deg,
-      transparent 0 330deg,
-      color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg);
+    animation: none; /* ... */
   }
 }
 
-/* For wrappers around elements that don't expose :focus nicely */
-.focus-anim-wrap {
-  position: relative;
-  border-radius: 10px;
-  isolation: isolate;
-}
-.focus-anim-wrap:focus-within {
-  box-shadow:
-    0 0 0 2px rgba(48,221,216,0.9),
-    0 0 0 6px rgba(48,221,216,0.22);
-  transition: box-shadow 120ms ease;
-}
-.focus-anim-wrap:focus-within::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    conic-gradient(from var(--orbit, 0deg),
-    rgba(48,221,216,0) 0deg,
-    rgba(48,221,216,0.35) 60deg,
-    rgba(48,221,216,0) 120deg);
-  animation: orbit 1.6s linear infinite;
-  opacity:.9;
-  mix-blend-mode: screen;
-}
-@keyframes orbit { to { --orbit: 360deg; } }
-
-/* === Control groups ===================================================== */
+/* === Control Groups ==================================================== */
 .controls4 {
-  display:grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap:12px; align-items:end;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  align-items: end;
 }
 .controls2 {
-  display:grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
-  gap:12px; align-items:end;
-  margin-top:8px;
-}
-.controls4 > label, .controls2 > label { display:flex; flex-direction:column; gap:6px; }
-
-/* === Number inputs: remove spinners ==================================== */
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-input[type="number"] { -moz-appearance: textfield; }
-
-/* === SearchableSelect (combobox) ======================================= */
-.combo { position: relative; z-index: 1;}
-.combo-input { padding-right: 28px; } /* room for caret */
-.combo-caret{
-  position:absolute; top:50%; right:10px;
-  width:0; height:0;
-  border-left:5px solid transparent;
-  border-right:5px solid transparent;
-  border-top:6px solid var(--text-300, #667);
-  transform: translateY(-50%);
-  pointer-events:none;
-}
-.combo[aria-expanded="true"] {
-  z-index: 1000000;             /* higher than any sibling */
-}
-.combo[aria-expanded="true"] .combo-list {
-  z-index: 1000001;
-}
-/* Dropdown menu uses the same theme vars as native <select> */
-.combo-list{
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: max(100%, 240px);
-
-  background: var(--dropdown-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 12px 30px rgba(0,0,0,.25);
-
-  padding: 6px;
-  margin: 0;
-
-  display: none;                     /* shown when expanded (see below) */
-  max-height: min(320px, 45vh);
-  overflow: auto;
-
-  /* subtle inertial feel */
-  transform-origin: top;
-}
-.combo[aria-expanded="true"] .combo-list {
-  display: block;
-  animation: dropdown-enter .22s ease forwards;
-}
-/* list items */
-.combo .combo-option {
-  list-style: none;
-  padding: 8px 10px;
-  margin: 2px 0;
-  border-radius: 8px;
-  color: var(--text-100);
-  line-height: 1.25rem;
-  cursor: pointer;
-  background: transparent;
-
-  /* start hidden for stagger effect */
-  opacity: 0;
-  transform: translateY(4px);
-  animation: dropdown-item-enter .22s ease forwards;
-}
-/* stagger like the menu demo (first few items) */
-.combo .combo-option:nth-child(1) { animation-delay: .00s; }
-.combo .combo-option:nth-child(2) { animation-delay: .04s; }
-.combo .combo-option:nth-child(3) { animation-delay: .08s; }
-.combo .combo-option:nth-child(4) { animation-delay: .12s; }
-.combo .combo-option:nth-child(5) { animation-delay: .16s; }
-
-/* hover/active/selected states */
-.combo .combo-option:hover,
-.combo .combo-option[aria-selected="true"],
-.combo .combo-option[data-active="true"] {
-  background: var(--turq-400);
-}
-/* optional tiny divider style if you use them */
-.combo .combo-divider {
-  height: 1px;
-  margin: 6px 4px;
-  background: var(--border);
-}
-
-/* search input (if your dropdown has one at the top) */
-.combo .combo-filter,
-.combo .combo input[type="search"] {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin: 4px 0 6px 0;
-  background: var(--bg-700);
-  color: var(--text-100);
-  outline: none;
-}
-.combo .combo-filter:focus,
-.combo .combo input[type="search"]:focus {
-  border-color: var(--turq-300);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--turq-300) 35%, transparent);
-}
-.combo-option{
-  padding:8px 10px; cursor:pointer; line-height:1.25;
-  color: var(--dropdown-fg);
-}
-.combo-option.active,
-.combo-option[aria-selected="true"],
-.combo-option:hover {
-  background: color-mix(in oklab, var(--dropdown-active) 60%, black 0%);
-}
-.combo-empty{
-  padding:10px; color: var(--text-300);
-}
-
-/* === Responsive niceties ================================================= */
-@media (max-width: 980px){
-  /* already collapsing grid above; keep other small adjustments here if needed */
-}
-
-/* === App shell sizing (sidebar width reacts to collapse) ================== */
-.app-shell { --sidebar-w: 260px; }
-.app-shell.sb-collapsed { --sidebar-w: 72px; }
-
-.app-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr; /* Defines sidebar and main columns */
-  min-height: 100dvh;
-  background: var(--bg-900);
-  /* Ensure transition for smoother collapse/expand */
-  transition: grid-template-columns 0.3s ease;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin-top: 8px;
 }
-
-.app-main {
-  min-width: 0; /* Crucial: Allows main content to shrink */
-  /* overflow-x: hidden; */ /* Optional: Prevents accidental horizontal scroll */
-}
-.app-content { display: grid; gap: 0px; padding: 15px; }
-
-/* === Sidebar (screenshot style) ========================================== */
-.sidebar {
-  position: sticky; /* Keeps sidebar in view while scrolling */
-  top: 24px;
-  align-self: start; /* Aligns to top of grid area */
-  height: calc(100dvh - 48px);
-  margin: 24px 0 24px 0;
+.controls4 > label,
+.controls2 > label {
   display: flex;
   flex-direction: column;
-  width: var(--sidebar-w); /* Width controlled by variable */
-  border-radius: 16px;
-  background: rgb(0 0 0 / 40%);    /* glassy */
-  border: 1px solid var(--border);
-  backdrop-filter: blur(20px);
-  box-shadow: var(--shadow);
-  z-index: 90; /* Make sure this doesn't conflict strangely */
-  transition: width 0.3s ease; /* Add transition for width change */
-}
-
-/* header: burger + logo */
-.sidebar header {
-  display: flex;
-  align-items: center;
-  height: 72px;
-  padding: 0 1.25rem 0 .75rem;
-  background: rgb(0 0 0 / 8%);
-  border-bottom: 1px solid var(--border);
-}
-.sidebar header button.sidebar-burger {
-  width: 58px;
-  height: 58px;
-  background: transparent;
-  border: 0;
-  color: var(--text-100);
-  cursor: pointer;
-  font-size: 18px;
-}
-.sidebar header img { height: 24px; }
-
-/* menu list */
-.sidebar .menu {
-  position: relative;
-  display: grid;
-  padding: 6px;
-  transition: opacity 0.15s ease; /* Controls how fast the label fades in/out */
-  opacity: 1; /* Default opacity when potentially visible */
-  white-space: nowrap; /* Prevent wrapping during transition */
-  overflow: hidden; /* Hide overflow during transition */
-}
-
-/* the animated selection bar */
-.sidebar .menu::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 56px;
-  width: 6px;
-  background: var(--turq-400, #6199f7);
-  translate: 0 var(--top);
-  transition: 0.3s;
-  border-radius: 0 4px 4px 0;
-}
-
-/* menu buttons */
-.sidebar .menu .menu-item {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  height: 56px;
-  width: var(--sidebar-w);
-  font-size: 16px;
-  padding: 0 22px;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  opacity: .75;
-  border-radius: 12px;
-  text-align: left;
-  transition: background .2s, opacity .2s;
-}
-.sidebar .menu .menu-item:hover { background: rgb(0 0 0 / 20%); }
-.sidebar .menu .menu-item.active {
-  background: rgb(0 0 0 / 28%);
-  opacity: 1;
-}
-.sidebar .menu .menu-item.disabled { opacity: .55; cursor: not-allowed; }
-
-/* icon + label */
-.sidebar .menu .menu-ico { width: 20px; text-align: center; font-style: normal; }
-.sidebar .menu .menu-label { 
-  font-family: 'Nova Flat', cursive;
-  color: #40E0D0; /* Bright turquoise */
-  transition: opacity 0.15s ease;
-  opacity: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-transform: capitalize;}
-
-/* icons-only when collapsed */
-.app-shell.sb-collapsed .sidebar .menu .menu-item { justify-content: center; }
-.app-shell.sb-collapsed .sidebar .menu .menu-label {
-  display: none;}
-
-/* Styles for the label when sidebar IS NOT collapsed (i.e., expanded or expanding) */
-.app-shell:not(.sb-collapsed) .sidebar .menu .menu-label {
-  opacity: 1; /* Make it visible */
-  /* Delay the fade-in: start slightly after the sidebar expansion begins */
-  /* Adjust 0.15s delay to sync with sidebar width transition */
-  transition-delay: 0.15s;
-}
-
-/* keep our combobox list on top */
-.combo-list { z-index: 2000; }
-
-.side-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
-}
-.side-toggle { padding: 6px 8px; }
-.side-title { font-weight: 700; color: var(--turq-300); letter-spacing: .2px; }
-
-.side-menu {
-  display: grid;
   gap: 4px;
-  padding: 10px;
-  overflow: auto;
 }
 
-.side-item {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-100);
-  border: 1px solid transparent;
-  text-align: left;
-  cursor: pointer;
-}
-.side-item:hover { background: var(--bg-750); border-color: var(--border); }
-.side-item.active { background: rgba(47,183,173,.14); border-color: rgba(47,183,173,.25); }
-.side-item.disabled { opacity: .55; cursor: not-allowed; }
-
-.side-ico { width: 20px; text-align: center; }
-
-.side-foot {
-  padding: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.card { padding: 12px; background:#0c2b33; border-radius:12px; color:#e9f6f8; margin-top:12px; }
-.card-title { margin:0 0 10px; font-weight:700; }
-.fld { display:flex; flex-direction:column; gap:6px; }
-.fld input { padding:8px; border-radius:8px; border:1px solid #1a515d; background:#0c2b33; color:#e9f6f8; }
-.sum-row { display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding-top:10px; border-top:1px dashed #1a515d; font-size:1.05rem; }
-.sum-label { opacity:.9; }
-.sum-value { font-weight:800; }
-
-
-/* globals.css (optional helpers) */
-.ew-chip { padding:6px 10px; border:1px solid #1a515d; border-radius:999px; background:#0c2b33; color:#e9f6f8; cursor:pointer; }
-.ew-chip:hover { filter:brightness(1.1); }
-
-/* === Generic table styling for estimators ================================= */
+/* === Generic Table Styling ============================================= */
 .tbl {
   width: 100%;
-  border-collapse: collapse;          /* consistent column widths */
-  table-layout: fixed;                /* respects <colgroup> widths */
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
 }
-
 .tbl th,
 .tbl td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-color);
   vertical-align: middle;
 }
-
 .tbl thead th {
-  text-align: left;                   /* default for text columns */
-  color: var(--turq-300);
+  text-align: left;
+  color: var(--text-accent);
   font-weight: 700;
-  background: linear-gradient(180deg, rgba(47,183,173,.10), transparent 70%);
+  background: linear-gradient(180deg, rgba(47, 183, 173, 0.1), transparent 70%);
 }
-
 .tbl tfoot th,
 .tbl tfoot td {
   font-weight: 700;
-  background: rgba(0,0,0,.06);
+  background: rgba(0, 0, 0, 0.06);
 }
-
-/* Right-align numeric columns (headers + cells) */
 .tbl .num {
   text-align: right;
-  font-variant-numeric: tabular-nums; /* keeps digits aligned */
+  font-variant-numeric: tabular-nums;
 }
-
-/* Optional: zebra only for body rows (not head/foot) */
-.tbl tbody tr:nth-child(even) { background: var(--bg-750); }
-.tbl tbody tr:hover { background: var(--bg-700); }
-
+.tbl tbody tr:nth-child(even) {
+  background: var(--bg-row-alt);
+}
+.tbl tbody tr:hover {
+  background: var(--bg-row-hover);
+}
 .ew-total-panels {
-  color: #FF7A00;      /* bright orange */
-  font-weight: 700;    /* optional: make it pop */
+  color: #ff7a00;
+  font-weight: 700;
 }
 
-/* AccordionSection */
-.acc { margin: 0 0 12px 0; }
+/* === Accordion Section ================================================= */
+.acc {
+  /* Let app-content handle margin */
+}
 .acc__header {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 6px;
+  /* Styles applied via inline style in component if not using 'bar' */
 }
 .acc__button {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 4px 8px; line-height: 1;
-  background: var(--bg, transparent); border: 1px solid var(--border);
-  border-radius: 8px; cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
 }
-.acc__chev { width: 1.1em; }
-.acc__title { font: inherit; font-weight: 700; }
-.acc__actions { margin-left: auto; }
+.acc__chev {
+  width: 16px;
+  height: 16px; /* Explicit size for img */
+}
+.acc__title {
+  font: inherit;
+  font-weight: 700;
+}
+.acc__actions {
+  /* No specific styles needed if using space-between on parent */
+}
 .acc__summary {
-  padding: 12px; border: 1px solid var(--border); border-radius: 10px;
-}
-.acc__body {
-  overflow: clip;           /* prevents scrollbars during animation */
-  transition: max-height .35s ease, opacity .2s ease;
-  max-height: 0; opacity: 0;
-  border: 1px solid var(--border); border-radius: 12px;
+  /* Header shown when collapsed */
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 13px;
 }
 
-/* But if a combobox is expanded inside, allow overflow so the menu can escape */
+.acc__body {
+  overflow: hidden;
+  transition: max-height 0.35s ease, opacity 0.2s ease, margin-top 0.35s ease,
+    border-top-width 0.35s ease; /* Added border transition */
+  max-height: 0;
+  opacity: 0;
+  border: 1px solid var(--border-color);
+  border-top-width: 0; /* Start with no top border */
+  border-radius: 0 0 12px 12px;
+  margin-top: 0;
+}
+.acc--open .acc__body {
+  max-height: 1000vh; /* Large value for expansion */
+  opacity: 1;
+  overflow: visible;
+  margin-top: 0; /* No negative margin needed */
+  border-top-width: 1px; /* Show top border when open */
+}
 .acc__body:has(.combo[aria-expanded="true"]) {
   overflow: visible;
 }
-
-
-.acc__bodyInner { padding: 16px; }
-
-/* Reserve vertical scrollbar gutter so layout width never changes */
-html {
-  scrollbar-gutter: stable both-edges;   /* modern */
+.acc__bodyInner {
+  padding: 16px;
 }
 
-@supports not (scrollbar-gutter: stable) {
-  /* Fallback: always show a vertical scrollbar track */
-  html { overflow-y: scroll; }
+/* === Summary Component Styles (Legacy/Specific - check usage) ========== */
+/* These might be duplicates or overrides - review if Summary.jsx uses ew-card */
+/* .card { padding: 12px; background:#0c2b33; border-radius:12px; color:#e9f6f8; margin-top:12px; } */
+/* .card-title { margin:0 0 10px; font-weight:700; } */
+.fld {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* .fld input { padding:8px; border-radius:8px; border:1px solid #1a515d; background:#0c2b33; color:#e9f6f8; } */ /* Duplicates .ew-input? */
+.sum-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #1a515d;
+  font-size: 1.05em; /* Use em */
+}
+.sum-label {
+  opacity: 0.9;
+}
+.sum-value {
+  font-weight: 800;
 }
 
-:root {
-  /* Teal/Turquoise scale */
-  --turq-950: #021617;
-  --turq-900: #042023;
-  --turq-800: #073033;
-  --turq-700: #0a3e41;
-  --turq-600: #0d4f53;
-  --turq-500: #116367;
-  --turq-400: #158085;
-  --turq-300: #2fb7ad;  /* you already reference this */
-  --turq-200: #6fd8d0;
-  --turq-100: #b9f0ea;
-
-  /* App surfaces */
-  --bg:        var(--turq-900);
-  --card:      var(--turq-800);
-  --surface:   var(--turq-700);
-  --panel:     var(--turq-800);
-  --border:    #2fb7ad33;
-
-  /* Text & accents */
-  --text:      #e6fffb;
-  --text-weak: #bfe7e4;
-  --accent:    var(--turq-300);
-  --accent-strong: #19afa4;
-
-  color-scheme: dark;
+/* === Animations ======================================================== */
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: scaleY(0.98) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dropdown-item-enter {
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-/* Themed scrollbars (Firefox + WebKit) */
-* { scrollbar-width: thin; scrollbar-color: var(--turq-500) transparent; }         /* Firefox */
-::-webkit-scrollbar { width: 12px; height: 12px; }                                  /* WebKit */
-::-webkit-scrollbar-track { background: transparent; }
+/* === Themed Scrollbars ================================================= */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--turq-500) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
   background-color: var(--turq-600);
   border-radius: 8px;
-  border: 3px solid transparent;  /* creates a “pill” */
+  border: 2px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background-color: var(--turq-400); }
-
-/* icon-only button */
-.ew-icon-btn {
-  padding: 4px 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Animations */
-@keyframes dropdown-enter {
-  from { opacity: 0; transform: scaleY(.98) translateY(6px); }
-  to   { opacity: 1; transform: none; }
-}
-@keyframes dropdown-item-enter {
-  to { opacity: 1; transform: none; }
-}
-
-/* Optional: pretty scrollbar for the dropdown only */
-.combo .combo-list::-webkit-scrollbar { width: 10px; }
-.combo .combo-list::-webkit-scrollbar-track { background: transparent; }
-.combo .combo-list::-webkit-scrollbar-thumb {
-  background: var(--turq-600);
-  border-radius: 10px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-/* Add these overrides to your globals.css */
-
-/* Reduce padding on rows and headers */
-.ew-row,
-.ew-head,
-.ew-rowhead,
-.tbl th,
-.tbl td {
-  padding-top: 6px;    /* Reduced from 10px or 8px */
-  padding-bottom: 6px; /* Reduced from 10px or 8px */
-}
-
-/* Reduce padding on inputs, selects, and buttons */
-.ew-input,
-.ew-select,
-.ew-btn {
-  padding-top: 5px;    /* Reduced from 8px */
-  padding-bottom: 5px; /* Reduced from 8px */
-}
-.ew-btn {
-  padding-left: 10px;  /* Slightly reduced */
-  padding-right: 10px; /* Slightly reduced */
-}
-.ew-icon-btn {
-  padding: 4px 6px; /* Slightly tighter */
-}
-
-
-/* Slightly smaller base font size for cards/sections */
-.ew-card, .tbl {
-  font-size: 0.825rem;
-  /* Slightly smaller than default small (0.875rem) */
-  /* If using Tailwind, you might use text-xs (0.75rem) or adjust base size */
-}
-
-/* Adjust title sizes if needed */
-.ew-title, .ew-h2, .ew-h3 {
-  font-size: 1rem; /* Adjust as needed */
-  margin-bottom: 8px; /* Slightly reduced */
-}
-
-/* Adjust hint text size */
-.ew-hint {
-  font-size: 0.7rem; /* Make hints even smaller */
-}
-
-/* Adjust chip size */
-.ew-chip {
-  padding: 1px 6px; /* Tighter padding */
-  font-size: 0.7rem; /* Smaller font */
-}
-
-/* Adjust Accordion button padding */
-.acc__button {
-    padding: 3px 6px;
-}
-
-/* Adjust ItemPicker/SearchableSelect input height */
-.ew-select.combo-input {
-  min-height: 32px; /* Adjust if needed, based on reduced padding */
-}
-
-
-.nova-flat-turquoise {
-  font-family: 'Nova Flat', cursive;
-  color: #40E0D0; 
-}
-
-.ew-h2.nova-flat-turquoise {
-  /* You might add !important if needed, but try without first */
-  /* color: #40E0D0 !important; */
-}
-
-.ew-chip.nova-flat-turquoise {
-   font-weight: 700; /* Ensure it stays bold if needed */
-   /* Add other specific overrides for the chip if necessary */
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--turq-400);
 }

@@ -1,30 +1,27 @@
 // src/components/ui/AccordionSection.jsx
-'use client';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+"use client";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 export default function AccordionSection({
   title,
-  // Use `bar` to render the top row for BOTH states (recommended).
-  // It can be a node or a function receiving { open, toggle, id }.
   bar,
-  // Legacy props (fallback if `bar` not provided):
-  summary,      // node or (ctx)=>node  (shown only when collapsed)
-  header,       // node or (ctx)=>node  (shown only when expanded)
+  summary, // node or (ctx)=>node  (shown only when collapsed)
+  header, // node or (ctx)=>node  (shown only when expanded)
   actions,
   defaultOpen = true,
   open: openProp,
   onOpenChange,
   hideHeaderWhenCollapsed = false, // ignored if `bar` is provided
   children,
-  className = '',
+  className = "",
 }) {
-  const isControlled = typeof openProp === 'boolean';
+  const isControlled = typeof openProp === "boolean";
   const [uncontrolled, setUncontrolled] = useState(!!defaultOpen);
   const open = isControlled ? openProp : uncontrolled;
 
   const setOpen = useCallback(
     (next) => {
-      const value = typeof next === 'function' ? next(open) : !!next;
+      const value = typeof next === "function" ? next(open) : !!next;
       if (!isControlled) setUncontrolled(value);
       onOpenChange?.(value);
     },
@@ -40,28 +37,41 @@ export default function AccordionSection({
     const el = bodyRef.current;
     if (!el) return;
     const h = el.scrollHeight;
-    el.style.maxHeight = open ? `${h}px` : '0px';
-    el.style.opacity = open ? '1' : '0';
-    el.setAttribute('aria-hidden', open ? 'false' : 'true');
+    el.style.maxHeight = open ? `${h}px` : "0px";
+    el.style.opacity = open ? "1" : "0";
+    el.setAttribute("aria-hidden", open ? "false" : "true");
   }, [open, children]);
 
   const resolve = (nodeOrFn) =>
-    typeof nodeOrFn === 'function' ? nodeOrFn({ open, toggle, id }) : nodeOrFn;
+    typeof nodeOrFn === "function" ? nodeOrFn({ open, toggle, id }) : nodeOrFn;
 
   const barNode = resolve(bar);
   const summaryNode = resolve(summary);
   const headerNode = resolve(header);
 
   return (
-    <section className={`acc ${open ? 'acc--open' : ''} ${className}`}>
+    <section className={`acc ${open ? "acc--open" : ""} ${className}`}>
       {barNode ? (
-        // One unified row for both states (same wrapper)
         <div className="acc__summary">{barNode}</div>
       ) : (
         <>
           {(open || !hideHeaderWhenCollapsed) && (
-            <div className="acc__header" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <div
+              className="acc__header"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
                 {open && headerNode ? (
                   headerNode
                 ) : (
@@ -71,15 +81,18 @@ export default function AccordionSection({
                     aria-expanded={open}
                     aria-controls={id}
                     onClick={toggle}
-                    title={open ? 'Collapse' : 'Expand'}
+                    title={open ? "Collapse" : "Expand"}
                   >
                     <img
-                      src={open ? '/icons/down.png' : '/icons/minimize.png'} 
-                      alt={open ? 'Collapse section' : 'Expand section'} 
-                      width={16} 
-                      height={16} 
+                      src={open ? "/icons/down.png" : "/icons/minimize.png"}
+                      alt={open ? "Collapse section" : "Expand section"}
+                      width={16}
+                      height={16}
                       className="acc__chev"
-                      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                      style={{
+                        display: "inline-block",
+                        verticalAlign: "middle",
+                      }}
                     />
                     <span className="acc__title">{title}</span>
                   </button>
@@ -89,7 +102,9 @@ export default function AccordionSection({
             </div>
           )}
 
-          {!open && summaryNode ? <div className="acc__summary">{summaryNode}</div> : null}
+          {!open && summaryNode ? (
+            <div className="acc__summary">{summaryNode}</div>
+          ) : null}
         </>
       )}
 
