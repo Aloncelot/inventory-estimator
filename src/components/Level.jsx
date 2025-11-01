@@ -1,19 +1,19 @@
 // src/components/Level.jsx
-'use client';
+"use client";
 
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import ExteriorWalls from '@/components/ExteriorWalls';
-import InteriorWalls from '@/components/InteriorWalls';
-import LoosePanelMaterials from '@/components/LoosePanelMaterials';
-import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
-import AccordionSection from '@/components/ui/AccordionSection';
-import RemoveButton from './ui/RemoveButton';
-import PanelNails from '@/components/PanelNails';
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import ExteriorWalls from "@/components/ExteriorWalls";
+import InteriorWalls from "@/components/InteriorWalls";
+import LoosePanelMaterials from "@/components/LoosePanelMaterials";
+import { useLocalStorageJson } from "@/hooks/useLocalStorageJson";
+import AccordionSection from "@/components/ui/AccordionSection";
+import RemoveButton from "./ui/RemoveButton";
+import PanelNails from "@/components/PanelNails";
 
 export default function Level({
-  id,           // required: stable per-level id
-  name,         // e.g. "Level 1"
-  onRemove,     // optional: () => void
+  id, // required: stable per-level id
+  name, // e.g. "Level 1"
+  onRemove, // optional: () => void
   onLooseTotal = () => {},
   onLevelTotal = () => {},
   onExteriorPanelLenChange,
@@ -26,61 +26,86 @@ export default function Level({
   levelsCount,
   panelsTotalAllSections,
   onLooseGeneralChange,
-}) {  
+}) {
   // UI (collapsed persisted per level)
-  const [ui, setUi] = useLocalStorageJson(`inv:v1:level-ui:${id}`, { collapsed: false });
+  const [ui, setUi] = useLocalStorageJson(`inv:v1:level-ui:${id}`, {
+    collapsed: false,
+  });
   const collapsed = !!ui.collapsed;
-  const setCollapsed = (c) => setUi(prev => ({ ...prev, collapsed: !!c }));
-  
+  const setCollapsed = (c) => setUi((prev) => ({ ...prev, collapsed: !!c }));
+
   // Live totals reported by wrappers
   const [extTotals, setExtTotals] = useState(null);
   const [intTotals, setIntTotals] = useState({
-    int2x6LF: 0, int2x4LF: 0, intPlatePieces: 0, intPTLFSum: 0,
-    panelsSubtotal: 0, // sum of InteriorWallGroup groupSubtotal for this level    
+    int2x6LF: 0,
+    int2x4LF: 0,
+    intPlatePieces: 0,
+    intPTLFSum: 0,
+    panelsSubtotal: 0, // sum of InteriorWallGroup groupSubtotal for this level
   });
   const [panelNailsSubtotal, setPanelNailsSubtotal] = useState(0);
 
   // derive once per level
-const panelPtBoards = useMemo(() =>
-  Math.ceil(Number(extTotals?.extPanelPtBoards || 0)) +
-  Math.ceil(Number(intTotals?.intPanelPtBoards || 0)),
-  [extTotals?.extPanelPtBoards, intTotals?.intPanelPtBoards]
-);
+  const panelPtBoards = useMemo(
+    () =>
+      Math.ceil(Number(extTotals?.extPanelPtBoards || 0)) +
+      Math.ceil(Number(intTotals?.intPanelPtBoards || 0)),
+    [extTotals?.extPanelPtBoards, intTotals?.intPanelPtBoards]
+  );
 
-// Sum of ALL bottom plate pieces used ON PANELS for this level
-  const totalBottomPlatePiecesPanel = useMemo(() =>
-    Math.ceil(Number(extTotals?.extBottomPlatePiecesPanel || 0)) +
-    Math.ceil(Number(intTotals?.intBottomPlatePiecesPanel || 0)),
+  // Sum of ALL bottom plate pieces used ON PANELS for this level
+  const totalBottomPlatePiecesPanel = useMemo(
+    () =>
+      Math.ceil(Number(extTotals?.extBottomPlatePiecesPanel || 0)) +
+      Math.ceil(Number(intTotals?.intBottomPlatePiecesPanel || 0)),
     [extTotals?.extBottomPlatePiecesPanel, intTotals?.intBottomPlatePiecesPanel]
   );
 
   const [looseSubtotal, setLooseSubtotal] = useState(0);
   const [extPanelLenFt, setExtPanelLenFt] = useState(0);
-  
-  const handlePanelLenFromExterior = useCallback((len) => {
-    const val = Number(len) || 16;
-    setExtPanelLenFt(val);
-    onExteriorPanelLenChange?.({ id, len: val }); // still inform parent if desired
-  }, [id, onExteriorPanelLenChange]);
 
-  const handleIntTotals = useCallback((t) => {
-    setIntTotals(t || null); // Store the whole object (or null)
-    if (!t) return;
+  const handlePanelLenFromExterior = useCallback(
+    (len) => {
+      const val = Number(len) || 16;
+      setExtPanelLenFt(val);
+      onExteriorPanelLenChange?.({ id, len: val }); // still inform parent if desired
+    },
+    [id, onExteriorPanelLenChange]
+  );
 
-    // Forward specific LF values if needed by parent (WallPanelsView)
-    onInteriorShearLF?.({ id, lf: Number(t.shearLengthSum) || 0 });
-    onInteriorShearPanelLenChange?.({ id, len: Number(t.shearPanelLenFt) || 8 });
-    onInteriorBearingLF?.({ id, lf: Number(t.bearingLengthSum) || 0 });
-    onInteriorNonLoadLF?.({ id, lf: Number(t.partitionLengthSum) || 0 }); // Assuming partition = non-load
-    onKneeWallLF?.({ id, lf: Number(t.kneeLengthSum) || 0 });
+  const handleIntTotals = useCallback(
+    (t) => {
+      setIntTotals(t || null); // Store the whole object (or null)
+      if (!t) return;
 
-  }, [id, onInteriorShearLF, onInteriorShearPanelLenChange, onInteriorBearingLF, onInteriorNonLoadLF, onKneeWallLF]);
+      // Forward specific LF values if needed by parent (WallPanelsView)
+      onInteriorShearLF?.({ id, lf: Number(t.shearLengthSum) || 0 });
+      onInteriorShearPanelLenChange?.({
+        id,
+        len: Number(t.shearPanelLenFt) || 8,
+      });
+      onInteriorBearingLF?.({ id, lf: Number(t.bearingLengthSum) || 0 });
+      onInteriorNonLoadLF?.({ id, lf: Number(t.partitionLengthSum) || 0 }); // Assuming partition = non-load
+      onKneeWallLF?.({ id, lf: Number(t.kneeLengthSum) || 0 });
+    },
+    [
+      id,
+      onInteriorShearLF,
+      onInteriorShearPanelLenChange,
+      onInteriorBearingLF,
+      onInteriorNonLoadLF,
+      onKneeWallLF,
+    ]
+  );
 
-  const handleLooseSubtotal = useCallback((payload) => {
-    const sub = Number(payload?.subtotal) || 0;
-    setLooseSubtotal(sub);
-    onLooseTotal?.({ id, subtotal: sub });
-  }, [id, onLooseTotal]);
+  const handleLooseSubtotal = useCallback(
+    (payload) => {
+      const sub = Number(payload?.subtotal) || 0;
+      setLooseSubtotal(sub);
+      onLooseTotal?.({ id, subtotal: sub });
+    },
+    [id, onLooseTotal]
+  );
 
   // Callback for PanelNails subtotal
   const handlePanelNailsSubtotal = useCallback((payload) => {
@@ -91,15 +116,21 @@ const panelPtBoards = useMemo(() =>
 
   // Level total = exterior panels + interior panels + loose (for this level)
   const levelTotal = useMemo(() => {
-    const ext   = Number(extTotals?.panelsSubtotal) || 0; // Cost from ExteriorWalls
-    const intl  = Number(intTotals?.panelsSubtotal) || 0; // Cost from InteriorWalls
-    const loose = Number(looseSubtotal)             || 0; // Cost from LoosePanelMaterials
-    const nails = Number(panelNailsSubtotal)      || 0; // <-- Include nails subtotal
+    const ext = Number(extTotals?.panelsSubtotal) || 0; // Cost from ExteriorWalls
+    const intl = Number(intTotals?.panelsSubtotal) || 0; // Cost from InteriorWalls
+    const loose = Number(looseSubtotal) || 0; // Cost from LoosePanelMaterials
+    const nails = Number(panelNailsSubtotal) || 0; // <-- Include nails subtotal
     return ext + intl + loose + nails;
-  }, [extTotals?.panelsSubtotal, intTotals?.panelsSubtotal, looseSubtotal, panelNailsSubtotal]);
+  }, [
+    extTotals?.panelsSubtotal,
+    intTotals?.panelsSubtotal,
+    looseSubtotal,
+    panelNailsSubtotal,
+  ]);
 
   const moneyFmt = useMemo(
-    () => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }),
+    () =>
+      new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }),
     []
   );
   const fmt = (n) => moneyFmt.format(Number(n) || 0);
@@ -108,113 +139,144 @@ const panelPtBoards = useMemo(() =>
     onLevelTotal?.({ id, total: levelTotal });
   }, [id, levelTotal, onLevelTotal]);
 
-const panelPlatePieces = Number(extTotals?.extPlatePieces || 0) + Number(intTotals?.intPlatePieces || 0);
+  const panelPlatePieces =
+    Number(extTotals?.extPlatePieces || 0) +
+    Number(intTotals?.intPlatePieces || 0);
 
-// Calculate total sheets used ON PANELS for this level
-const panelSheetsAll = useMemo(() => {
+  // Calculate total sheets used ON PANELS for this level
+  const panelSheetsAll = useMemo(() => {
     const ext = Number(extTotals?.extPanelSheets || 0); // Use the corrected prop name
     const ints = Number(intTotals?.intPanelSheets || 0); // Use the corrected prop name
     return ext + ints;
-}, [extTotals?.extPanelSheets, intTotals?.intPanelSheets]); // Update dependencies
+  }, [extTotals?.extPanelSheets, intTotals?.intPanelSheets]); // Update dependencies
 
-const novaMonoStyle = { fontFamily: "'Nova Mono', monospace" };
+  const novaMonoStyle = { fontFamily: "'Nova Mono', monospace" };
 
   return (
-  <section className="ew-stack">
-    <AccordionSection
-      open={!collapsed}
-      onOpenChange={(o) => setCollapsed(!o)}
-      bar={({ open, toggle }) => (
-        <div style={{ ...novaMonoStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            type="button"
-            className="acc__button"
-            onClick={toggle}
-            title={open ? 'Collapse' : 'Expand'}
-            aria-label={`${open ? 'Collapse' : 'Expand'} ${name}`}
-          >
-            <img
-              src={open ? '/icons/down.png' : '/icons/minimize.png'}
-              alt={open ? 'Collapse section' : 'Expand section'}
-              width={16} // Adjust size if needed
-              height={16} // Adjust size if needed
-              className="acc__chev" // Keep class if needed for styling
-              style={{ display: 'inline-block', verticalAlign: 'middle' }}
-            />
-            <span className="ew-head">{name}</span>
-          </button>
-
+    <section className="ew-stack">
+      <AccordionSection
+        open={!collapsed}
+        onOpenChange={(o) => setCollapsed(!o)}
+        bar={({ open, toggle }) => (
           <div
-            className="ew-right"
-            style={{ marginLeft: 'auto', fontWeight: 800, fontSize: 16, color: '#f18d5b' }}
-            title="Level total (Panels + Loose)"
+            style={{
+              ...novaMonoStyle,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
           >
-            Level total: {fmt(levelTotal)}
+            <button
+              type="button"
+              className="acc__button"
+              onClick={toggle}
+              title={open ? "Collapse" : "Expand"}
+              aria-label={`${open ? "Collapse" : "Expand"} ${name}`}
+              style={{ fontSize: "18px", fontWeight: "700", color: "#59d2c8" }}
+            >
+              <img
+                src={open ? "/icons/down.png" : "/icons/minimize.png"}
+                alt={open ? "Collapse section" : "Expand section"}
+                className="acc__chev"
+                style={{
+                  display: "inline-block",
+                  verticalAlign: "middle",
+                }}
+              />
+              {name}
+            </button>
+
+            <div
+              className="ew-right"
+              style={{
+                marginLeft: "auto",
+                fontWeight: 800,
+                fontSize: 16,
+                color: "#f18d5b",
+              }}
+              title="Level total (Panels + Loose)"
+            >
+              Level total: {fmt(levelTotal)}
+            </div>
+
+            {onRemove ? (
+              <RemoveButton
+                onClick={onRemove}
+                title="Remove level"
+                label="Remove level"
+              />
+            ) : null}
           </div>
-
-          {onRemove ? <RemoveButton onClick={onRemove} title="Remove level" label="Remove level" /> : null}
-        </div>
-      )}
-    >
-      <ExteriorWalls
-        levelId={id}
-        onTotalsChange={(t) => setExtTotals(t)}
-        title={`${name} — Exterior walls`}
-        onLengthLFChange={(lf) => onExteriorLF?.({ id, lf })}
-        onPanelLenFtChange={handlePanelLenFromExterior}
-        isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
-      />
-
-      <InteriorWalls
-        levelId={id}
-        onTotalsChange={handleIntTotals}
-        title={`${name} — Interior walls`}
-        isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ''))}
-        onInteriorBearingLF={onInteriorBearingLF}
-        onBearingLFChange={(lfVal) => onInteriorBearingLF?.({ id, lf: Number(lfVal) || 0 })}
-        onPartitionLFChange={(lfVal) => onInteriorNonLoadLF?.({ id, lf: Number(lfVal) || 0 })}
-        onKneeLFChange={(lfVal) => onKneeWallLF?.({ id, lf: Number(lfVal) || 0 })}
-      />
-
-      <PanelNails
-        title={`${name} — Panel nails`}
-        persistKey={`panel-nails:${id}`}
-        platePiecesPanels={Number( // This is NON-PT plates only, keep for 8D nails
-          (extTotals?.extPlatePieces || 0) + (intTotals?.intPlatePieces || 0)
-          ) - totalBottomPlatePiecesPanel}
-        ptPlatePiecesPanels={panelPtBoards}
-        totalPanelSheets={panelSheetsAll}
-        totalBottomPlatePiecesPanel={totalBottomPlatePiecesPanel}
-        onTotalChange={handlePanelNailsSubtotal}
-      />
-
-      <LoosePanelMaterials
-        title={`${name} — Loose materials (wall panels)`}
-        persistKey={`loose:${id}`}
-        onSubtotalChange={handleLooseSubtotal}
-        extLengthLF={Number(extTotals?.extLengthSum || 0)}
-        extZipSheetsFinal={Number(
-          extTotals?.extZipSheetsFinal ??
-          extTotals?.extZipSheetsSum ??
-          0
         )}
-        extZipSheetsSum={extTotals?.extZipSheetsSum}
-        int2x6LF={Number(intTotals?.int2x6LF || 0)}
-        int2x4LF={Number(intTotals?.int2x4LF || 0)}
-        // for nails/bracing math (lets Loose use the real combined totals)
-        ptLFTotal={
-          Number(extTotals?.extPTLFSum || 0) +
-          Number(intTotals?.intPTLFSum || 0)
-        }
-        platePiecesTotal={
-          Number(extTotals?.extPlatePieces || 0) +
-          Number(intTotals?.intPlatePieces || 0)
-        }
-        totalPanelsAllLevels={Number(panelsTotalAllSections || 0)}
-        levelsCount={Number(levelsCount || 1)}
-        levelId={id}
-        onGeneralChange={onLooseGeneralChange}
-      />
-    </AccordionSection>
-  </section>
-)};
+      >
+        <ExteriorWalls
+          levelId={id}
+          onTotalsChange={(t) => setExtTotals(t)}
+          title={`${name} — Exterior walls`}
+          onLengthLFChange={(lf) => onExteriorLF?.({ id, lf })}
+          onPanelLenFtChange={handlePanelLenFromExterior}
+          isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ""))}
+        />
+
+        <InteriorWalls
+          levelId={id}
+          onTotalsChange={handleIntTotals}
+          title={`${name} — Interior walls`}
+          isLevelOne={/(\b|^)level\s*1(\b|$)/i.test(String(name || ""))}
+          onInteriorBearingLF={onInteriorBearingLF}
+          onBearingLFChange={(lfVal) =>
+            onInteriorBearingLF?.({ id, lf: Number(lfVal) || 0 })
+          }
+          onPartitionLFChange={(lfVal) =>
+            onInteriorNonLoadLF?.({ id, lf: Number(lfVal) || 0 })
+          }
+          onKneeLFChange={(lfVal) =>
+            onKneeWallLF?.({ id, lf: Number(lfVal) || 0 })
+          }
+        />
+
+        <PanelNails
+          title={`${name} — Panel nails`}
+          persistKey={`panel-nails:${id}`}
+          platePiecesPanels={
+            Number(
+              // This is NON-PT plates only, keep for 8D nails
+              (extTotals?.extPlatePieces || 0) +
+                (intTotals?.intPlatePieces || 0)
+            ) - totalBottomPlatePiecesPanel
+          }
+          ptPlatePiecesPanels={panelPtBoards}
+          totalPanelSheets={panelSheetsAll}
+          totalBottomPlatePiecesPanel={totalBottomPlatePiecesPanel}
+          onTotalChange={handlePanelNailsSubtotal}
+        />
+
+        <LoosePanelMaterials
+          title={`${name} — Loose materials (wall panels)`}
+          persistKey={`loose:${id}`}
+          onSubtotalChange={handleLooseSubtotal}
+          extLengthLF={Number(extTotals?.extLengthSum || 0)}
+          extZipSheetsFinal={Number(
+            extTotals?.extZipSheetsFinal ?? extTotals?.extZipSheetsSum ?? 0
+          )}
+          extZipSheetsSum={extTotals?.extZipSheetsSum}
+          int2x6LF={Number(intTotals?.int2x6LF || 0)}
+          int2x4LF={Number(intTotals?.int2x4LF || 0)}
+          // for nails/bracing math (lets Loose use the real combined totals)
+          ptLFTotal={
+            Number(extTotals?.extPTLFSum || 0) +
+            Number(intTotals?.intPTLFSum || 0)
+          }
+          platePiecesTotal={
+            Number(extTotals?.extPlatePieces || 0) +
+            Number(intTotals?.intPlatePieces || 0)
+          }
+          totalPanelsAllLevels={Number(panelsTotalAllSections || 0)}
+          levelsCount={Number(levelsCount || 1)}
+          levelId={id}
+          onGeneralChange={onLooseGeneralChange}
+        />
+      </AccordionSection>
+    </section>
+  );
+}

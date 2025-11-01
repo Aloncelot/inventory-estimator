@@ -4,23 +4,23 @@
 @custom-variant dark (&:is(.dark *));
 
 /* === Theme tokens ======================================================= */
-.dark{
+.dark {
   /* Surfaces & borders */
-  --bg-900:#0a0f1a;   /* page background */
-  --bg-800:#0e1624;   /* cards */
-  --bg-750:#111c2d;   /* row alt */
-  --bg-700:#13243a;   /* row hover */
-  --border:#1f344f;
-  --shadow: 0 10px 25px rgba(0,0,0,.35);
+  --bg-900: #0a0f1a; /* page background */
+  --bg-800: #0e1624; /* cards */
+  --bg-750: #111c2d; /* row alt */
+  --bg-700: #13243a; /* row hover */
+  --border: #1f344f;
+  --shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
 
   /* Text */
-  --text-100:#e6f1ff;
-  --text-300:#a9c1d9;
+  --text-100: #e6f1ff;
+  --text-300: #a9c1d9;
 
   /* Brand / accents */
-  --turq-300:#59d2c8;
-  --turq-400:#2fb7ad;
-  --turq-500:#21a399;
+  --turq-300: #59d2c8;
+  --turq-400: #2fb7ad;
+  --turq-500: #21a399;
 
   /* Dropdown (applies to native <select> + SearchableSelect menu) */
   --dropdown-bg: #0f172a;
@@ -40,15 +40,16 @@
   --brand-6: var(--turq-400);
 }
 
-html, body {
+html,
+body {
   background: var(--bg-900);
   color: var(--text-100);
 }
 
 /* === Cards / layout ===================================================== */
-.ew-card{
+.ew-card {
   background: var(--bg-800);
-  border:1px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: var(--shadow);
   padding: 10px;
@@ -56,18 +57,22 @@ html, body {
   overflow: visible;
 }
 
-.ew-stack { margin-top: 10px; }
+.ew-stack {
+  margin-top: 10px;
+}
 
-.ew-title{
+.ew-title {
   margin: 0 0 5px;
   font-weight: 700;
-  letter-spacing:.2px;
+  letter-spacing: 0.2px;
 }
-.ew-title span{ color: var(--turq-300); }
+.ew-title span {
+  color: var(--turq-300);
+}
 
 /* Brighten ONLY the Level header card (it’s the one that contains the Level total chip) */
 .ew-card:has(.ew-chip[title="Level total (Panels + Loose)"]) .ew-h2 {
-  color: #00fcef;           /* brighter/darker for emphasis */
+  color: #00fcef; /* brighter/darker for emphasis */
   letter-spacing: 0.2px;
 }
 
@@ -77,21 +82,25 @@ html, body {
   border-color: rgb(0, 255, 255);
 }
 
-
-.ew-grid{
-  display:grid;
+.ew-grid {
+  display: grid;
   grid-template-columns: var(--cols);
-  gap:10px;
-  align-items:center;
+  gap: 10px;
+  align-items: center;
 }
 
 /* Section/row headers (unify .ew-head and .ew-rowhead styles) */
-.ew-head, .ew-rowhead{
-  display:grid;
-  gap:10px;
-  align-items:center;
-  background: linear-gradient(180deg, rgba(47,183,173,.15), transparent 70%);
-  border-bottom:1px solid var(--border);
+.ew-head,
+.ew-rowhead {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  background: linear-gradient(
+    180deg,
+    rgba(47, 183, 173, 0.15),
+    transparent 70%
+  );
+  border-bottom: 1px solid var(--border);
   padding: 8px 10px;
   border-radius: 8px;
   font-weight: 600;
@@ -99,71 +108,117 @@ html, body {
 }
 
 /* Rows */
-.ew-rows{
-  border-radius: 10px; 
+.ew-rows {
+  border-radius: 10px;
 }
-.ew-row{
+.ew-row {
   padding: 10px;
-  border-bottom:1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   background: var(--bg-800);
   overflow: visible;
 }
-.ew-row:nth-child(even){ background: var(--bg-750); }
-.ew-row:hover{ background: var(--bg-700); }
+.ew-row:nth-child(even) {
+  background: var(--bg-750);
+}
+.ew-row:hover {
+  background: var(--bg-700);
+}
 
 /* Utilities */
-.t-right { text-align: right; }            /* keep this; remove .ew-right usage */
-.ew-inline { display:flex; gap:8px; align-items:end; }
-.ew-h2, .ew-h3 { margin:0 0 10px; font-weight:700; letter-spacing:.2px; }
-.ew-hint { font-size:12px; color: var(--text-300); margin-top:4px; }
-.ew-footer { display:flex; align-items:center; gap:8px; margin-top:12px; }
-.ew-total { margin-left:auto; font-weight:700; }
-.ew-right { text-align: right; }
-.ew-subtotalright { text-align: right; font-weight:700; }
+.t-right {
+  text-align: right;
+} /* keep this; remove .ew-right usage */
+.ew-inline {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+}
+.ew-h2,
+.ew-h3 {
+  margin: 0 0 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.ew-hint {
+  font-size: 12px;
+  color: var(--text-300);
+  margin-top: 4px;
+}
+.ew-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ew-total {
+  margin-left: auto;
+  font-weight: 700;
+}
+.ew-right {
+  text-align: right;
+}
+.ew-subtotalright {
+  text-align: right;
+  font-weight: 700;
+}
 
 /* === Inputs / selects / buttons ======================================== */
-.ew-input, .ew-select{
-  width:100%;
-  padding:8px 10px;
-  background:#0b1524;
-  color:var(--text-100);
-  border:1px solid var(--border);
-  border-radius:8px;
-  outline:none;
+.ew-input,
+.ew-select {
+  width: 100%;
+  padding: 8px 10px;
+  background: #0b1524;
+  color: var(--text-100);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
 }
-.ew-input:focus, .ew-select:focus{
+.ew-input:focus,
+.ew-select:focus {
   border-color: var(--turq-400);
-  box-shadow: 0 0 0 3px rgba(47,183,173,.18);
+  box-shadow: 0 0 0 3px rgba(47, 183, 173, 0.18);
 }
 
-.ew-btn{
-  padding:8px 12px;
-  border-radius:10px;
-  border:1px solid var(--border);
-  background: linear-gradient(180deg,#102036,#0f1b2e);
-  color:var(--text-100);
-  cursor:pointer;
+.ew-btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #102036, #0f1b2e);
+  color: var(--text-100);
+  cursor: pointer;
 }
-.ew-btn:hover{ border-color:var(--turq-400); color:#fff; }
-.ew-btn--turq{
-  background: linear-gradient(180deg,#143a40,#113237);
-  border-color:#1b4f56;
+.ew-btn:hover {
+  border-color: var(--turq-400);
+  color: #fff;
 }
-.ew-subtle{ color:var(--text-300); font-size:12px; }
+.ew-btn--turq {
+  background: linear-gradient(180deg, #143a40, #113237);
+  border-color: #1b4f56;
+}
+.ew-subtle {
+  color: var(--text-300);
+  font-size: 12px;
+}
 
 /* Money / chip */
-.ew-money{ font-variant-numeric: tabular-nums; }
-.ew-chip{
-  display:inline-block; padding:2px 8px; border-radius:999px;
-  background: rgba(47,183,173,.14);
+.ew-money {
+  font-variant-numeric: tabular-nums;
+}
+.ew-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(47, 183, 173, 0.14);
   color: var(--turq-300);
-  border:1px solid rgba(47,183,173,.25);
-  font-size:12px;
+  border: 1px solid rgba(47, 183, 173, 0.25);
+  font-size: 12px;
 }
 
 /* Responsive collapsing grid columns */
-@media (max-width: 980px){
-  .ew-grid[style*="--cols"]{ grid-template-columns: 1fr !important; }
+@media (max-width: 980px) {
+  .ew-grid[style*="--cols"] {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* === Native <select> theming (kept for places you still use it) ========= */
@@ -183,7 +238,7 @@ select option:hover {
 }
 select:focus {
   outline: 2px solid var(--brand-6);
-  box-shadow: 0 0 0 3px rgba(20,184,166,0.25);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.25);
 }
 
 /* === Fancy focus ring (inputs/selects/buttons) ========================== */
@@ -200,34 +255,37 @@ select:focus {
   inset: calc(var(--ring-gap) * -1);
   border-radius: inherit;
   padding: var(--ring-size);
-  background:
-    conic-gradient(from var(--ring-angle,0deg),
+  background: conic-gradient(
+    from var(--ring-angle, 0deg),
     transparent 0 330deg,
-    color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg);
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
+    color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
-          mask-composite: exclude;
+  mask-composite: exclude;
   animation: ring-spin var(--ring-speed) linear infinite;
   pointer-events: none;
   z-index: 1;
 }
 .focus-anim:focus-visible,
 .focus-anim:focus {
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--ring-color) 35%, #000 65%),
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ring-color) 35%, #000 65%),
     0 0 14px -2px color-mix(in oklab, var(--ring-color) 60%, #000 40%);
 }
-@keyframes ring-spin { to { --ring-angle: 360deg; } }
+@keyframes ring-spin {
+  to {
+    --ring-angle: 360deg;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .focus-anim:focus-visible::after,
   .focus-anim:focus::after {
     animation: none;
-    background:
-      conic-gradient(from 0deg,
+    background: conic-gradient(
+      from 0deg,
       transparent 0 330deg,
-      color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg);
+      color-mix(in oklab, var(--ring-color) 90%, white 10%) 330deg 360deg
+    );
   }
 }
 
@@ -238,9 +296,8 @@ select:focus {
   isolation: isolate;
 }
 .focus-anim-wrap:focus-within {
-  box-shadow:
-    0 0 0 2px rgba(48,221,216,0.9),
-    0 0 0 6px rgba(48,221,216,0.22);
+  box-shadow: 0 0 0 2px rgba(48, 221, 216, 0.9),
+    0 0 0 6px rgba(48, 221, 216, 0.22);
   transition: box-shadow 120ms ease;
 }
 .focus-anim-wrap:focus-within::after {
@@ -249,56 +306,81 @@ select:focus {
   inset: -2px;
   border-radius: inherit;
   pointer-events: none;
-  background:
-    conic-gradient(from var(--orbit, 0deg),
-    rgba(48,221,216,0) 0deg,
-    rgba(48,221,216,0.35) 60deg,
-    rgba(48,221,216,0) 120deg);
+  background: conic-gradient(
+    from var(--orbit, 0deg),
+    rgba(48, 221, 216, 0) 0deg,
+    rgba(48, 221, 216, 0.35) 60deg,
+    rgba(48, 221, 216, 0) 120deg
+  );
   animation: orbit 1.6s linear infinite;
-  opacity:.9;
+  opacity: 0.9;
   mix-blend-mode: screen;
 }
-@keyframes orbit { to { --orbit: 360deg; } }
+@keyframes orbit {
+  to {
+    --orbit: 360deg;
+  }
+}
 
 /* === Control groups ===================================================== */
 .controls4 {
-  display:grid;
+  display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap:12px; align-items:end;
+  gap: 12px;
+  align-items: end;
 }
 .controls2 {
-  display:grid;
+  display: grid;
   grid-template-columns: repeat(2, minmax(140px, 1fr));
-  gap:12px; align-items:end;
-  margin-top:8px;
+  gap: 12px;
+  align-items: end;
+  margin-top: 8px;
 }
-.controls4 > label, .controls2 > label { display:flex; flex-direction:column; gap:6px; }
+.controls4 > label,
+.controls2 > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 
 /* === Number inputs: remove spinners ==================================== */
 input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
 
 /* === SearchableSelect (combobox) ======================================= */
-.combo { position: relative; z-index: 1;}
-.combo-input { padding-right: 28px; } /* room for caret */
-.combo-caret{
-  position:absolute; top:50%; right:10px;
-  width:0; height:0;
-  border-left:5px solid transparent;
-  border-right:5px solid transparent;
-  border-top:6px solid var(--text-300, #667);
+.combo {
+  position: relative;
+  z-index: 1;
+}
+.combo-input {
+  padding-right: 28px;
+} /* room for caret */
+.combo-caret {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--text-300, #667);
   transform: translateY(-50%);
-  pointer-events:none;
+  pointer-events: none;
 }
 .combo[aria-expanded="true"] {
-  z-index: 1000000;             /* higher than any sibling */
+  z-index: 1000000; /* higher than any sibling */
 }
 .combo[aria-expanded="true"] .combo-list {
   z-index: 1000001;
 }
 /* Dropdown menu uses the same theme vars as native <select> */
-.combo-list{
+.combo-list {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -307,12 +389,12 @@ input[type="number"] { -moz-appearance: textfield; }
   background: var(--dropdown-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 12px 30px rgba(0,0,0,.25);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
 
   padding: 6px;
   margin: 0;
 
-  display: none;                     /* shown when expanded (see below) */
+  display: none; /* shown when expanded (see below) */
   max-height: min(320px, 45vh);
   overflow: auto;
 
@@ -321,7 +403,7 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 .combo[aria-expanded="true"] .combo-list {
   display: block;
-  animation: dropdown-enter .22s ease forwards;
+  animation: dropdown-enter 0.22s ease forwards;
 }
 /* list items */
 .combo .combo-option {
@@ -337,14 +419,24 @@ input[type="number"] { -moz-appearance: textfield; }
   /* start hidden for stagger effect */
   opacity: 0;
   transform: translateY(4px);
-  animation: dropdown-item-enter .22s ease forwards;
+  animation: dropdown-item-enter 0.22s ease forwards;
 }
 /* stagger like the menu demo (first few items) */
-.combo .combo-option:nth-child(1) { animation-delay: .00s; }
-.combo .combo-option:nth-child(2) { animation-delay: .04s; }
-.combo .combo-option:nth-child(3) { animation-delay: .08s; }
-.combo .combo-option:nth-child(4) { animation-delay: .12s; }
-.combo .combo-option:nth-child(5) { animation-delay: .16s; }
+.combo .combo-option:nth-child(1) {
+  animation-delay: 0s;
+}
+.combo .combo-option:nth-child(2) {
+  animation-delay: 0.04s;
+}
+.combo .combo-option:nth-child(3) {
+  animation-delay: 0.08s;
+}
+.combo .combo-option:nth-child(4) {
+  animation-delay: 0.12s;
+}
+.combo .combo-option:nth-child(5) {
+  animation-delay: 0.16s;
+}
 
 /* hover/active/selected states */
 .combo .combo-option:hover,
@@ -376,8 +468,10 @@ input[type="number"] { -moz-appearance: textfield; }
   border-color: var(--turq-300);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--turq-300) 35%, transparent);
 }
-.combo-option{
-  padding:8px 10px; cursor:pointer; line-height:1.25;
+.combo-option {
+  padding: 8px 10px;
+  cursor: pointer;
+  line-height: 1.25;
   color: var(--dropdown-fg);
 }
 .combo-option.active,
@@ -385,18 +479,23 @@ input[type="number"] { -moz-appearance: textfield; }
 .combo-option:hover {
   background: color-mix(in oklab, var(--dropdown-active) 60%, black 0%);
 }
-.combo-empty{
-  padding:10px; color: var(--text-300);
+.combo-empty {
+  padding: 10px;
+  color: var(--text-300);
 }
 
 /* === Responsive niceties ================================================= */
-@media (max-width: 980px){
+@media (max-width: 980px) {
   /* already collapsing grid above; keep other small adjustments here if needed */
 }
 
 /* === App shell sizing (sidebar width reacts to collapse) ================== */
-.app-shell { --sidebar-w: 260px; }
-.app-shell.sb-collapsed { --sidebar-w: 72px; }
+.app-shell {
+  --sidebar-w: 260px;
+}
+.app-shell.sb-collapsed {
+  --sidebar-w: 72px;
+}
 
 .app-shell {
   display: grid;
@@ -411,7 +510,11 @@ input[type="number"] { -moz-appearance: textfield; }
   min-width: 0; /* Crucial: Allows main content to shrink */
   /* overflow-x: hidden; */ /* Optional: Prevents accidental horizontal scroll */
 }
-.app-content { display: grid; gap: 0px; padding: 15px; }
+.app-content {
+  display: grid;
+  gap: 0px;
+  padding: 15px;
+}
 
 /* === Sidebar (screenshot style) ========================================== */
 .sidebar {
@@ -424,7 +527,7 @@ input[type="number"] { -moz-appearance: textfield; }
   flex-direction: column;
   width: var(--sidebar-w); /* Width controlled by variable */
   border-radius: 16px;
-  background: rgb(0 0 0 / 40%);    /* glassy */
+  background: rgb(0 0 0 / 40%); /* glassy */
   border: 1px solid var(--border);
   backdrop-filter: blur(20px);
   box-shadow: var(--shadow);
@@ -437,7 +540,7 @@ input[type="number"] { -moz-appearance: textfield; }
   display: flex;
   align-items: center;
   height: 72px;
-  padding: 0 1.25rem 0 .75rem;
+  padding: 0 1.25rem 0 0.75rem;
   background: rgb(0 0 0 / 8%);
   border-bottom: 1px solid var(--border);
 }
@@ -450,7 +553,9 @@ input[type="number"] { -moz-appearance: textfield; }
   cursor: pointer;
   font-size: 18px;
 }
-.sidebar header img { height: 24px; }
+.sidebar header img {
+  height: 24px;
+}
 
 /* menu list */
 .sidebar .menu {
@@ -490,33 +595,46 @@ input[type="number"] { -moz-appearance: textfield; }
   border: 0;
   color: inherit;
   cursor: pointer;
-  opacity: .75;
+  opacity: 0.75;
   border-radius: 12px;
   text-align: left;
-  transition: background .2s, opacity .2s;
+  transition: background 0.2s, opacity 0.2s;
 }
-.sidebar .menu .menu-item:hover { background: rgb(0 0 0 / 20%); }
+.sidebar .menu .menu-item:hover {
+  background: rgb(0 0 0 / 20%);
+}
 .sidebar .menu .menu-item.active {
   background: rgb(0 0 0 / 28%);
   opacity: 1;
 }
-.sidebar .menu .menu-item.disabled { opacity: .55; cursor: not-allowed; }
+.sidebar .menu .menu-item.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 /* icon + label */
-.sidebar .menu .menu-ico { width: 20px; text-align: center; font-style: normal; }
-.sidebar .menu .menu-label { 
-  font-family: 'Nova Flat', cursive;
+.sidebar .menu .menu-ico {
+  width: 20px;
+  text-align: center;
+  font-style: normal;
+}
+.sidebar .menu .menu-label {
+  font-family: "Nova Flat", cursive;
   color: var(--text-secondary);
   transition: opacity 0.15s ease;
   opacity: 1;
   white-space: nowrap;
   overflow: hidden;
-  text-transform: capitalize;}
+  text-transform: capitalize;
+}
 
 /* icons-only when collapsed */
-.app-shell.sb-collapsed .sidebar .menu .menu-item { justify-content: center; }
+.app-shell.sb-collapsed .sidebar .menu .menu-item {
+  justify-content: center;
+}
 .app-shell.sb-collapsed .sidebar .menu .menu-label {
-  display: none;}
+  display: none;
+}
 
 /* Styles for the label when sidebar IS NOT collapsed (i.e., expanded or expanding) */
 .app-shell:not(.sb-collapsed) .sidebar .menu .menu-label {
@@ -527,7 +645,9 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 
 /* keep our combobox list on top */
-.combo-list { z-index: 2000; }
+.combo-list {
+  z-index: 2000;
+}
 
 .side-top {
   display: flex;
@@ -536,8 +656,14 @@ input[type="number"] { -moz-appearance: textfield; }
   padding: 10px;
   border-bottom: 1px solid var(--border);
 }
-.side-toggle { padding: 6px 8px; }
-.side-title { font-weight: 700; color: var(--turq-300); letter-spacing: .2px; }
+.side-toggle {
+  padding: 6px 8px;
+}
+.side-title {
+  font-weight: 700;
+  color: var(--turq-300);
+  letter-spacing: 0.2px;
+}
 
 .side-menu {
   display: grid;
@@ -559,35 +685,86 @@ input[type="number"] { -moz-appearance: textfield; }
   text-align: left;
   cursor: pointer;
 }
-.side-item:hover { background: var(--bg-750); border-color: var(--border); }
-.side-item.active { background: rgba(47,183,173,.14); border-color: rgba(47,183,173,.25); }
-.side-item.disabled { opacity: .55; cursor: not-allowed; }
+.side-item:hover {
+  background: var(--bg-750);
+  border-color: var(--border);
+}
+.side-item.active {
+  background: rgba(47, 183, 173, 0.14);
+  border-color: rgba(47, 183, 173, 0.25);
+}
+.side-item.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
-.side-ico { width: 20px; text-align: center; }
+.side-ico {
+  width: 20px;
+  text-align: center;
+}
 
 .side-foot {
   padding: 10px;
   border-top: 1px solid var(--border);
 }
 
-.card { padding: 12px; background:#0c2b33; border-radius:12px; color:#e9f6f8; margin-top:12px; }
-.card-title { margin:0 0 10px; font-weight:700; }
-.fld { display:flex; flex-direction:column; gap:6px; }
-.fld input { padding:8px; border-radius:8px; border:1px solid #1a515d; background:#0c2b33; color:#e9f6f8; }
-.sum-row { display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding-top:10px; border-top:1px dashed #1a515d; font-size:1.05rem; }
-.sum-label { opacity:.9; }
-.sum-value { font-weight:800; }
-
+.card {
+  padding: 12px;
+  background: #0c2b33;
+  border-radius: 12px;
+  color: #e9f6f8;
+  margin-top: 12px;
+}
+.card-title {
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+.fld {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fld input {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #1a515d;
+  background: #0c2b33;
+  color: #e9f6f8;
+}
+.sum-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #1a515d;
+  font-size: 1.05rem;
+}
+.sum-label {
+  opacity: 0.9;
+}
+.sum-value {
+  font-weight: 800;
+}
 
 /* globals.css (optional helpers) */
-.ew-chip { padding:6px 10px; border:1px solid #1a515d; border-radius:999px; background:#0c2b33; color:#e9f6f8; cursor:pointer; }
-.ew-chip:hover { filter:brightness(1.1); }
+.ew-chip {
+  padding: 6px 10px;
+  border: 1px solid #1a515d;
+  border-radius: 999px;
+  background: #0c2b33;
+  color: #e9f6f8;
+  cursor: pointer;
+}
+.ew-chip:hover {
+  filter: brightness(1.1);
+}
 
 /* === Generic table styling for estimators ================================= */
 .tbl {
   width: 100%;
-  border-collapse: collapse;          /* consistent column widths */
-  table-layout: fixed;                /* respects <colgroup> widths */
+  border-collapse: collapse; /* consistent column widths */
+  table-layout: fixed; /* respects <colgroup> widths */
 }
 
 .tbl th,
@@ -598,16 +775,16 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 
 .tbl thead th {
-  text-align: left;                   /* default for text columns */
+  text-align: left; /* default for text columns */
   color: var(--turq-300);
   font-weight: 700;
-  background: linear-gradient(180deg, rgba(47,183,173,.10), transparent 70%);
+  background: linear-gradient(180deg, rgba(47, 183, 173, 0.1), transparent 70%);
 }
 
 .tbl tfoot th,
 .tbl tfoot td {
   font-weight: 700;
-  background: rgba(0,0,0,.06);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 /* Right-align numeric columns (headers + cells) */
@@ -617,37 +794,61 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 
 /* Optional: zebra only for body rows (not head/foot) */
-.tbl tbody tr:nth-child(even) { background: var(--bg-750); }
-.tbl tbody tr:hover { background: var(--bg-700); }
+.tbl tbody tr:nth-child(even) {
+  background: var(--bg-750);
+}
+.tbl tbody tr:hover {
+  background: var(--bg-700);
+}
 
 .ew-total-panels {
-  color: #FF7A00;      /* bright orange */
-  font-weight: 700;    /* optional: make it pop */
+  color: #ff7a00; /* bright orange */
+  font-weight: 700; /* optional: make it pop */
 }
 
 /* AccordionSection */
-.acc { margin: 0 0 12px 0; }
+.acc {
+  margin: 0 0 12px 0;
+}
 .acc__header {
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
 }
 .acc__button {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 4px 8px; line-height: 1;
-  background: var(--bg, transparent); border: 1px solid var(--border);
-  border-radius: 8px; cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  line-height: 1;
+  background: var(--bg, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
 }
-.acc__chev { width: 1.1em; }
-.acc__title { font: inherit; font-weight: 700; }
-.acc__actions { margin-left: auto; }
+.acc__chev {
+  width: 1.1em;
+}
+.acc__title {
+  font: inherit;
+  font-weight: 700;
+}
+.acc__actions {
+  margin-left: auto;
+}
 .acc__summary {
-  padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 .acc__body {
-  overflow: clip;           /* prevents scrollbars during animation */
-  transition: max-height .35s ease, opacity .2s ease;
-  max-height: 0; opacity: 0;
-  border: 1px solid var(--border); border-radius: 12px;
+  overflow: clip; /* prevents scrollbars during animation */
+  transition: max-height 0.35s ease, opacity 0.2s ease;
+  max-height: 0;
+  opacity: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 
 /* But if a combobox is expanded inside, allow overflow so the menu can escape */
@@ -655,17 +856,20 @@ input[type="number"] { -moz-appearance: textfield; }
   overflow: visible;
 }
 
-
-.acc__bodyInner { padding: 16px; }
+.acc__bodyInner {
+  padding: 16px;
+}
 
 /* Reserve vertical scrollbar gutter so layout width never changes */
 html {
-  scrollbar-gutter: stable both-edges;   /* modern */
+  scrollbar-gutter: stable both-edges; /* modern */
 }
 
 @supports not (scrollbar-gutter: stable) {
   /* Fallback: always show a vertical scrollbar track */
-  html { overflow-y: scroll; }
+  html {
+    overflow-y: scroll;
+  }
 }
 
 :root {
@@ -677,37 +881,47 @@ html {
   --turq-600: #0d4f53;
   --turq-500: #116367;
   --turq-400: #158085;
-  --turq-300: #2fb7ad;  /* you already reference this */
+  --turq-300: #2fb7ad; /* you already reference this */
   --turq-200: #6fd8d0;
   --turq-100: #b9f0ea;
 
   /* App surfaces */
-  --bg:        var(--turq-900);
-  --card:      var(--turq-800);
-  --surface:   var(--turq-700);
-  --panel:     var(--turq-800);
-  --border:    #2fb7ad33;
+  --bg: var(--turq-900);
+  --card: var(--turq-800);
+  --surface: var(--turq-700);
+  --panel: var(--turq-800);
+  --border: #2fb7ad33;
 
   /* Text & accents */
-  --text:      #e6fffb;
+  --text: #e6fffb;
   --text-weak: #bfe7e4;
-  --accent:    var(--turq-300);
+  --accent: var(--turq-300);
   --accent-strong: #19afa4;
 
   color-scheme: dark;
 }
 
 /* Themed scrollbars (Firefox + WebKit) */
-* { scrollbar-width: thin; scrollbar-color: var(--turq-500) transparent; }         /* Firefox */
-::-webkit-scrollbar { width: 12px; height: 12px; }                                  /* WebKit */
-::-webkit-scrollbar-track { background: transparent; }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--turq-500) transparent;
+} /* Firefox */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+} /* WebKit */
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
   background-color: var(--turq-600);
   border-radius: 8px;
-  border: 3px solid transparent;  /* creates a “pill” */
+  border: 3px solid transparent; /* creates a “pill” */
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background-color: var(--turq-400); }
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--turq-400);
+}
 
 /* icon-only button */
 .ew-icon-btn {
@@ -719,16 +933,29 @@ html {
 
 /* Animations */
 @keyframes dropdown-enter {
-  from { opacity: 0; transform: scaleY(.98) translateY(6px); }
-  to   { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: scaleY(0.98) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @keyframes dropdown-item-enter {
-  to { opacity: 1; transform: none; }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Optional: pretty scrollbar for the dropdown only */
-.combo .combo-list::-webkit-scrollbar { width: 10px; }
-.combo .combo-list::-webkit-scrollbar-track { background: transparent; }
+.combo .combo-list::-webkit-scrollbar {
+  width: 10px;
+}
+.combo .combo-list::-webkit-scrollbar-track {
+  background: transparent;
+}
 .combo .combo-list::-webkit-scrollbar-thumb {
   background: var(--turq-600);
   border-radius: 10px;
@@ -744,7 +971,7 @@ html {
 .ew-rowhead,
 .tbl th,
 .tbl td {
-  padding-top: 6px;    /* Reduced from 10px or 8px */
+  padding-top: 6px; /* Reduced from 10px or 8px */
   padding-bottom: 6px; /* Reduced from 10px or 8px */
 }
 
@@ -752,27 +979,29 @@ html {
 .ew-input,
 .ew-select,
 .ew-btn {
-  padding-top: 5px;    /* Reduced from 8px */
+  padding-top: 5px; /* Reduced from 8px */
   padding-bottom: 5px; /* Reduced from 8px */
 }
 .ew-btn {
-  padding-left: 10px;  /* Slightly reduced */
+  padding-left: 10px; /* Slightly reduced */
   padding-right: 10px; /* Slightly reduced */
 }
 .ew-icon-btn {
   padding: 4px 6px; /* Slightly tighter */
 }
 
-
 /* Slightly smaller base font size for cards/sections */
-.ew-card, .tbl {
+.ew-card,
+.tbl {
   font-size: 0.825rem;
   /* Slightly smaller than default small (0.875rem) */
   /* If using Tailwind, you might use text-xs (0.75rem) or adjust base size */
 }
 
 /* Adjust title sizes if needed */
-.ew-title, .ew-h2, .ew-h3 {
+.ew-title,
+.ew-h2,
+.ew-h3 {
   font-size: 1rem; /* Adjust as needed */
   margin-bottom: 8px; /* Slightly reduced */
 }
@@ -790,7 +1019,7 @@ html {
 
 /* Adjust Accordion button padding */
 .acc__button {
-    padding: 3px 6px;
+  padding: 3px 6px;
 }
 
 /* Adjust ItemPicker/SearchableSelect input height */
@@ -798,10 +1027,9 @@ html {
   min-height: 32px; /* Adjust if needed, based on reduced padding */
 }
 
-
 .nova-flat-turquoise {
-  font-family: 'Nova Flat', cursive;
-  color: #40E0D0; 
+  font-family: "Nova Flat", cursive;
+  color: #40e0d0;
 }
 
 .ew-h2.nova-flat-turquoise {
@@ -810,13 +1038,13 @@ html {
 }
 
 .ew-chip.nova-flat-turquoise {
-   font-weight: 700; /* Ensure it stays bold if needed */
-   /* Add other specific overrides for the chip if necessary */
+  font-weight: 700; /* Ensure it stays bold if needed */
+  /* Add other specific overrides for the chip if necessary */
 }
 
 /* Style for ENABLED (not disabled) items */
 .sidebar .menu .menu-item:not(.disabled) .menu-label {
-  color: #40E0D0; /* Bright turquoise for enabled items */
+  color: #40e0d0; /* Bright turquoise for enabled items */
 }
 
 /* Style for ACTIVE item */

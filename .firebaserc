@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "inventory-estimator"
-  }
+    "default": "inventory-estimator",
+    "estimator": "inventory-estimator"
+  },
+  "targets": {},
+  "etags": {}
 }

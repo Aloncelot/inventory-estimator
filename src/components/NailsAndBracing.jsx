@@ -1,5 +1,5 @@
 // src/components/NailsAndBracing.jsx
-'use client';
+"use client";
 
 import React, {
   Fragment,
@@ -9,37 +9,48 @@ import React, {
   useRef,
   useCallback,
   memo,
-} from 'react';
-import ItemPicker from '@/components/ItemPicker';
-import { unitPriceFrom } from '@/domain/lib/parsing';
-import AccordionSection from '@/components/ui/AccordionSection';
+} from "react";
+import ItemPicker from "@/components/ItemPicker";
+import { unitPriceFrom } from "@/domain/lib/parsing";
+import AccordionSection from "@/components/ui/AccordionSection";
 
-const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const moneyFmt = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
 const fmtMoney = (n) => moneyFmt.format(Number(n) || 0);
 
 const deref = (x) => (x && x.item ? deref(x.item) : x);
 const getItem = (s) => deref(s);
-const getUnit = (s) => deref(s)?.unit || deref(s)?.raw?.unit || 'box';
+const getUnit = (s) => deref(s)?.unit || deref(s)?.raw?.unit || "box";
 
 const GRID_COLS =
-  'minmax(220px,1.3fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 1.6fr 0.8fr';
+  "minmax(220px,1.3fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 1.6fr 0.8fr";
 
 const Row = memo(
   function Row({ label, picker, row, hint }) {
     return (
       <Fragment>
-        <div className="ew-grid ew-row" style={{ '--cols': GRID_COLS }}>
+        <div className="ew-grid ew-row" style={{ "--cols": GRID_COLS }}>
           <div>{label}</div>
           <div>
             {picker}
-            {hint ? <div className="ew-hint" style={{ marginTop: 6 }}>{hint}</div> : null}
+            {hint ? (
+              <div className="ew-hint" style={{ marginTop: 6 }}>
+                {hint}
+              </div>
+            ) : null}
           </div>
           <div className="ew-right">{Math.ceil(row.qtyRaw || 0)}</div>
           <div className="ew-right">{row.wastePct ?? 0}</div>
-          <div className="ew-right">{row.qtyFinal ?? '—'}</div>
-          <div className="ew-right">{row.unit || '—'}</div>
-          <div className="ew-right ew-money">{row.unitPrice ? fmtMoney(row.unitPrice) : '—'}</div>
-          <div className="ew-right ew-money">{row.subtotal ? fmtMoney(row.subtotal) : '—'}</div>
+          <div className="ew-right">{row.qtyFinal ?? "—"}</div>
+          <div className="ew-right">{row.unit || "—"}</div>
+          <div className="ew-right ew-money">
+            {row.unitPrice ? fmtMoney(row.unitPrice) : "—"}
+          </div>
+          <div className="ew-right ew-money">
+            {row.subtotal ? fmtMoney(row.subtotal) : "—"}
+          </div>
           <div></div>
           <div></div>
         </div>
@@ -65,7 +76,7 @@ const Row = memo(
 );
 
 export default function NailsAndBracing({
-  title = 'General — Nails & bracing (all levels)',
+  title = "General — Nails & bracing (all levels)",
   totals = {},
   onTotalChange,
 }) {
@@ -87,20 +98,31 @@ export default function NailsAndBracing({
   });
 
   const onConcreteSelect = useCallback(
-    (val) => setSel((prev) => (prev.nailsConcrete === val ? prev : { ...prev, nailsConcrete: val })),
+    (val) =>
+      setSel((prev) =>
+        prev.nailsConcrete === val ? prev : { ...prev, nailsConcrete: val }
+      ),
     []
   );
   const onSheathingSelect = useCallback(
     (val) =>
-      setSel((prev) => (prev.nailsSheathing === val ? prev : { ...prev, nailsSheathing: val })),
+      setSel((prev) =>
+        prev.nailsSheathing === val ? prev : { ...prev, nailsSheathing: val }
+      ),
     []
   );
   const onFramingSelect = useCallback(
-    (val) => setSel((prev) => (prev.nailsFraming === val ? prev : { ...prev, nailsFraming: val })),
+    (val) =>
+      setSel((prev) =>
+        prev.nailsFraming === val ? prev : { ...prev, nailsFraming: val }
+      ),
     []
   );
   const onBracingSelect = useCallback(
-    (val) => setSel((prev) => (prev.tempBracing === val ? prev : { ...prev, tempBracing: val })),
+    (val) =>
+      setSel((prev) =>
+        prev.tempBracing === val ? prev : { ...prev, tempBracing: val }
+      ),
     []
   );
 
@@ -113,9 +135,9 @@ export default function NailsAndBracing({
   // Concrete nails: (PT pieces * 25 / 100) then +40% waste → ceil
   const concrete = useMemo(() => {
     const basePieces = Number(ptPiecesAll) || 0;
-    const qtyRaw = basePieces * 25 / 100;
+    const qtyRaw = (basePieces * 25) / 100;
     const qtyFinal = Math.ceil(qtyRaw * 1.4);
-    const unit = getUnit(sel.nailsConcrete) || 'box';
+    const unit = getUnit(sel.nailsConcrete) || "box";
     const item = getItem(sel.nailsConcrete);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
@@ -124,9 +146,9 @@ export default function NailsAndBracing({
 
   // Sheathing nails: (all ZIP sheets * 80 / 2700) then +40% waste → ceil
   const sheathing = useMemo(() => {
-    const qtyRaw = (Number(allSheetsLoose) || 0) * 80 / 2700;
+    const qtyRaw = ((Number(allSheetsLoose) || 0) * 80) / 2700;
     const qtyFinal = Math.ceil(qtyRaw * 1.4);
-    const unit = getUnit(sel.nailsSheathing) || 'box';
+    const unit = getUnit(sel.nailsSheathing) || "box";
     const item = getItem(sel.nailsSheathing);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
@@ -135,9 +157,9 @@ export default function NailsAndBracing({
 
   // Framing nails: (platePiecesAll * 25 / 2500) then +40% waste → ceil
   const framing = useMemo(() => {
-    const qtyRaw = (Number(platePiecesAll) || 0) * 25 / 2500;
+    const qtyRaw = ((Number(platePiecesAll) || 0) * 25) / 2500;
     const qtyFinal = Math.ceil(qtyRaw * 1.4);
-    const unit = getUnit(sel.nailsFraming) || 'box';
+    const unit = getUnit(sel.nailsFraming) || "box";
     const item = getItem(sel.nailsFraming);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
@@ -148,7 +170,7 @@ export default function NailsAndBracing({
   const bracing = useMemo(() => {
     const qtyRaw = Math.max(0, Number(panelsAll) || 0) * 3;
     const qtyFinal = Math.ceil(qtyRaw);
-    const unit = getUnit(sel.tempBracing) || 'pcs';
+    const unit = getUnit(sel.tempBracing) || "pcs";
     const item = getItem(sel.tempBracing);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
@@ -235,18 +257,19 @@ export default function NailsAndBracing({
 
   const concreteHint = useMemo(() => {
     const base = Number(ptPiecesAll) || 0;
-    const n = new Intl.NumberFormat('en-US').format(base);
+    const n = new Intl.NumberFormat("en-US").format(base);
     return `PT pieces: ${n} → boxes = pt pieces × 25 / 100 + 40% waste`;
   }, [ptPiecesAll]);
 
   const sheathingHint = useMemo(
     () =>
       `Loose sheets = (band: ${sheetsBandAll})` +
-      (sheetsExtraAll ? ` + (extra: ${sheetsExtraAll})` : ''),
+      (sheetsExtraAll ? ` + (extra: ${sheetsExtraAll})` : ""),
     [sheetsBandAll, sheetsExtraAll]
   );
   const framingHint = useMemo(
-    () => `Loose non-PT boards = ${platePiecesAll} → boxes = ceil((boards × 25 / 2500) × 1.4)`,
+    () =>
+      `Loose non-PT boards = ${platePiecesAll} → boxes = ceil((boards × 25 / 2500) × 1.4)`,
     [platePiecesAll]
   );
   const bracingHint = useMemo(
@@ -259,31 +282,69 @@ export default function NailsAndBracing({
       <AccordionSection
         title={title}
         defaultOpen={true}
-        summary={<div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b'}}>Nails & Bracing subtotal: {fmtMoney(sectionTotal)}</div>}
+        summary={
+          <div
+            className="ew-right"
+            style={{
+              fontFamily: "Nova Flat",
+              fontWeight: "700",
+              fontSize: "16px",
+              marginLeft: "auto",
+              color: "#f18d5b",
+            }}
+          >
+            Nails & Bracing subtotal: {fmtMoney(sectionTotal)}
+          </div>
+        }
       >
-      <div className="ew-grid ew-head" style={{ '--cols': GRID_COLS }}>
-        <div>Item</div>
-        <div>Vendor · Family · Size</div>
-        <div className="ew-right">Qty</div>
-        <div className="ew-right">Waste %</div>
-        <div className="ew-right">Final qty</div>
-        <div className="ew-right">Unit</div>
-        <div className="ew-right">Unit price</div>
-        <div className="ew-right">Subtotal</div>
-        <div></div>
-        <div></div>
-      </div>
+        <div className="ew-grid ew-head" style={{ "--cols": GRID_COLS }}>
+          <div>Item</div>
+          <div>Family · Size · Vendor</div>
+          <div className="ew-right">Qty</div>
+          <div className="ew-right">Waste %</div>
+          <div className="ew-right">Final qty</div>
+          <div className="ew-right">Unit</div>
+          <div className="ew-right">Unit price</div>
+          <div className="ew-right">Subtotal</div>
+          <div></div>
+          <div></div>
+        </div>
 
-      <div className="ew-rows">
-        <Row label="Concrete nails" row={concrete} picker={concretePicker} hint={concreteHint} />
-        <Row label="Sheathing nails" row={sheathing} picker={sheathingPicker} hint={sheathingHint} />
-        <Row label="Framing nails" row={framing} picker={framingPicker} hint={framingHint} />
-        <Row label="Temporary Bracing" row={bracing} picker={bracingPicker} hint={bracingHint} />
-      </div>
+        <div className="ew-rows">
+          <Row
+            label="Concrete nails"
+            row={concrete}
+            picker={concretePicker}
+            hint={concreteHint}
+          />
+          <Row
+            label="Sheathing nails"
+            row={sheathing}
+            picker={sheathingPicker}
+            hint={sheathingHint}
+          />
+          <Row
+            label="Framing nails"
+            row={framing}
+            picker={framingPicker}
+            hint={framingHint}
+          />
+          <Row
+            label="Temporary Bracing"
+            row={bracing}
+            picker={bracingPicker}
+            hint={bracingHint}
+          />
+        </div>
 
-      <div className="ew-footer">
-        <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b'}}>Section subtotal: {fmtMoney(sectionTotal)}</div>
-      </div>
+        <div className="ew-footer">
+          <div
+            className="ew-right"
+            style={{ marginLeft: "auto", color: "#f18d5b" }}
+          >
+            Section subtotal: {fmtMoney(sectionTotal)}
+          </div>
+        </div>
       </AccordionSection>
     </div>
   );
