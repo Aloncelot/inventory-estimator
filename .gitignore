@@ -49,3 +49,5 @@ serviceAccount.json
 serviceAccount*.json
 
 .vscode/
+
+_backup/
