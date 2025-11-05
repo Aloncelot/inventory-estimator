@@ -609,7 +609,7 @@ export default function InteriorWallGroup({
         {/* Header row */}
         <div className="ew-grid ew-head" style={{ "--cols": gridCols }}>
           <div>Item</div>
-          <div>Vendor · Family · Size</div>
+          <div>Family · Size · Vendor</div>
           <div className="ew-right">Qty</div>
           <div className="ew-right">Waste %</div>
           <div className="ew-right">Final qty</div>
@@ -646,7 +646,13 @@ export default function InteriorWallGroup({
                           : "SPF#2"
                       }
                       defaultSizeLabel={
-                        row.key === "sheathing" ? `4x8'-1/2"` : undefined
+                        row.key === "sheathing"
+                          ? `4x8'-1/2"`
+                          : row.key === "bottomPlate" ||
+                            row.key === "topPlate" ||
+                            row.key === "blocking"
+                          ? `2x6"-8'`
+                          : undefined
                       }
                       preferredSeries={
                         row.key === "sheathing" ? undefined : "2x6"

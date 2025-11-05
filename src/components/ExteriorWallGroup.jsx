@@ -296,14 +296,6 @@ export default function ExteriorWallGroup({
     ? Math.ceil(Number(sheathingRow?.qtyFinal || 0))
     : 0;
 
-  // family label can be in different places; normalize it
-  // const getFam = (it) => String(
-  //   it?.familyLabel ??
-  //   it?.raw?.familyLabel ??
-  //   it?.family ??
-  //   ''
-  // ).toLowerCase();
-
   const platePieces =
     (rowByKey?.bottomPlate?.qtyFinal ?? 0) +
     (rowByKey?.topPlate?.qtyFinal ?? 0);
@@ -562,7 +554,7 @@ export default function ExteriorWallGroup({
         {/* Header row */}
         <div className="ew-grid ew-head" style={{ "--cols": gridCols }}>
           <div>Item</div>
-          <div>Vendor · Family · Size</div>
+          <div>Family · Size · Vendor</div>
           <div className="ew-right">Qty</div>
           <div className="ew-right">Waste %</div>
           <div className="ew-right">Final qty</div>

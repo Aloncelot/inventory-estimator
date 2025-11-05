@@ -571,7 +571,6 @@ export default function LoosePanelMaterials({
       <AccordionSection
         title={title}
         defaultOpen={true}
-        // summary={<div style={{ textAlign: 'right', fontWeight: 700, color: '#f18d5b' }}>Subtotal: {fmt(sectionSubtotal)}</div>}
         actions={
           onRemove ? (
             <button className="ew-btn" onClick={onRemove}>
