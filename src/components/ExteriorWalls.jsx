@@ -1,93 +1,50 @@
 // src/components/ExteriorWalls.jsx
 'use client';
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useMemo, useCallback } from 'react';
+import { useProject } from '@/context/ProjectContext';
 import ExteriorWallGroup from '@/components/ExteriorWallGroup';
-import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import AddButton from './ui/AddButton';
-
-const sameTotals = (a, b) => {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return (
-    a.extLengthSum              === b.extLengthSum &&
-    a.extZipSheetsSum           === b.extZipSheetsSum &&
-    a.extPanelSheets            === b.extPanelSheets &&
-    a.extPlatePieces            === b.extPlatePieces &&
-    a.extBottomPlatePiecesPanel === b.extBottomPlatePiecesPanel &&
-    a.extPTLFSum                === b.extPTLFSum &&
-    a.extMoneySum               === b.extMoneySum &&
-    a.panelsSubtotal            === b.panelsSubtotal &&
-    a.panelLenFtExterior        === b.panelLenFtExterior &&
-    a.extPanelPtBoards          === b.extPanelPtBoards
-  );
-};
-
-function genId() {
-  return 'ex-' + Math.random().toString(36).slice(2, 8) + '-' + Date.now().toString(36);
-}
 
 const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const fmt = n => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : '—');
 
 export default function ExteriorWalls({
-  onTotalsChange,
+  sectionsData,
+  onSectionsChange,
   title = 'Exterior walls',
-  levelId = 'default',
-  onLengthLFChange,      
-  onPanelLenFtChange,   
   isLevelOne = false,
 }) {
-  // Sections per level
-  const [sections, setSections] = useLocalStorageJson(`inv:v1:ex:sections:${levelId}`, [
-    { id: genId() },
-  ]);
-
-  // Stats each section
-  const [statsById, setStatsById] = useState({}); 
-
-  const addSection = () => setSections(prev => [...prev, { id: genId() }]);
-  const removeSection = (id) => {
-    setSections(prev => prev.filter(s => s.id !== id));
-    setStatsById(prev => {
-      const c = { ...prev };
-      delete c[id];
-      return c;
-    });
+  const { blankSection } = useProject();
+   const addSection = () => {
+    const newSection = blankSection({ kind: 'exterior' }); 
+    onSectionsChange([...(sectionsData || []), newSection]); // Add guard for undefined sectionsData
   };
 
-  // Get changes on each group
-  const handleStatsChange = useCallback((s) => {
-    if (!s || !s.id) return;
-    setStatsById(prev => {
-      const p = prev[s.id];
-      if (
-        p &&
-        p.lengthLF        === s.lengthLF &&
-        p.zipSheetsFinal  === s.zipSheetsFinal &&
-        p.platePieces     === s.platePieces &&
-        p.ptLF            === s.ptLF &&
-        p.groupSubtotal   === s.groupSubtotal &&
-        p.bottomBoardLenFt=== s.bottomBoardLenFt
-      ) {
-        return prev;
-      }
-      return { ...prev, [s.id]: s };
-    });
-  }, []);
+  const removeSection = (idToRemove) => {
+    const newSections = sectionsData.filter(s => s.id !== idToRemove);
+    onSectionsChange(newSections);
+  };
+
+  const handleSectionChange = useCallback((updatedSection) => {
+    const newSections = sectionsData.map(s => 
+      s.id === updatedSection.id ? updatedSection : s
+    );
+    onSectionsChange(newSections);
+  }, [sectionsData, onSectionsChange]);
 
   // Totals
   const totals = useMemo(() => {
-    const arr = Object.values(statsById);
-    const extLengthSum    = arr.reduce((sum, s) => sum + (Number(s.lengthLF)       || 0), 0);
-    const extZipSheetsSum = arr.reduce((sum, s) => sum + (Number(s.zipSheetsFinal) || 0), 0);
-    const extPanelSheets  = arr.reduce((sum, s) => sum + (Number(s.panelSheets)    || 0), 0);
-    const extPlatePieces  = arr.reduce((sum, s) => sum + (Number(s.platePieces)    || 0), 0);
-    const extBottomPlatePiecesPanel = arr.reduce((sum, s) => sum + (Number(s.bottomPlatePiecesPanel) || 0), 0);
-    const extPTLFSum      = arr.reduce((sum, s) => sum + (Number(s.ptLF)           || 0), 0);
-    const extMoneySum     = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
-    const panelsSubtotal  = arr.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
-    const extPanelPtBoards= arr.reduce((sum, s) => sum + (Number(s.panelPtBoards)  || 0), 0);
+    const sections = Array.isArray(sectionsData) ? sectionsData : [];
+    const panelsSubtotal = sections.reduce((sum, s) => sum + (Number(s.groupSubtotal) || 0), 0);
+    const extLengthSum    = sections.reduce((sum, s) => sum + (Number(s.lengthLF)       || 0), 0);
+    const extZipSheetsSum = sections.reduce((sum, s) => sum + (Number(s.zipSheetsFinal) || 0), 0);
+    const extPanelSheets  = sections.reduce((sum, s) => sum + (Number(s.panelSheets)    || 0), 0);
+    const extPlatePieces  = sections.reduce((sum, s) => sum + (Number(s.platePieces)    || 0), 0);
+    const extBottomPlatePiecesPanel = sections.reduce((sum, s) => sum + (Number(s.bottomPlatePiecesPanel) || 0), 0);
+    const extPTLFSum      = sections.reduce((sum, s) => sum + (Number(s.ptLF)           || 0), 0);
+    const extMoneySum     = sections.reduce((sum, s) => sum + (Number(s.groupSubtotal)  || 0), 0);
+    const extPanelPtBoards= sections.reduce((sum, s) => sum + (Number(s.panelPtBoards)  || 0), 0);
     
     return { 
       extLengthSum, 
@@ -101,28 +58,7 @@ export default function ExteriorWalls({
       panelsSubtotal,
       extPanelPtBoards,
     };
-  }, [statsById]);
-
-  const panelLenFtExterior = useMemo(() => {
-    const vals = Object.values(statsById)
-      .map(s => Number(s.bottomBoardLenFt) || 0)
-      .filter(Boolean);
-    if (!vals.length) return 8;
-    const counts = {};
-    for (const v of vals) counts[v] = (counts[v] || 0) + 1;
-    return Number(Object.keys(counts).sort((a, b) => counts[b] - counts[a] || b - a)[0]);
-  }, [statsById]);
-
-  const lastSentRef = useRef(null);
-  useEffect(() => {
-    const payload = { ...totals, panelLenFtExterior };
-    if (sameTotals(payload, lastSentRef.current)) return;
-    lastSentRef.current = payload;
-
-    onTotalsChange?.(payload);
-    onLengthLFChange?.(totals.extLengthSum);
-    onPanelLenFtChange?.(panelLenFtExterior);
-  }, [totals, panelLenFtExterior, onTotalsChange, onLengthLFChange, onPanelLenFtChange]);
+  }, [sectionsData]);
 
    const exteriorTotalSubtotal = totals.panelsSubtotal;
    const novaMonoStyle = { fontFamily: "'Nova Mono', monospace" };
@@ -136,7 +72,7 @@ export default function ExteriorWalls({
       </div>
     </div>
 
-      {sections.length === 0 && (
+      {(!sectionsData || sectionsData.length === 0) && (
         <div className="ew-card">
           <div className="ew-subtle">No exterior wall sections yet.</div>
           <div style={{ marginTop: 8 }}>
@@ -145,18 +81,18 @@ export default function ExteriorWalls({
         </div>
       )}
 
-      {sections.map((sec, idx) => (
+      {Array.isArray(sectionsData) && sectionsData.map((sec, idx) => (
         <ExteriorWallGroup
           key={sec.id}
-          persistKey={`exterior:${sec.id}`}
+          sectionData={sec} 
+          onUpdateSection={handleSectionChange}
           title={`Exterior walls — section ${idx + 1}`}
           onRemove={() => removeSection(sec.id)}
-          onStatsChange={handleStatsChange}
           bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
         />
       ))}
 
-      <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop: '1rem' /* Optional margin */ }}>
+      <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop: '1rem' }}>
         <div className="ew-subtle">Add another exterior wall section to this level.</div>
         <AddButton onClick={addSection} title="Add Section" label="Add Section" />
        </div>
