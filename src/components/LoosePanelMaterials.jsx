@@ -698,7 +698,7 @@ export default function LoosePanelMaterials({
         {/* Exterior header */}
         <div className="ew-grid ew-head" style={{ "--cols": gridCols }}>
           <div>Item</div>
-          <div>Vendor · Family · Size</div>
+          <div>Family · Size · Vendor</div>
           <div className="ew-right">Qty</div>
           <div className="ew-right">Waste %</div>
           <div className="ew-right">Final qty</div>
@@ -1017,7 +1017,7 @@ export default function LoosePanelMaterials({
         {/* Interior header */}
         <div className="ew-grid ew-head" style={{ "--cols": gridCols }}>
           <div>Item</div>
-          <div>Vendor · Family · Size</div>
+          <div>Family · Size · Vendor</div>
           <div className="ew-right">Qty</div>
           <div className="ew-right">Waste %</div>
           <div className="ew-right">Final qty</div>

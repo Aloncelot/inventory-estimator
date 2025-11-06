@@ -652,6 +652,7 @@ export default function InteriorWallGroup({
                             row.key === "topPlate" ||
                             row.key === "blocking"
                           ? `2x6"-8'`
+                          : row.key === "stud" ? `2x6"-10'` 
                           : undefined
                       }
                       preferredSeries={
@@ -807,8 +808,11 @@ export default function InteriorWallGroup({
                           : "SPF#2"
                       }
                       defaultSizeLabel={
-                        ex.type === "Extra sheathing" ? `4x8'-1/2"` : undefined
-                      }
+                          (ex.type === 'Headers infill' || ex.type === 'Extra sheathing') ? `4x8'-1/2"` :
+                          (ex.type === 'Header' || ex.type === 'Extra blocking') ? `2x6"-8'` :
+                          (ex.type === 'Post') ?  `2x6"-10'` :
+                          undefined
+                        }
                     />
 
                     {/* Header params */}

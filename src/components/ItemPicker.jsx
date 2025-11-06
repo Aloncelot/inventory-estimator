@@ -32,7 +32,7 @@ export default function ItemPicker({
   defaultVendor,
   defaultFamilyLabel,
   defaultSizeLabel,
-  preferredSeries, // <-- This prop is now used
+  preferredSeries, 
 }) {
   // Data
   const [families, setFamilies] = useState([]);
