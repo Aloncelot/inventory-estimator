@@ -3,7 +3,6 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import ItemPicker from '@/components/ItemPicker';
-// Removed: useLocalStorageJson
 import {
         calcPlates, calcStuds, calcBlocking, calcSheathing,
         calcHeader, calcPost, calcHeadersInfill,
@@ -13,47 +12,48 @@ import { isLVL, isVersaColumn, isLumberFamily, isInfillFamily } from '@/domain/l
 import AccordionSection from '@/components/ui/AccordionSection';
 import RemoveButton from '@/components/ui/RemoveButton';
 
-// --- Helpers (unchanged) ---
+// --- HELPER FUNCTIONS ---
 const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const fmt = n => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : '—');
-
 const wordsPreview = (s = '', maxWords = 8) => {
   const parts = String(s).trim().split(/\s+/);
   const preview = parts.slice(0, maxWords).join(' ');
   return parts.length > maxWords ? `${preview}…` : preview || '';
 };
 
-const deref = x => (x && x.item ? deref(x.item) : x);
-const getItem   = selLike => deref(selLike);
-const getUnit   = selLike => deref(selLike)?.unit || deref(selLike)?.raw?.unit || 'pcs';
-const getSize   = selLike => deref(selLike)?.sizeDisplay || deref(selLike)?.sizeLabel || deref(selLike)?.raw?.sizeDisplay || '';
+const deref = (x) => (x && x.item ? x.item : x); 
+const getItem = (selLike) => deref(selLike); 
+const getUnit = (selLike) =>
+  deref(selLike)?.unit || deref(selLike)?.raw?.unit || "pcs";
+
+const getSize = (selLike) =>
+  deref(selLike)?.sizeLabel ||
+  deref(selLike)?.sizeDisplay ||
+  deref(selLike)?.raw?.sizeDisplay ||
+  "";
+
 const getFamily = (selLike) => {
-  const it = deref(selLike);
+  const it = selLike; // Do NOT deref
   return String(
     it?.familyLabel ??
     it?.familyDisplay ??
     it?.raw?.familyDisplay ??
     it?.raw?.familyLabel ??
     it?.family ??
-    ''
+    ""
   ).toLowerCase();
 };
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Component
-   ────────────────────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────── */
 
 export default function ExteriorWallGroup({
-  // 1. Receive sectionData and the update function
   sectionData,
   onUpdateSection,
   title = 'Exterior walls',
   onRemove,
   bottomDefaultFamily = 'SPF#2',
-  // Removed: persistKey, onStatsChange
 }) {
 
-  // 2. Read all data from the sectionData prop
   const {
     id,
     lengthLF = 0,
@@ -66,66 +66,81 @@ export default function ExteriorWallGroup({
     extras = [],
   } = sectionData;
 
-  // 3. Local state *only* for the laggy LF input
   const [inputValueLF, setInputValueLF] = useState(String(lengthLF));
   useEffect(() => {
     setInputValueLF(String(lengthLF));
   }, [lengthLF]);
 
-  // 4. Handlers that call onUpdateSection
-  
-  // Helper to update a field in this section
-  const updateField = (fieldName, value) => {
-    onUpdateSection({ ...sectionData, [fieldName]: value });
-  };
-  
-  const setWaste = (key, value) => {
-    updateField('waste', { ...waste, [key]: Number(value) || 0 });
-  };
-  
-  const setPick = key => choice => {
-    updateField('sel', { ...sel, [key]: choice });
-  };
+  const updateField = useCallback((fieldName, value) => {
+    onUpdateSection(prevData => ({ ...prevData, [fieldName]: value }));
+  }, [onUpdateSection]);
 
-  const getNote = k => notes[k] || { plan:'', comment:'', open:false };
-  const setNote = (k, patch) => {
-    updateField('notes', { ...notes, [k]: { ...getNote(k), ...patch } });
-  };
-  const toggleOpen = k => setNote(k, { open: !getNote(k).open });
-  
-  const addExtra = type => {
+  const setWaste = useCallback((key, value) => {
+    onUpdateSection(prevData => ({
+      ...prevData,
+      waste: { ...(prevData.waste || {}), [key]: Number(value) || 0 }
+    }));
+  }, [onUpdateSection]);
+
+  const setPick = useCallback(key => choice => {
+    onUpdateSection(prevData => ({
+      ...prevData,
+      sel: { ...(prevData.sel || {}), [key]: choice }
+    }));
+  }, [onUpdateSection]);
+
+  const getNote = k => (notes || {})[k] || { plan:'', comment:'', open:false };
+  const setNote = useCallback((k, patch) => {
+    onUpdateSection(prevData => {
+      const currentNotes = prevData.notes || {};
+      const newNotes = { ...currentNotes, [k]: { ...(currentNotes[k] || {}), ...patch } };
+      return { ...prevData, notes: newNotes };
+    });
+  }, [onUpdateSection]);
+
+  const toggleOpen = useCallback(k => setNote(k, { open: !getNote(k).open }), [setNote, getNote]);
+
+  const addExtra = useCallback(type => {
     const newExtra = { id:`x${Date.now()}`, type, item:null, wastePct:5, inputs:{} };
-    updateField('extras', [...extras, newExtra]);
-  };
-  const removeExtra = id => {
-    updateField('extras', extras.filter(r => r.id !== id));
-  };
-  const updateExtra = (id, patch) => {
-    updateField('extras', extras.map(r => r.id === id ? { ...r, ...patch } : r));
-  };
+    onUpdateSection(prevData => ({
+      ...prevData,
+      extras: [...(prevData.extras || []), newExtra]
+    }));
+  }, [onUpdateSection]);
 
-  // Handle LF input commit
-  const commitLengthLF = () => {
+  const removeExtra = useCallback(id => {
+    onUpdateSection(prevData => ({
+      ...prevData,
+      extras: (prevData.extras || []).filter(r => r.id !== id)
+    }));
+  }, [onUpdateSection]);
+
+  const updateExtra = useCallback((id, patch) => {
+    onUpdateSection(prevData => ({
+      ...prevData,
+      extras: (prevData.extras || []).map(r => r.id === id ? { ...r, ...patch } : r)
+    }));
+  }, [onUpdateSection]);
+
+  const commitLengthLF = useCallback(() => {
     const newValue = Number(inputValueLF) || 0; 
     updateField('lengthLF', newValue);
-  };
-  const handleKeyDownLF = (e) => {
+  }, [inputValueLF, updateField]); 
+
+  const handleKeyDownLF = useCallback((e) => {
     if (e.key === 'Enter') {
       commitLengthLF();
       e.target.blur(); 
     }
-  };
+  }, [commitLengthLF]);
   
-  /* 5. Board lengths and calculations are derived from props (unchanged) */
+  // --- Calculations ---
   const _parsedBottom = parseBoardLengthFt(getSize(sel.bottomPlate));
   const bottomLen = _parsedBottom ?? 12;
   const bottomBoardLenFt = Number.isFinite(_parsedBottom) ? _parsedBottom : 0;
   const topLen   = parseBoardLengthFt(getSize(sel.topPlate))    ?? 12;
   const blockLen = parseBoardLengthFt(getSize(sel.blocking))    ?? 12;
 
-  /* 6. All useMemo hooks for calculations (baseRows, computedExtras) stay the same (unchanged) */
-  
-  /* Build base rows */
   const baseRows = useMemo(() => {
     const rows = [];
     {
@@ -166,28 +181,39 @@ export default function ExteriorWallGroup({
   const platePieces = (rowByKey?.bottomPlate?.qtyFinal ?? 0) + (rowByKey?.topPlate?.qtyFinal ?? 0);
   const ptLF = Number(lengthLF || 0);
 
+  const extrasSignature = useMemo(() => {
+    return (extras || [])
+      .map(r => `${r.type}:${getFamily(r.item)}:${r.inputs.headerLF || 0}`) // <-- Fixed getFamily call
+      .join(',');
+  }, [extras]);
+
   useEffect(() => {
-    const headerLF = extras.filter(r => r.type==='Header' && isInfillFamily(getFamily(r))).reduce((s,r) => s + Number(r.inputs.headerLF || 0), 0);
-    const hasInfill = extras.some(r => r.type==='Headers infill');
-    if (headerLF > 0 && !hasInfill) { addExtra('Headers infill'); }
-    if (headerLF === 0 && hasInfill) { removeExtra('infill'); }
-  }, [extras, addExtra, removeExtra]); // Corrected dependencies
+    const headerLF = (extras || []).filter(r => r.type === 'Header' && isInfillFamily(getFamily(r.item))).reduce((s, r) => s + Number(r.inputs.headerLF || 0), 0);
+    const hasInfill = (extras || []).some(r => r.type === 'Headers infill');
+    
+    if (headerLF > 0 && !hasInfill) { 
+      addExtra('Headers infill'); 
+    }
+    if (headerLF === 0 && hasInfill) { 
+      removeExtra('infill'); 
+    }
+  }, [extrasSignature, addExtra, removeExtra]); 
 
   const computedExtras = useMemo(() => {
-    const headerLFPool = extras.filter(r => r.type === 'Header' && isInfillFamily(getFamily(r))).reduce((s, r) => s + Number(r?.inputs?.headerLF || 0), 0);
-    return extras.map(r => {
-      const fam = getFamily(r);
-      const boardLenFt = parseBoardLengthFt(getSize(r)) ?? 0;
+    const headerLFPool = (extras || []).filter(r => r.type === 'Header' && isInfillFamily(getFamily(r.item))).reduce((s, r) => s + Number(r?.inputs?.headerLF || 0), 0);
+    return (extras || []).map(r => {
+      const fam = getFamily(r.item); // <-- Fixed getFamily call
+      const boardLenFt = parseBoardLengthFt(getSize(r.item)) ?? 0; // <-- Fixed getSize call
       if (r.type === 'Header') {
-        const res = calcHeader({ isLVL: isLVL(fam), headerLF: Number(r?.inputs?.headerLF || 0), lvlPieces: Number(r?.inputs?.lvlPieces || 0), lvlLength: Number(r?.inputs?.lvlLength || 0), boardLenFt, wastePct: r.wastePct ?? 5, item: getItem(r) });
+        const res = calcHeader({ isLVL: isLVL(fam), headerLF: Number(r?.inputs?.headerLF || 0), lvlPieces: Number(r?.inputs?.lvlPieces || 0), lvlLength: Number(r?.inputs?.lvlLength || 0), boardLenFt, wastePct: r.wastePct ?? 5, item: getItem(r.item) });
         return { ...r, unit: res.unit, qtyRaw: res.qtyRaw, qtyFinal: res.qtyFinal, unitPrice: res.unitPrice, subtotal: res.subtotal, boardLenFt };
       }
       if (r.type === 'Post') {
-        const res = calcPost({ isLinearLF: isLVL(fam) || isVersaColumn(fam), pieces: Number(r?.inputs?.pieces || 0), heightFt: Number(r?.inputs?.heightFt ?? heightFt), piecesPerPost: Number(r?.inputs?.piecesPerPost || 0), numPosts: Number(r?.inputs?.numPosts || 0), wastePct: r.wastePct ?? 5, item: getItem(r) });
+        const res = calcPost({ isLinearLF: isLVL(fam) || isVersaColumn(fam), pieces: Number(r?.inputs?.pieces || 0), heightFt: Number(r?.inputs?.heightFt ?? heightFt), piecesPerPost: Number(r?.inputs?.piecesPerPost || 0), numPosts: Number(r?.inputs?.numPosts || 0), wastePct: r.wastePct ?? 5, item: getItem(r.item) });
         return { ...r, unit: res.unit, qtyRaw: res.qtyRaw, qtyFinal: res.qtyFinal, unitPrice: res.unitPrice, subtotal: res.subtotal, boardLenFt };
       }
       if (r.type === 'Headers infill') {
-        const res = calcHeadersInfill({ headerLFPool, wastePct: r.wastePct ?? 5, item: getItem(r) });
+        const res = calcHeadersInfill({ headerLFPool, wastePct: r.wastePct ?? 5, item: getItem(r.item) });
         return { ...r, unit: res.unit, qtyRaw: res.qtyRaw, qtyFinal: res.qtyFinal, unitPrice: res.unitPrice, subtotal: res.subtotal, boardLenFt: null };
       }
       return r;
@@ -200,13 +226,12 @@ export default function ExteriorWallGroup({
     return b + x;
   }, [baseRows, computedExtras]);
 
-  // 7. This useEffect now just updates the parent's state (unchanged from my last version)
   const lastSentSigRef = useRef('');
   useEffect(() => {
     const currentStats = {
-      ...sectionData,
       lengthLF, 
-      zipSheetsFinal, panelSheets,
+      zipSheetsFinal, 
+      panelSheets,
       platePieces: Math.ceil(platePieces),
       bottomPlatePiecesPanel: Math.ceil(rowByKey.bottomPlate?.qtyFinal || 0),
       ptLF,
@@ -214,12 +239,21 @@ export default function ExteriorWallGroup({
       bottomBoardLenFt,
       panelPtBoards,
     };
-     const currentSig = JSON.stringify(currentStats);
-     if (currentSig !== lastSentSigRef.current) {
-         lastSentSigRef.current = currentSig;
-         onUpdateSection?.(currentStats);
+    
+    const currentSig = JSON.stringify(currentStats);     
+    if (currentSig !== lastSentSigRef.current) {
+         lastSentSigRef.current = currentSig;         
+         onUpdateSection(prevData => ({
+            ...prevData, 
+            ...currentStats,
+         }));
      }
-  }, [ sectionData, onUpdateSection, lengthLF, zipSheetsFinal, panelSheets, platePieces, rowByKey.bottomPlate?.qtyFinal, ptLF, groupSubtotal, bottomBoardLenFt, panelPtBoards ]);
+  }, [ 
+      onUpdateSection,
+      lengthLF, zipSheetsFinal, panelSheets, platePieces, 
+      rowByKey.bottomPlate?.qtyFinal, ptLF, groupSubtotal, 
+      bottomBoardLenFt, panelPtBoards 
+  ]);
 
   /* ────────────────────────────────────────────────────────────────────────
      Render
@@ -234,7 +268,7 @@ export default function ExteriorWallGroup({
       summary={<div style={{ textAlign:'right', fontWeight: 700, color: '#f18d5b' }}>Subtotal: {fmt(groupSubtotal)}</div>}
       actions={onRemove ? <RemoveButton onClick={onRemove} title="Remove section" label="Remove section" /> : null}
     >
-          {/* 8. All inputs are wired to the correct update handlers */}
+          {/* Inputs are wired to stable handlers */}
           <div className="controls4" style={{ marginBottom: 12 }}>
             <label>
               <span className="ew-subtle">Length (LF)</span>
@@ -258,22 +292,21 @@ export default function ExteriorWallGroup({
             <label>
               <span className="ew-subtle">Studs per location</span>
               <select
-              className="ew-select focus-anim"
-              value={studMultiplier}
-              onChange={(e) => updateField('studMultiplier', Number(e.target.value))}
-            >
-              <option value={1}>Single</option>
-              <option value={2}>Double</option>
-              <option value={3}>Triple</option>
-              <option value={4}>Quad</option>
-            </select>
-
+                className="ew-select focus-anim"
+                value={studMultiplier}
+                onChange={e => updateField('studMultiplier', Number(e.target.value))}
+              >
+                <option value={1}>Single</option>
+                <option value={2}>Double</option>
+                <option value={3}>Triple</option>
+                <option value={4}>Quad</option>
+              </select>
             </label>
           </div>
 
           <div className="ew-grid ew-head" style={{ '--cols': gridCols }}>
             <div>Item</div>
-            <div>Vendor · Family · Size</div>
+            <div>Family · Size · Vendor</div>
             <div className="ew-right">Qty</div>
             <div className="ew-right">Waste %</div>
             <div className="ew-right">Final qty</div>
@@ -295,7 +328,7 @@ export default function ExteriorWallGroup({
                     <ItemPicker
                       compact
                       onSelect={setPick(row.key)}
-                      value={sel[row.key]} // <-- ** THIS IS THE KEY **
+                      value={sel[row.key]} 
                       defaultVendor="Gillies & Prittie Warehouse"
                       defaultFamilyLabel={
                         row.key === 'sheathing'   ?   'Green Zip':
@@ -305,6 +338,7 @@ export default function ExteriorWallGroup({
                       defaultSizeLabel={
                         row.key === 'sheathing' ? `4x8'-7/16"` :
                         (row.key === 'bottomPlate' || row.key === 'topPlate' || row.key === 'blocking') ? `2x6"-8'` :
+                        row.key === 'studs' ? `2x6"-10'` :
                         undefined
                       }
                       preferredSeries={row.key === 'sheathing'  ? undefined: '2x6'}
@@ -315,7 +349,7 @@ export default function ExteriorWallGroup({
                         className="ew-input focus-anim"
                         type="number" inputMode="decimal"
                         value={row.wastePct}
-                        onChange={e => setWaste(row.key, e.target.value)} // Corrected
+                        onChange={e => setWaste(row.key, e.target.value)} 
                         style={{ width:80, padding:6, textAlign:'right' }}
                       />
                     </div>
@@ -323,7 +357,6 @@ export default function ExteriorWallGroup({
                     <div className="ew-right">{row.unit}</div>
                     <div className="ew-right ew-money">{row.unitPrice ? fmt(row.unitPrice) : '—'}</div>
                     <div className="ew-right ew-money">{row.subtotal ? fmt(row.subtotal) : '—'}</div>
-                    {/* ... (notes block unchanged) ... */}
                     <div>
                       <div className="ew-subtle" style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
                         <span className="ew-chip" title={n.plan || ''}>{n.plan || '—'}</span>
@@ -337,7 +370,7 @@ export default function ExteriorWallGroup({
                     </div>
                     <div></div>
                   </div>
-                  {n.open && ( /* ... (notes drawer unchanged) ... */ 
+                  {n.open && ( 
                     <div className="ew-row" style={{ padding:12 }}>
                       <div className="controls2" style={{ width:'100%' }}>
                         <label>
@@ -387,18 +420,17 @@ export default function ExteriorWallGroup({
                       <ItemPicker
                         compact
                         onSelect={(item) => updateExtra(ex.id, { item })}
-                        value={ex.item} // <-- ** THIS IS THE KEY **
+                        value={ex.item}
                         defaultVendor="Gillies & Prittie Warehouse"
                         defaultFamilyLabel={ex.type === 'Headers infill' ? 'CDX SE' : 'SPF#2'}
                         defaultSizeLabel={
                           ex.type === 'Headers infill' ? `4x8'-1/2"` :
-                          (ex.type === 'Header' || ex.type === 'Post') ? `2x6"-8'` :
+                          (ex.type === 'Header' || ex.type === 'Post') ? `2x6"-10'` :
                           undefined
                         }
                         />
-                      {/* ... (all extra inputs are unchanged and correct) ... */}
                       {ex.type === 'Header' && ( 
-                        isLVL(getFamily(ex)) ? (
+                        isLVL(getFamily(ex.item)) ? (
                           <div className="ew-inline" style={{ marginTop:6, alignItems:'end' }}>
                             <label style={{minWidth: 120}}><span className="ew-subtle">Pieces</span>
                               <input className="ew-input focus-anim" type="number"
@@ -421,12 +453,12 @@ export default function ExteriorWallGroup({
                                 onChange={e => updateExtra(ex.id, { inputs: { ...ex.inputs, headerLF: Number(e.target.value) } })}
                               />
                             </label>
-                            <div className="ew-hint">Board length from size: {ex.boardLenFt || parseBoardLengthFt(getSize(ex)) || '—'} ft</div>
+                            <div className="ew-hint">Board length from size: {ex.boardLenFt || parseBoardLengthFt(getSize(ex.item)) || '—'} ft</div>
                           </div>
                         )
                       )}
                       {ex.type === 'Post' && (
-                        (isLVL(getFamily(ex)) || isVersaColumn(getFamily(ex))) ? (
+                        (isLVL(getFamily(ex.item)) || isVersaColumn(getFamily(ex.item))) ? ( 
                           <div className="ew-inline" style={{ marginTop:6, alignItems:'end' }}>
                             <label style={{minWidth: 120}}><span className="ew-subtle">Pieces</span>
                               <input className="ew-input focus-anim" type="number"
@@ -441,7 +473,7 @@ export default function ExteriorWallGroup({
                               />
                             </label>
                           </div>
-                        ) : isLumberFamily(getFamily(ex)) ? (
+                        ) : isLumberFamily(getFamily(ex.item)) ? ( 
                           <div className="ew-inline" style={{ marginTop:6, alignItems:'end' }}>
                             <label style={{minWidth: 160}}><span className="ew-subtle">Pieces per post</span>
                               <input className="ew-input focus-anim" type="number"
@@ -464,7 +496,6 @@ export default function ExteriorWallGroup({
                         </div>
                       )}
                     </div>
-                    {/* ... (rest of row unchanged) ... */}
                     <div className="ew-right">{Math.ceil(ex.qtyRaw ?? 0)}</div>
                     <div className="ew-right">
                       <input
@@ -481,18 +512,18 @@ export default function ExteriorWallGroup({
                     <div className="ew-right ew-money">{ex.subtotal ? fmt(ex.subtotal) : '—'}</div>
                     <div>
                       <div className="ew-subtle" style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
-                        <span className="ew-chip" title={getNote(noteKey).plan || ''}>{getNote(noteKey).plan || '—'}</span>
+                        <span className="ew-chip" title={n.plan || ''}>{n.plan || '—'}</span>
                         <button className="ew-btn" style={{ padding:'4px 8px' }} onClick={() => toggleOpen(noteKey)}>
-                          {getNote(noteKey).open ? 'Hide' : 'Notes'}
+                          {n.open ? 'Hide' : 'Notes'}
                         </button>
                       </div>
-                      {getNote(noteKey).comment && (
-                        <div className="ew-subtle" title={getNote(noteKey).comment}>{wordsPreview(getNote(noteKey).comment)}</div>
+                      {n.comment && (
+                        <div className="ew-subtle" title={n.comment}>{wordsPreview(n.comment)}</div>
                       )}
                     </div>
                     <div></div>
                   </div>
-                  {getNote(noteKey).open && ( /* ... (notes drawer unchanged) ... */
+                  {n.open && ( 
                     <div className="ew-row" style={{ padding:12 }}>
                       <div className="controls2" style={{ width:'100%' }}>
                         <label>
@@ -522,26 +553,34 @@ export default function ExteriorWallGroup({
           </div>
 
           <div className="ew-footer">
-            <button className="ew-btn" onClick={() => addExtra('Header')}><img
-              src={"/icons/plus-sign.png"}
-              width={12}
-              height={12}
-              className="acc__chev"
-              style={{
-                display: "inline-block",
-                verticalAlign: "middle",
-              }}
-            />{" "} Header</button>
-            <button className="ew-btn" onClick={() => addExtra('Post')}><img
-              src={"/icons/plus-sign.png"}
-              width={12}
-              height={12}
-              className="acc__chev"
-              style={{
-                display: "inline-block",
-                verticalAlign: "middle",
-              }}
-            />{" "} Post</button>
+            <button className="ew-btn" onClick={() => addExtra('Header')}>
+              <img
+                src={"/icons/plus-sign.png"}
+                width={12}
+                height={12}
+                alt="Add"
+                style={{
+                  display: "inline-block",
+                  verticalAlign: "middle",
+                  marginRight: '6px' 
+                }}
+              />
+              Header
+            </button>
+            <button className="ew-btn" onClick={() => addExtra('Post')}>
+              <img
+                src={"/icons/plus-sign.png"}
+                width={12}
+                height={12}
+                alt="Add"
+                style={{
+                  display: "inline-block",
+                  verticalAlign: "middle",
+                  marginRight: '6px' 
+                }}
+              />
+              Post
+            </button>
             <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b'}}>
               Group subtotal: {fmt(groupSubtotal)}
             </div>      

@@ -1,38 +1,20 @@
 // src/components/ItemPicker.jsx
-"use client";
+'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import {
-  getFamilies,
-  getSizesForFamily,
-  getVendorsForIds,
-  getFinalItem,
-} from "@/lib/catalog";
-import SearchableSelect from "@/components/SearchableSelect";
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { getFamilies, getSizesForFamily, getVendorsForIds, getFinalItem } from '@/lib/catalog';
+import SearchableSelect from '@/components/SearchableSelect';
 
-// Helper function (copied from your import-prices.js)
-function slug(s) {
-  return String(s || "")
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "_")
-    .toLowerCase();
-}
-
-const norm = (s = "") =>
-  String(s)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+const norm = (s = '') => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export default function ItemPicker({
   onSelect,
+  value, // This prop holds the currently selected item object
   compact = false,
   defaultVendor,
   defaultFamilyLabel,
   defaultSizeLabel,
-  preferredSeries, 
+  preferredSeries,
 }) {
   // Data
   const [families, setFamilies] = useState([]);
@@ -40,9 +22,9 @@ export default function ItemPicker({
   const [vendors, setVendors] = useState([]);
 
   // Selection
-  const [familySlug, setFamilySlug] = useState("");
-  const [sizeLookupId, setSizeLookupId] = useState("");
-  const [vendorId, setVendorId] = useState("");
+  const [familySlug, setFamilySlug] = useState('');
+  const [sizeLookupId, setSizeLookupId] = useState(''); 
+  const [vendorId, setVendorId] = useState('');
 
   // Loading states
   const [loadingFamilies, setLoadingFamilies] = useState(true);
@@ -54,11 +36,17 @@ export default function ItemPicker({
   const didAutoSize = useRef(false);
   const didAutoVendor = useRef(false);
   const onSelectRef = useRef(onSelect);
-  useEffect(() => {
-    onSelectRef.current = onSelect;
-  }, [onSelect]);
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
-  // --- Step 1: Load all Families on mount ---
+  useEffect(() => {
+    if (value && value.family) {
+      if (familySlug !== value.family) setFamilySlug(value.family);
+      if (sizeLookupId !== value.sizeLookupId) setSizeLookupId(value.sizeLookupId);
+      if (vendorId !== value.vendorId) setVendorId(value.vendorId);
+    }
+  }, [value, familySlug, sizeLookupId, vendorId]); 
+
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -67,42 +55,35 @@ export default function ItemPicker({
       if (!alive) return;
       setFamilies(fams);
       setLoadingFamilies(false);
+
+      if (!value && !didAutoFamily.current && fams.length > 0 && defaultFamilyLabel) {
+        const want = norm(defaultFamilyLabel);
+        const pick = fams.find(f => norm(f.label) === want);
+        if (pick) {
+          didAutoFamily.current = true;
+          setFamilySlug(pick.value);
+        }
+      }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
+  }, [value, defaultFamilyLabel]);
+
+  const handleFamilyChange = useCallback((slug) => {
+    setFamilySlug(slug);
+    setSizeLookupId('');
+    setVendorId('');
+    setSizes([]);
+    setVendors([]);
   }, []);
-
-  // Auto-pick default family
-  useEffect(() => {
-    if (didAutoFamily.current || families.length === 0 || !defaultFamilyLabel)
-      return;
-    const want = norm(defaultFamilyLabel);
-    const pick = families.find((f) => norm(f.label) === want);
-    if (pick) {
-      didAutoFamily.current = true;
-      setFamilySlug(pick.value);
-    }
-  }, [families, defaultFamilyLabel]);
-
-  // --- Step 2: On Family change, load Sizes ---
-  const handleFamilyChange = useCallback(
-    (slug) => {
-      setFamilySlug(slug);
-      setSizeLookupId("");
-      setVendorId("");
-      setSizes([]);
-      setVendors([]);
-      onSelectRef.current?.(null);
-    },
-    [onSelectRef]
-  );
 
   useEffect(() => {
     if (!familySlug) {
-      setSizes([]);
+      setSizes([]); 
       return;
-    }
+    };
+
+    if (value && value.family === familySlug && sizes.length > 0) return;
+
     let alive = true;
     (async () => {
       setLoadingSizes(true);
@@ -110,55 +91,41 @@ export default function ItemPicker({
       if (!alive) return;
       setSizes(newSizes);
       setLoadingSizes(false);
+
+      if (!value && !didAutoSize.current && newSizes.length > 0) {
+        let pick = null;
+        if (defaultSizeLabel) {
+          const want = norm(defaultSizeLabel);
+          pick = newSizes.find(s => norm(s.label) === want);
+        }
+        if (!pick && preferredSeries) {
+          const wantSeries = norm(preferredSeries).replace(/[^0-9x]/g, '');
+          const labelNorm = (s) => norm(String(s || '')).replace(/[^0-9x]/g, '');
+          pick = newSizes.find(s => labelNorm(s.label).startsWith(wantSeries));
+        }
+        if (pick) {
+          didAutoSize.current = true;
+          setSizeLookupId(pick.value);
+        }
+      }
     })();
-    return () => {
-      alive = false;
-    };
-  }, [familySlug]);
+    return () => { alive = false; };
+  }, [familySlug, value, defaultSizeLabel, preferredSeries, sizes.length]); 
 
-  // Auto-pick default size (NOW INCLUDES preferredSeries)
-  useEffect(() => {
-    if (didAutoSize.current || sizes.length === 0) return;
-    if (!defaultSizeLabel && !preferredSeries) return;
-
-    let pick = null;
-
-    // Priority 1: Try to match defaultSizeLabel exactly (if provided)
-    if (defaultSizeLabel) {
-      const want = norm(defaultSizeLabel);
-      pick = sizes.find((s) => norm(s.label) === want);
-    }
-
-    // Priority 2: If no match, try to match preferredSeries (e.g., "2x6")
-    if (!pick && preferredSeries) {
-      const wantSeries = norm(preferredSeries).replace(/[^0-9x]/g, ""); // "2x6"
-      const labelNorm = (s) => norm(String(s || "")).replace(/[^0-9x]/g, "");
-      pick = sizes.find((s) => labelNorm(s.label).startsWith(wantSeries));
-    }
-
-    if (pick) {
-      didAutoSize.current = true;
-      setSizeLookupId(pick.value); // This is the itemLookupId (e.g., 'spf-2_2x6-8')
-    }
-  }, [sizes, defaultSizeLabel, preferredSeries]);
-
-  // --- Step 3: On Size change, load Vendors ---
-  const handleSizeChange = useCallback(
-    (lookupId) => {
-      setSizeLookupId(lookupId);
-      setVendorId("");
-      setVendors([]);
-      onSelectRef.current?.(null);
-    },
-    [onSelectRef]
-  );
+  const handleSizeChange = useCallback((lookupId) => {
+    setSizeLookupId(lookupId);
+    setVendorId('');
+    setVendors([]);
+  }, []);
 
   useEffect(() => {
     if (!sizeLookupId) {
-      setVendors([]);
+      setVendors([]); 
       return;
     }
-    const selectedSize = sizes.find((s) => s.value === sizeLookupId);
+    if (value && value.sizeLookupId === sizeLookupId && vendors.length > 0) return;
+    
+    const selectedSize = sizes.find(s => s.value === sizeLookupId);
     if (!selectedSize?.vendorIds) return;
 
     let alive = true;
@@ -168,78 +135,62 @@ export default function ItemPicker({
       if (!alive) return;
       setVendors(newVendors);
       setLoadingVendors(false);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [sizeLookupId, sizes]);
 
-  // --- Step 4: On Vendor change, get final item and emit ---
-  const handleVendorChange = useCallback(
-    (vId) => {
-      setVendorId(vId);
-
-      const family = families.find((f) => f.value === familySlug);
-      const size = sizes.find((s) => s.value === sizeLookupId);
-
-      if (!family || !size || !vId) {
-        onSelectRef.current?.(null);
-        return;
-      }
-
-      (async () => {
-        const firestoreDoc = await getFinalItem({
-          familyLabel: family.label,
-          sizeLabel: size.label,
-          vendorId: vId,
-        });
-
-        if (!firestoreDoc) {
-          onSelectRef.current?.(null);
-          return;
+      if (!value && !didAutoVendor.current && newVendors.length > 0 && defaultVendor) {
+        const want = norm(defaultVendor);
+        const pick = newVendors.find(v => norm(v.label).includes(want)); 
+        if (pick) {
+          didAutoVendor.current = true;
+          setVendorId(pick.value); 
         }
+      }
+    })();
+    return () => { alive = false; };
+  }, [sizeLookupId, sizes, value, defaultVendor, vendors.length]); 
 
-        // 1. Re-create the `item` object (what the old `listSizes` did)
-        const itemObject = {
-          id: slug(`${family.label}|${size.label}`), // The doc ID
-          sizeSlug: firestoreDoc.sizeSlug,
-          sizeLabel: firestoreDoc.sizeDisplay, // <-- This is what getSize() needs
-          unit: firestoreDoc.unit,
-          priceWithMarkup: firestoreDoc.priceWithMarkup ?? null,
-          raw: firestoreDoc, // Pass the full doc as `raw`
-        };
+  const handleVendorChange = useCallback((vId) => {
+    setVendorId(vId);
+  }, []);
 
-        // 2. Build the final `onSelect` payload
-        const selectionPayload = {
-          vendorId: vId,
-          vendorName: vendors.find((v) => v.value === vId)?.label || vId,
-          family: family.value,
-          familyLabel: family.label,
-          item: itemObject, // <-- Pass the reconstructed `item` object
-        };
-
-        onSelectRef.current?.(selectionPayload);
-      })();
-    },
-    [familySlug, sizeLookupId, families, sizes, vendors, onSelectRef]
-  );
-
-  // Auto-pick default vendor
   useEffect(() => {
-    if (didAutoVendor.current || vendors.length === 0 || !defaultVendor) return;
-    const want = norm(defaultVendor);
-    const pick = vendors.find((v) => norm(v.label).includes(want));
-    if (pick) {
-      didAutoVendor.current = true;
-      handleVendorChange(pick.value);
+    if (!vendorId || !familySlug || !sizeLookupId) {
+      onSelectRef.current?.(null);
+      return;
     }
-  }, [vendors, defaultVendor, handleVendorChange]);
+    
+    const family = families.find(f => f.value === familySlug);
+    const size = sizes.find(s => s.value === sizeLookupId);
+    const vendor = vendors.find(v => v.value === vendorId);
+
+    if (!family || !size || !vendor) {
+      onSelectRef.current?.(null);
+      return;
+    }
+
+    (async () => {
+      const item = await getFinalItem({
+        familyLabel: family.label,
+        sizeLabel: size.label,
+        vendorId: vendor.value,
+      });
+      
+      onSelectRef.current?.(item ? {
+        vendorId: vendor.value,
+        vendorName: vendor.label,
+        family: family.value,
+        familyLabel: family.label,
+        sizeLookupId: size.value, 
+        item: item, 
+      } : null);
+    })();
+    
+  }, [vendorId, familySlug, sizeLookupId, families, sizes, vendors]); 
 
   // --- UI ---
   const FamilySelect = (
     <SearchableSelect
       ariaLabel="Family"
-      value={familySlug}
+      value={familySlug} 
       onChange={handleFamilyChange}
       options={families}
       placeholder="Select Family…"
@@ -251,7 +202,7 @@ export default function ItemPicker({
   const SizeSelect = (
     <SearchableSelect
       ariaLabel="Size"
-      value={sizeLookupId}
+      value={sizeLookupId} 
       onChange={handleSizeChange}
       options={sizes}
       placeholder="Select Size…"
@@ -263,7 +214,7 @@ export default function ItemPicker({
   const VendorSelect = (
     <SearchableSelect
       ariaLabel="Vendor"
-      value={vendorId}
+      value={vendorId} 
       onChange={handleVendorChange}
       options={vendors}
       placeholder="Select Vendor…"
@@ -274,13 +225,7 @@ export default function ItemPicker({
 
   if (compact) {
     return (
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.2fr 1.2fr 1fr",
-          gap: 6,
-        }}
-      >
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr', gap: 6 }}>
         {FamilySelect}
         {SizeSelect}
         {VendorSelect}
@@ -289,7 +234,7 @@ export default function ItemPicker({
   }
 
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {FamilySelect}
       {SizeSelect}
       {VendorSelect}
