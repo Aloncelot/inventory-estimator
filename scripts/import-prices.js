@@ -51,19 +51,23 @@ function escapeRe(s = '') {
 }
 
 function splitFamilySizeFallback(description, familyFromSheet) {
-  const desc = normalizeKey(description);
-  let family = String(familyFromSheet || '').trim();
-  if (family) {
-    const rx = new RegExp(`\\s*[-–—]?\\s*${escapeRe(family)}\\s*$`, 'i');
-    const size = desc.replace(rx, '').trim();
+  const desc = normalizeKey(description || '');
+  
+  const firstSpaceIndex = desc.indexOf(' ');
+
+  // Check if a space exists and it's not at the beginning or end
+  if (firstSpaceIndex > 0 && firstSpaceIndex < desc.length - 1) {
+    const size = desc.substring(0, firstSpaceIndex).trim();
+    const family = desc.substring(firstSpaceIndex + 1).trim();
     return { family, size };
   }
-  const m = desc.match(/([A-Za-z0-9#]+(?:\s+[A-Za-z0-9#]+)*)$/);
-  if (m) {
-    family = m[1].trim();
-    const size = desc.slice(0, -m[0].length).replace(/\s*[-–—]\s*$/, '').trim();
-    return { family, size };
+
+  // If no space is found, use the 'familyFromSheet' if available
+  if (familyFromSheet) {
+    return { family: familyFromSheet, size: desc };
   }
+
+  // Failsafe: return the whole description as the family
   return { family: desc, size: desc };
 }
 
@@ -138,9 +142,15 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
     const materialType  = pick(row, 'MATERIAL TYPE') || '';
     const familySheet   = pick(row, 'SHEATHING', 'ADV', 'FAMILY', 'MATERIAL', 'GROUP', 'TYPE'); // Added 'SHEATHING' from screenshot
 
-    const supplierPrice = money(pick(row, 'Supplier Price'));
-    const markupPct     = pct(pick(row, 'MARKUP%', 'MARKUP %'));
-    const priceWithSheet= money(pick(row, 'CK PRICE with markup', 'PRICE WITH MARKUP'));
+    const rawBasePrice = pick(row, 'Supplier Price Sep 2025', 'Base Price') || null;
+    const rawMarkup = pick(row, 'Markup %') || null;
+    const rawPriceWithMarkup = pick(row, 'CX PRICE with markup', 'Price w/Markup') || null;
+    const basePrice = money(rawBasePrice);
+    const markupPct = pct(rawMarkup);
+    const priceWithMarkup = money(rawPriceWithMarkup);    
+    
+    // const priceWithSheet= money(pick(row, 'CK PRICE with markup', 'PRICE WITH MARKUP'));
+    
     const link          = pick(row, 'LINK', 'URL');
 
     // 1) Find family/size via Data map
@@ -156,14 +166,15 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       family = sp.family;
       size   = sp.size;
     }
-
+    
+    if (basePrice === null || isNaN(basePrice) || basePrice <= 0) {
+        if (family && size) {
+          console.warn(`SKIPPING: Invalid or missing basePrice for "${family} | ${size}". Raw value: "${rawBasePrice}"`);
+        }
+        skipped++; //
+        continue;
+    }
     const joinKey = `${family}|${size}`;
-
-    const priceWithMarkup = (priceWithSheet != null && Number.isFinite(priceWithSheet))
-      ? priceWithSheet
-      : (supplierPrice != null && markupPct != null)
-        ? supplierPrice * (1 + markupPct / 100)
-        : null;
 
     const { vendorId, displayName } = canonicalVendorName(supplierRaw);
 
@@ -183,7 +194,7 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       vendorId,
       materialType,
       url: link || '',
-      basePrice: supplierPrice,
+      basePrice: basePrice,
       markupPct:  (markupPct != null) ? Number(markupPct) : null,
       priceWithMarkup: (priceWithMarkup != null) ? Number(priceWithMarkup) : null,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -203,11 +214,9 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
                     familySlug: familySlug,
                     sizeSlug: sizeSlug
                  });
-             }
-             // **MODIFIED:** Add vendor to the Set within the object
+             }            
              itemVendorMap.get(itemLookupId).vendorSet.add(vendorId); 
          }
-
     try {
       const vendorDoc = {
         displayName,

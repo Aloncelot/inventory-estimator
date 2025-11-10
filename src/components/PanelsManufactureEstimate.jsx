@@ -2,7 +2,6 @@
 "use client";
 import { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import AccordionSection from "./ui/AccordionSection";
-// Removed: useLocalStorageJson
 
  const DEFAULT_RATES = {
      exteriorWalls:     { ratePerLF: 10.50, ratePerPanel: 84.00 },
@@ -21,7 +20,7 @@ import AccordionSection from "./ui/AccordionSection";
 
  export default function PanelsManufactureEstimate({
      data,
-     onChange,
+     onChange, // This is now a stable function: (updaterFn) => void
      panelLenFt = 8,
      panelLenFtInterior = 8,
      panelLenFtExterior = undefined,
@@ -34,6 +33,7 @@ import AccordionSection from "./ui/AccordionSection";
      kneeWallLF,
  }) {
     
+    // 1. Destructure data from props
     const {
         collapsed = false,
         rateByKey = { 
@@ -63,59 +63,66 @@ import AccordionSection from "./ui/AccordionSection";
         manualInputTouched = {},
     } = data || {};
 
-    const onChangeRef = useRef(onChange);
-    useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
-
-    // --- **THIS IS THE FIX (PART 1)** ---
-    // Create a ref to hold the data, so our effects don't need to depend on it
-    const dataRef = useRef(data);
-    useEffect(() => {
-        dataRef.current = data;
-    }, [data]);
     
-    // Helper to update a field in this component's data object
+    // --- **THIS IS THE FIX (PART 1)** ---
+    // All update handlers are now stable and pass an "updater function"
+    
     const updateField = useCallback((fieldName, value) => {
-        // Read the *current* data from the ref
-        onChangeRef.current?.({ ...dataRef.current, [fieldName]: value });
-    }, [onChangeRef]); // This callback is now stable
+        // Pass a function to onChange
+        onChange(prevData => ({ ...prevData, [fieldName]: value }));
+    }, [onChange]);
 
     const setCollapsed = (isCollapsed) => {
         updateField('collapsed', !!isCollapsed);
     };
 
-    // --- Handlers for Input Changes (These are now stable) ---
      const handlePanelLenChange = useCallback((key) => (e) => {
          const v = Number(e.target.value) || 0;
-         updateField('panelLenByKey', { ...panelLenByKey, [key]: Math.max(1, v) });
-         updateField('panelLenTouched', { ...panelLenTouched, [key]: true });
-     }, [panelLenByKey, panelLenTouched, updateField]);
+         onChange(prevData => ({
+             ...prevData,
+             panelLenByKey: { ...(prevData.panelLenByKey || {}), [key]: Math.max(1, v) },
+             panelLenTouched: { ...(prevData.panelLenTouched || {}), [key]: true }
+         }));
+     }, [onChange]);
 
      const handleRateChange = useCallback((key) => (e) => {
          const v = e.target.value;
-         updateField('rateByKey', { ...rateByKey, [key]: v });
-     }, [rateByKey, updateField]);
+         onChange(prevData => ({
+            ...prevData,
+            rateByKey: { ...(prevData.rateByKey || {}), [key]: v }
+         }));
+     }, [onChange]);
 
      const handleRateBlur = useCallback((key) => (e) => {
           const v = parseFloat(e.target.value);
           const finalRate = Number.isFinite(v) ? v : 0;
-          updateField('rateByKey', { ...rateByKey, [key]: finalRate });
-          updateField('rateTouched', { ...rateTouched, [key]: true });
-     }, [rateByKey, rateTouched, updateField]);
+          onChange(prevData => ({
+              ...prevData,
+              rateByKey: { ...(prevData.rateByKey || {}), [key]: finalRate },
+              rateTouched: { ...(prevData.rateTouched || {}), [key]: true }
+          }));
+     }, [onChange]);
 
       const handleManualInputChange = useCallback((key) => (e) => {
           const v = e.target.value;
-          updateField('manualInputByKey', { ...manualInputByKey, [key]: v });
-      }, [manualInputByKey, updateField]);
+          onChange(prevData => ({
+              ...prevData,
+              manualInputByKey: { ...(prevData.manualInputByKey || {}), [key]: v }
+          }));
+      }, [onChange]);
 
      const handleManualInputBlur = useCallback((key) => (e) => {
          const v = parseInt(e.target.value, 10);
          const finalValue = Number.isFinite(v) && v >= 0 ? v : 0;
-         updateField('manualInputByKey', { ...manualInputByKey, [key]: finalValue });
-         updateField('manualInputTouched', { ...manualInputTouched, [key]: true });
-     }, [manualInputByKey, manualInputTouched, updateField]);
+         onChange(prevData => ({
+             ...prevData,
+             manualInputByKey: { ...(prevData.manualInputByKey || {}), [key]: finalValue },
+             manualInputTouched: { ...(prevData.manualInputTouched || {}), [key]: true }
+         }));
+     }, [onChange]);
      
     // --- **THIS IS THE FIX (PART 2)** ---
-    // These effects sync props to state, but no longer depend on `updateField`
+    // These effects now only depend on props and the stable `onChange`
     
      useEffect(() => {
         let needsUpdate = false;
@@ -128,10 +135,9 @@ import AccordionSection from "./ui/AccordionSection";
         // ... (repeat for all other rates) ...
         
         if (needsUpdate) {
-            // Call onChange directly using the ref
-            onChangeRef.current?.({ ...dataRef.current, rateByKey: newRates });
+            onChange(prevData => ({ ...prevData, rateByKey: newRates }));
         }
-     }, [rates, rateTouched, rateByKey]); // Removed updateField/data
+     }, [rates, rateTouched, rateByKey, onChange]);
      
      useEffect(() => {
         let needsUpdate = false;
@@ -145,10 +151,9 @@ import AccordionSection from "./ui/AccordionSection";
         // ... (repeat for all other panel lengths) ...
         
         if (needsUpdate) {
-            // Call onChange directly using the ref
-            onChangeRef.current?.({ ...dataRef.current, panelLenByKey: newPanelLens });
+            onChange(prevData => ({ ...prevData, panelLenByKey: newPanelLens }));
         }
-     }, [panelLenFtExterior, panelLenFt, panelLenTouched, panelLenByKey]); // Removed updateField/data
+     }, [panelLenFtExterior, panelLenFt, panelLenTouched, panelLenByKey, onChange]);
 
 
      // --- Calculations (useMemo) ---
@@ -209,14 +214,14 @@ import AccordionSection from "./ui/AccordionSection";
 
         if (sig !== lastSentRef.current) {
              lastSentRef.current = sig;
-             // Call onChange directly using the ref
-             onChangeRef.current?.({
-               ...dataRef.current, // Use the current data from the ref
+             // Use functional update form
+             onChange(prevData => ({
+               ...prevData,
                total: newTotals.total,
                panels: newTotals.panels,
-             });
+             }));
         }
-     }, [totals]); // <-- Only depends on `totals`
+     }, [totals, onChange]); // <-- Only depends on `totals` and stable `onChange`
 
 
      // --- RENDER ---

@@ -50,6 +50,7 @@ const wordsPreview = (s = "", maxWords = 8) => {
 };
 
 export default function LoosePanelMaterials({
+  onChange, // <-- **FIX**: ADDED THIS PROP
   title = "Loose materials — Wall Panels",
   persistKey = "loose-panels-0",
   onRemove,
@@ -501,26 +502,38 @@ export default function LoosePanelMaterials({
     onGenRef.current = onGeneralChange;
   }, [onGeneralChange]);
 
+  // **FIX**: ADD REFS FOR ONCHANGE
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    const sig = [
-      Number(sheetsExt) || 0,
-      Number(sheetsBand) || 0,
-      Number(sheetsExtra) || 0,
-      Number(nonPTPiecesLevel) || 0,
-      String(levelId || ""),
-      Number(ptPiecesLevel) || 0,
-    ].join("|");
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    // **FIX**: Create the stats object first
+    const stats = {
+      id: levelId,
+      sheetsExt: Number(sheetsExt) || 0,
+      sheetsBand: Number(sheetsBand) || 0,
+      sheetsExtra: Number(sheetsExtra) || 0,
+      platePiecesTotal: Number(nonPTPiecesLevel) || 0, // Loose-only non-PT
+      ptPieces: Number(ptPiecesLevel) || 0, // PT pieces (per-group 5% waste)
+    };
+
+    // **FIX**: Use the object to create the signature
+    const sig = JSON.stringify(stats);
 
     if (sig !== lastGenSigRef.current) {
       lastGenSigRef.current = sig;
-      onGenRef.current?.({
-        id: levelId,
-        sheetsExt: Number(sheetsExt) || 0,
-        sheetsBand: Number(sheetsBand) || 0,
-        sheetsExtra: Number(sheetsExtra) || 0,
-        platePiecesTotal: Number(nonPTPiecesLevel) || 0, // Loose-only non-PT
-        ptPieces: Number(ptPiecesLevel) || 0, // PT pieces (per-group 5% waste)
-      });
+      
+      // This call is fine, even if onGeneralChange is null
+      onGenRef.current?.(stats);
+
+      // **FIX**: Call the main 'onChange' prop (from Level.jsx)
+      // to save these stats into the looseMaterials object.
+      onChangeRef.current?.(prevData => ({
+        ...prevData,
+        generalStats: stats // <-- Save it here
+      }));
     }
   }, [
     sheetsExt,
@@ -529,7 +542,7 @@ export default function LoosePanelMaterials({
     nonPTPiecesLevel,
     ptPiecesLevel,
     levelId,
-  ]);
+  ]); // <-- Dependencies are correct
 
   // Totals for nails math
 

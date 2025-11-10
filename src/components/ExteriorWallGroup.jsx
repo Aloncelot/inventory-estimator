@@ -183,27 +183,28 @@ export default function ExteriorWallGroup({
 
   const extrasSignature = useMemo(() => {
     return (extras || [])
-      .map(r => `${r.type}:${getFamily(r.item)}:${r.inputs.headerLF || 0}`) // <-- Fixed getFamily call
+      .map(r => `${r.type}:${getFamily(r.item)}:${r.inputs.headerLF || 0}`)
       .join(',');
   }, [extras]);
 
+  // **THIS IS THE FIX for the infinite loop**
   useEffect(() => {
     const headerLF = (extras || []).filter(r => r.type === 'Header' && isInfillFamily(getFamily(r.item))).reduce((s, r) => s + Number(r.inputs.headerLF || 0), 0);
-    const hasInfill = (extras || []).some(r => r.type === 'Headers infill');
+    const infillItem = (extras || []).find(r => r.type === 'Headers infill'); // <-- Find the actual item
     
-    if (headerLF > 0 && !hasInfill) { 
+    if (headerLF > 0 && !infillItem) { // <-- Check using the item
       addExtra('Headers infill'); 
     }
-    if (headerLF === 0 && hasInfill) { 
-      removeExtra('infill'); 
+    if (headerLF === 0 && infillItem) { // <-- Check using the item
+      removeExtra(infillItem.id); // <--- Pass the correct ID
     }
   }, [extrasSignature, addExtra, removeExtra]); 
 
   const computedExtras = useMemo(() => {
     const headerLFPool = (extras || []).filter(r => r.type === 'Header' && isInfillFamily(getFamily(r.item))).reduce((s, r) => s + Number(r?.inputs?.headerLF || 0), 0);
     return (extras || []).map(r => {
-      const fam = getFamily(r.item); // <-- Fixed getFamily call
-      const boardLenFt = parseBoardLengthFt(getSize(r.item)) ?? 0; // <-- Fixed getSize call
+      const fam = getFamily(r.item);
+      const boardLenFt = parseBoardLengthFt(getSize(r.item)) ?? 0;
       if (r.type === 'Header') {
         const res = calcHeader({ isLVL: isLVL(fam), headerLF: Number(r?.inputs?.headerLF || 0), lvlPieces: Number(r?.inputs?.lvlPieces || 0), lvlLength: Number(r?.inputs?.lvlLength || 0), boardLenFt, wastePct: r.wastePct ?? 5, item: getItem(r.item) });
         return { ...r, unit: res.unit, qtyRaw: res.qtyRaw, qtyFinal: res.qtyFinal, unitPrice: res.unitPrice, subtotal: res.subtotal, boardLenFt };
