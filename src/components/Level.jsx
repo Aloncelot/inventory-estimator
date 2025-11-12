@@ -29,7 +29,8 @@ export default function Level({
   const panelNails = useMemo(() => levelData.panelNails || {}, [levelData.panelNails]);
 
   // --- **THIS IS THE FIX** ---
-  // All handlers must now be stable `useCallback` hooks
+  // All handlers must now be stable `useCallback` hooks that
+  // correctly pass the "updater function" up to the parent.
   
   const handleNameChange = useCallback((newName) => {
     onLevelChange(prevLevel => ({ ...prevLevel, name: newName }));

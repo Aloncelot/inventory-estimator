@@ -20,7 +20,7 @@ import AccordionSection from "./ui/AccordionSection";
 
  export default function PanelsManufactureEstimate({
      data,
-     onChange, // This is now a stable function: (updaterFn) => void
+     onChange, // This is a stable function: (updaterFn) => void
      panelLenFt = 8,
      panelLenFtInterior = 8,
      panelLenFtExterior = undefined,
@@ -35,7 +35,7 @@ import AccordionSection from "./ui/AccordionSection";
     
     // 1. Destructure data from props
     const {
-        collapsed = false,
+        collapsed = true, // Default to collapsed
         rateByKey = { 
              exteriorWalls: rates.exteriorWalls?.ratePerLF ?? 0,
              interiorShear: rates.interiorShear?.ratePerLF ?? 0,
@@ -64,17 +64,11 @@ import AccordionSection from "./ui/AccordionSection";
     } = data || {};
 
     
-    // --- **THIS IS THE FIX (PART 1)** ---
-    // All update handlers are now stable and pass an "updater function"
+    // --- Stable Update Handlers ---
     
-    const updateField = useCallback((fieldName, value) => {
-        // Pass a function to onChange
-        onChange(prevData => ({ ...prevData, [fieldName]: value }));
+    const setCollapsed = useCallback((isOpen) => {
+        onChange(prev => ({ ...prev, collapsed: !isOpen }));
     }, [onChange]);
-
-    const setCollapsed = (isCollapsed) => {
-        updateField('collapsed', !!isCollapsed);
-    };
 
      const handlePanelLenChange = useCallback((key) => (e) => {
          const v = Number(e.target.value) || 0;
@@ -121,8 +115,7 @@ import AccordionSection from "./ui/AccordionSection";
          }));
      }, [onChange]);
      
-    // --- **THIS IS THE FIX (PART 2)** ---
-    // These effects now only depend on props and the stable `onChange`
+    // --- Effects to sync default props ---
     
      useEffect(() => {
         let needsUpdate = false;
@@ -157,7 +150,6 @@ import AccordionSection from "./ui/AccordionSection";
 
 
      // --- Calculations (useMemo) ---
-     // (This logic is unchanged)
      const lines = useMemo(() => {
          const L = [];
          const pushLF = (label, key, rateConfigDefault) => {
@@ -205,8 +197,7 @@ import AccordionSection from "./ui/AccordionSection";
      }, [lines]);
 
 
-     // --- **THIS IS THE FIX (PART 3)** ---
-     // This effect reports totals. It must NOT depend on `data`.
+     // --- Effect to report totals ---
      const lastSentRef = useRef(null);
      useEffect(() => {
         const newTotals = { total: totals.total, panels: totals.panels };
@@ -214,136 +205,136 @@ import AccordionSection from "./ui/AccordionSection";
 
         if (sig !== lastSentRef.current) {
              lastSentRef.current = sig;
-             // Use functional update form
              onChange(prevData => ({
                ...prevData,
                total: newTotals.total,
                panels: newTotals.panels,
              }));
         }
-     }, [totals, onChange]); // <-- Only depends on `totals` and stable `onChange`
+     }, [totals, onChange]);
 
 
      // --- RENDER ---
-     // (This logic is unchanged)
      return (
-         <AccordionSection
-             open={!collapsed}
-             onOpenChange={(isOpen) => setCollapsed(!isOpen)} 
-             bar={({ open, toggle }) => (
-                 <div style={{ display:'flex', alignItems:'center', gap: 8, width: '100%' }}>
-                     <button
-                         type="button"
-                         className="acc__button"
-                         onClick={toggle}
-                         aria-expanded={open}
-                         title={open ? "Collapse" : "Expand"}
-                     >
-                          <img
-                             src={open ? '/icons/minimize.png' : '/icons/down.png'}
-                             alt={open ? 'Collapse section' : 'Expand section'}
-                             width={16}
-                             height={16}
-                             className="acc__chev"
-                             style={{ display: 'inline-block', verticalAlign: 'middle' }}
-                         />
-                     </button>
-                     <h2 className="ew-h2" style={{ margin:0 }}>Panels Manufacture Estimate</h2>
-                     <div style={{ marginLeft:'auto' }} />
-                     <div
-                         className="ew-right"
-                         title="Panels manufacture subtotal"
-                         style={{ fontWeight:800 }}
-                     >
-                         {money(totals.total)}
+        // **THIS IS THE FIX (Bug #5)**
+        // This component now uses the same wrapper as all the others
+         <div className="ew-card">
+             <AccordionSection
+                 open={!collapsed}
+                 onOpenChange={setCollapsed} // <-- Use new stable handler
+                 bar={({ open, toggle }) => (
+                     <div style={{ display:'flex', alignItems:'center', gap: 8, width: '100%' }}>
+                         <button
+                             type="button"
+                             className="acc__button"
+                             onClick={toggle}
+                             aria-expanded={open}
+                             title={open ? "Collapse" : "Expand"}
+                         >
+                              <img
+                                 src={open ? '/icons/down.png' : '/icons/minimize.png'}
+                                 alt={open ? 'Collapse section' : 'Expand section'}
+                                 width={16}
+                                 height={16}
+                                 className="acc__chev"
+                                 style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                             />
+                         </button>
+                         {/* Use standard ew-head class */}
+                         <h2 className="ew-head" style={{ margin:0, border: 'none', background: 'none' }}>Panels Manufacture Estimate</h2>
+                         <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b', fontWeight: '700', fontSize: '16px', fontFamily: "'Nova Mono', monospace" }}>
+                             Subtotal: {money(totals.total)}
+                         </div>
                      </div>
-                 </div>
-             )}
-         >
-             <div className="table-wrap">
-                 <table className="tbl" style={{ width: "100%", tableLayout: "fixed" }}>
-                     <colgroup><col style={{ width: "26%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /><col style={{ width: "12%" }} /><col style={{ width: "12%" }} /><col style={{ width: "11%" }} /></colgroup>
-                     <thead>
-                         <tr>
-                             <th>Wall type</th>
-                             <th className="num">LF / Qty</th>
-                             <th className="num">Panel Length (ft)</th>
-                             <th className="num"># Panels</th>
-                             <th className="num">Rate per LF / $ Each</th>
-                             <th className="num">Rate per Panel $</th>
-                             <th className="num">Subtotal</th>
-                         </tr>
-                     </thead>
-                     <tbody>
-                         {lines.map((r) => {
-                             const isEditablePanel =
-                                 r.key === "exteriorWalls" ||
-                                 r.key === "interiorShear" ||
-                                 r.key === "interiorBlockingOnly" ||
-                                 r.key === "interiorNonLoad" ||
-                                 r.key === "kneeWall";
+                 )}
+             >
+                 <div className="table-wrap">
+                     <table className="tbl" style={{ width: "100%", tableLayout: "fixed" }}>
+                         <colgroup><col style={{ width: "26%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /><col style={{ width: "13%" }} /><col style={{ width: "12%" }} /><col style={{ width: "12%" }} /><col style={{ width: "11%" }} /></colgroup>
+                         {/* Use standard table head from globals.css */}
+                         <thead>
+                             <tr>
+                                 <th>Wall type</th>
+                                 <th className="num">LF / Qty</th>
+                                 <th className="num">Panel Length (ft)</th>
+                                 <th className="num"># Panels</th>
+                                 <th className="num">Rate per LF / $ Each</th>
+                                 <th className="num">Rate per Panel $</th>
+                                 <th className="num">Subtotal</th>
+                             </tr>
+                         </thead>
+                         {/* Use standard tbody styles from globals.css */}
+                         <tbody>
+                             {lines.map((r) => {
+                                 const isEditablePanel =
+                                     r.key === "exteriorWalls" ||
+                                     r.key === "interiorShear" ||
+                                     r.key === "interiorBlockingOnly" ||
+                                     r.key === "interiorNonLoad" ||
+                                     r.key === "kneeWall";
 
-                             return (
-                                 <tr key={r.key}>
-                                     <td>{r.label}</td>
-                                     <td className="num">
-                                        {r.isQtyBased ? (
+                                 return (
+                                     <tr key={r.key} className="ew-row">
+                                         <td>{r.label}</td>
+                                         <td className="num">
+                                            {r.isQtyBased ? (
+                                                 <input
+                                                     className="ew-input focus-anim"
+                                                     type="number" min="0" step="1"
+                                                     value={manualInputByKey[r.key] ?? ''}
+                                                     onChange={handleManualInputChange(r.key)}
+                                                     onBlur={handleManualInputBlur(r.key)}
+                                                     style={{ width: 110, textAlign: 'right', padding: '4px 8px' }}
+                                                 />
+                                             ) : (
+                                                 <span>{Number(r.lf || 0).toLocaleString()}</span>
+                                             )}
+                                         </td>
+                                         <td className="num">
+                                             {r.isQtyBased ? (
+                                                 "—"
+                                             ) : isEditablePanel ? (
+                                                 <input
+                                                     className="ew-input focus-anim"
+                                                     type="number" min="1" step="0.01"
+                                                     value={panelLenByKey[r.key] ?? ''}
+                                                     onChange={handlePanelLenChange(r.key)}
+                                                     style={{ width: 90, textAlign: "right", padding: '4px 8px' }}
+                                                 />
+                                             ) : (
+                                                  r.panelLenFt
+                                             )}
+                                         </td>
+                                         <td className="num">{r.isQtyBased ? "—" : fmt(r.panels)}</td>
+                                         <td className="num">
                                              <input
                                                  className="ew-input focus-anim"
-                                                 type="number" min="0" step="1"
-                                                 value={manualInputByKey[r.key] ?? ''}
-                                                 onChange={handleManualInputChange(r.key)}
-                                                 onBlur={handleManualInputBlur(r.key)}
-                                                 style={{ width: 110, textAlign: 'right', padding: '4px 8px' }}
+                                                 type="number" step="0.01" min="0"
+                                                 value={rateByKey[r.key] ?? ''}
+                                                 onChange={handleRateChange(r.key)}
+                                                 onBlur={handleRateBlur(r.key)}
+                                                 style={{ width: 110, textAlign: "right", padding: '4px 8px' }}
                                              />
-                                         ) : (
-                                             <span>{Number(r.lf || 0).toLocaleString()}</span>
-                                         )}
-                                     </td>
-                                     <td className="num">
-                                         {r.isQtyBased ? (
-                                             "—"
-                                         ) : isEditablePanel ? (
-                                             <input
-                                                 className="ew-input focus-anim"
-                                                 type="number" min="1" step="0.01"
-                                                 value={panelLenByKey[r.key] ?? ''}
-                                                 onChange={handlePanelLenChange(r.key)}
-                                                 style={{ width: 90, textAlign: "right", padding: '4px 8px' }}
-                                             />
-                                         ) : (
-                                              r.panelLenFt
-                                         )}
-                                     </td>
-                                     <td className="num">{r.isQtyBased ? "—" : fmt(r.panels)}</td>
-                                     <td className="num">
-                                         <input
-                                             className="ew-input focus-anim"
-                                             type="number" step="0.01" min="0"
-                                             value={rateByKey[r.key] ?? ''}
-                                             onChange={handleRateChange(r.key)}
-                                             onBlur={handleRateBlur(r.key)}
-                                             style={{ width: 110, textAlign: "right", padding: '4px 8px' }}
-                                         />
-                                     </td>
-                                     <td className="num">
-                                         {r.ratePerPanel === "n/a" ? "n/a" : money(r.ratePerPanel)}
-                                     </td>
-                                     <td className="num ew-money">{money(r.total)}</td>
-                                 </tr>
-                             );
-                         })}
-                     </tbody>
-                     <tfoot>
-                         <tr>
-                             <th colSpan={3} style={{ textAlign: "right" }}>TOTALS</th>
-                             <th className="num ew-total-panels">{fmt(totals.panels)}</th>
-                             <th colSpan={2}></th>
-                             <th className="num ew-total-panels">{money(totals.total)}</th>
-                         </tr>
-                     </tfoot>
-                 </table>
-             </div>
-         </AccordionSection>
+                                         </td>
+                                         <td className="num">
+                                             {r.ratePerPanel === "n/a" ? "n/a" : money(r.ratePerPanel)}
+                                         </td>
+                                         <td className="num ew-money">{money(r.total)}</td>
+                                     </tr>
+                                 );
+                             })}
+                         </tbody>
+                         <tfoot>
+                             <tr>
+                                 <th colSpan={3} style={{ textAlign: "right" }}>TOTALS</th>
+                                 <th className="num ew-total-panels">{fmt(totals.panels)}</th>
+                                 <th colSpan={2}></th>
+                                 <th className="num ew-total-panels">{money(totals.total)}</th>
+                             </tr>
+                         </tfoot>
+                     </table>
+                 </div>
+             </AccordionSection>
+         </div>
      );
  }
