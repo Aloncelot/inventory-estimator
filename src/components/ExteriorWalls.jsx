@@ -55,8 +55,8 @@ export default function ExteriorWalls({
   return (
   <section className="ew-stack">
     <div className="ew-card" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-      <h2 className="ew-h2" style={{ ...novaMonoStyle, margin:0, flexShrink: 0 }}>{title}</h2>
-      <div className="ew-right" title="Sum of all exterior wall section subtotals for this level" style={{ ...novaMonoStyle, fontWeight: 700 }}>
+      <h2 className="text-h2" style={{ margin:0, flexShrink: 0 }}>{title}</h2>
+      <div className="ew-right text-level-total" title="Sum of all exterior wall section subtotals for this level">
         Total: {fmt(exteriorTotalSubtotal)}
       </div>
     </div>

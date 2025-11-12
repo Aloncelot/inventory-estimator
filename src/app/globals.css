@@ -21,6 +21,7 @@
   --turq-300: #59d2c8;
   --turq-400: #2fb7ad;
   --turq-500: #21a399;
+  --nova-flat-turquoise: #40e0d0; /* Legacy alias */
 
   /* Dropdown (applies to native <select> + SearchableSelect menu) */
   --dropdown-bg: #0f172a;
@@ -38,12 +39,61 @@
   --surface-2: var(--bg-800);
   --text-1: var(--text-100);
   --brand-6: var(--turq-400);
+
+  /* Hierarchy Colors */
+  --color-level-total: #67e8f9; 
+  --color-subtotal-orange: #f18d5b;
 }
 
 html,
 body {
   background: var(--bg-900);
   color: var(--text-100);
+}
+
+/* === FONT HIERARCHY & COLORS === */
+/* Clases de utilidad para las fuentes */
+.text-h1 {
+  font-size: 1.5rem; /* 24px */
+  font-weight: 700;
+  font-family: 'Nova Flat', cursive;
+  color: var(--nova-flat-turquoise, #40e0d0); 
+  margin: 0;
+}
+
+.text-h2 {
+  font-size: 1.25rem; /* 20px */
+  font-weight: 700;
+  font-family: 'Nova Flat', cursive;
+  color: var(--nova-flat-turquoise, #40e0d0);
+  margin: 0;
+}
+
+/* Esta es la clase para sub-secciones (Wall Groups) */
+.text-section-header {
+  font-size: 1.0rem;  /* 16px */
+  font-weight: 700;
+  font-family: 'Nova Flat', cursive;
+  color: var(--nova-flat-turquoise, #40e0d0);
+  margin: 0;
+  border: none;
+  background: none;
+}
+
+/* Total de Nivel y Sección (Azul) */
+.text-level-total {
+  font-family: 'Nova Flat', cursive;
+  font-weight: 700;
+  color: var(--color-level-total) !important;
+  font-size: 1.125rem; /* 18px */
+}
+
+/* Subtotal de Sub-sección (Naranja) */
+.text-subtotal-orange {
+  font-family: 'Nova Flat', cursive;
+  font-weight: 700;
+  color: var(--color-subtotal-orange) !important;
+  font-size: 1.0rem; /* 16px */
 }
 
 /* === Cards / layout ===================================================== */
@@ -53,33 +103,24 @@ body {
   border-radius: 14px;
   box-shadow: var(--shadow);
   padding: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 8px; /* Antes era 10px */
   overflow: visible;
 }
 
 .ew-stack {
-  margin-top: 10px;
+  margin-top: 8px; /* Antes era 10px */
 }
 
-.ew-title {
-  margin: 0 0 5px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
-.ew-title span {
-  color: var(--turq-300);
-}
-
-/* Brighten ONLY the Level header card (it’s the one that contains the Level total chip) */
-.ew-card:has(.ew-chip[title="Level total (Panels + Loose)"]) .ew-h2 {
-  color: #00fcef; /* brighter/darker for emphasis */
-  letter-spacing: 0.2px;
-}
-
-/* Optional: subtle band so the Level start/stop is obvious */
-.ew-card:has(.ew-chip[title="Level total (Panels + Loose)"]) {
-  background: linear-gradient(to bottom, rgba(41, 94, 94, 0.986), transparent);
-  border-color: rgb(0, 255, 255);
+.sticky-header {
+  position: sticky;
+  top: 15px;
+  z-index: 100;
+  background: var(--bg-800);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 10px;
+  margin-bottom: 10px;
 }
 
 .ew-grid {
@@ -112,7 +153,7 @@ body {
   border-radius: 10px;
 }
 .ew-row {
-  padding: 10px;
+  padding: 4px 10px; /* Antes era 6px 10px */
   border-bottom: 1px solid var(--border);
   background: var(--bg-800);
   overflow: visible;
@@ -125,22 +166,13 @@ body {
 }
 
 /* Utilities */
-.t-right {
-  text-align: right;
-} /* keep this; remove .ew-right usage */
 .ew-inline {
   display: flex;
   gap: 8px;
   align-items: end;
 }
-.ew-h2,
-.ew-h3 {
-  margin: 0 0 10px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
 .ew-hint {
-  font-size: 12px;
+  font-size: 0.7rem; /* Compact */
   color: var(--text-300);
   margin-top: 4px;
 }
@@ -150,50 +182,8 @@ body {
   gap: 8px;
   margin-top: 12px;
 }
-.ew-total {
-  margin-left: auto;
-  font-weight: 700;
-}
 .ew-right {
   text-align: right;
-}
-.ew-subtotalright {
-  text-align: right;
-  font-weight: 700;
-}
-
-/* === Inputs / selects / buttons ======================================== */
-.ew-input,
-.ew-select {
-  width: 100%;
-  padding: 8px 10px;
-  background: #0b1524;
-  color: var(--text-100);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  outline: none;
-}
-.ew-input:focus,
-.ew-select:focus {
-  border-color: var(--turq-400);
-  box-shadow: 0 0 0 3px rgba(47, 183, 173, 0.18);
-}
-
-.ew-btn {
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, #102036, #0f1b2e);
-  color: var(--text-100);
-  cursor: pointer;
-}
-.ew-btn:hover {
-  border-color: var(--turq-400);
-  color: #fff;
-}
-.ew-btn--turq {
-  background: linear-gradient(180deg, #143a40, #113237);
-  border-color: #1b4f56;
 }
 .ew-subtle {
   color: var(--text-300);
@@ -205,13 +195,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .ew-chip {
-  display: inline-block;
-  padding: 2px 8px;
+  padding: 1px 6px; /* Compact */
+  font-size: 0.7rem; /* Compact */
+  border: 1px solid #1a515d;
   border-radius: 999px;
-  background: rgba(47, 183, 173, 0.14);
-  color: var(--turq-300);
-  border: 1px solid rgba(47, 183, 173, 0.25);
-  font-size: 12px;
+  background: #0c2b33;
+  color: #e9f6f8;
+  cursor: pointer;
+}
+.ew-chip:hover {
+  filter: brightness(1.1);
 }
 
 /* Responsive collapsing grid columns */
@@ -219,6 +212,51 @@ body {
   .ew-grid[style*="--cols"] {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* === Inputs / selects / buttons ======================================== */
+.ew-input,
+.ew-select {
+  width: 100%;
+  padding: 4px 8px; /* Antes era 5px 10px */
+  background: #0b1524;
+  color: var(--text-100);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  font-size: 0.825rem;
+}
+.ew-input:focus,
+.ew-select:focus {
+  border-color: var(--turq-400);
+  box-shadow: 0 0 0 3px rgba(47, 183, 173, 0.18);
+}
+.ew-select.combo-input {
+  min-height: auto;
+}
+
+.ew-btn {
+  padding: 4px 8px; /* Antes era 5px 10px */
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #102036, #0f1b2e);
+  color: var(--text-100);
+  cursor: pointer;
+  font-size: 0.825rem;
+}
+.ew-btn:hover {
+  border-color: var(--turq-400);
+  color: #fff;
+}
+.ew-btn--turq {
+  background: linear-gradient(180deg, #143a40, #113237);
+  border-color: #1b4f56;
+}
+.ew-icon-btn {
+  padding: 4px; /* Antes era 4px 6px */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* === Native <select> theming (kept for places you still use it) ========= */
@@ -326,13 +364,13 @@ select:focus {
 .controls4 {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap: 12px;
+  gap: 8px; /* Antes era 12px */
   align-items: end;
 }
 .controls2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(140px, 1fr));
-  gap: 12px;
+  gap: 8px; /* Antes era 12px */
   align-items: end;
   margin-top: 8px;
 }
@@ -398,8 +436,8 @@ input[type="number"] {
   max-height: min(320px, 45vh);
   overflow: auto;
 
-  /* subtle inertial feel */
   transform-origin: top;
+  z-index: 2000; /* Keep on top */
 }
 .combo[aria-expanded="true"] .combo-list {
   display: block;
@@ -439,55 +477,23 @@ input[type="number"] {
 }
 
 /* hover/active/selected states */
-.combo .combo-option:hover,
+.combo .combo-option.active,
 .combo .combo-option[aria-selected="true"],
-.combo .combo-option[data-active="true"] {
-  background: var(--turq-400);
-}
-/* optional tiny divider style if you use them */
-.combo .combo-divider {
-  height: 1px;
-  margin: 6px 4px;
-  background: var(--border);
-}
-
-/* search input (if your dropdown has one at the top) */
-.combo .combo-filter,
-.combo .combo input[type="search"] {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin: 4px 0 6px 0;
-  background: var(--bg-700);
-  color: var(--text-100);
-  outline: none;
-}
-.combo .combo-filter:focus,
-.combo .combo input[type="search"]:focus {
-  border-color: var(--turq-300);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--turq-300) 35%, transparent);
-}
-.combo-option {
-  padding: 8px 10px;
-  cursor: pointer;
-  line-height: 1.25;
-  color: var(--dropdown-fg);
-}
-.combo-option.active,
-.combo-option[aria-selected="true"],
-.combo-option:hover {
+.combo .combo-option:hover {
   background: color-mix(in oklab, var(--dropdown-active) 60%, black 0%);
 }
 .combo-empty {
   padding: 10px;
   color: var(--text-300);
 }
-
-/* === Responsive niceties ================================================= */
-@media (max-width: 980px) {
-  /* already collapsing grid above; keep other small adjustments here if needed */
+.combo .combo-option.danger {
+  color: #f87171; /* red-400 */
 }
+.combo .combo-option.danger:hover {
+  background: #450a0a; /* red-900 */
+  color: #fecaca; /* red-200 */
+}
+
 
 /* === App shell sizing (sidebar width reacts to collapse) ================== */
 .app-shell {
@@ -502,13 +508,11 @@ input[type="number"] {
   grid-template-columns: var(--sidebar-w) 1fr; /* Defines sidebar and main columns */
   min-height: 100dvh;
   background: var(--bg-900);
-  /* Ensure transition for smoother collapse/expand */
   transition: grid-template-columns 0.3s ease;
 }
 
 .app-main {
   min-width: 0; /* Crucial: Allows main content to shrink */
-  /* overflow-x: hidden; */ /* Optional: Prevents accidental horizontal scroll */
 }
 .app-content {
   display: grid;
@@ -518,21 +522,21 @@ input[type="number"] {
 
 /* === Sidebar (screenshot style) ========================================== */
 .sidebar {
-  position: sticky; /* Keeps sidebar in view while scrolling */
+  position: sticky;
   top: 24px;
-  align-self: start; /* Aligns to top of grid area */
+  align-self: start;
   height: calc(100dvh - 48px);
   margin: 24px 0 24px 0;
   display: flex;
   flex-direction: column;
-  width: var(--sidebar-w); /* Width controlled by variable */
+  width: var(--sidebar-w);
   border-radius: 16px;
-  background: rgb(0 0 0 / 40%); /* glassy */
+  background: rgb(0 0 0 / 40%);
   border: 1px solid var(--border);
   backdrop-filter: blur(20px);
   box-shadow: var(--shadow);
-  z-index: 90; /* Make sure this doesn't conflict strangely */
-  transition: width 0.3s ease; /* Add transition for width change */
+  z-index: 90;
+  transition: width 0.3s ease;
 }
 
 /* header: burger + logo */
@@ -562,10 +566,10 @@ input[type="number"] {
   position: relative;
   display: grid;
   padding: 6px;
-  transition: opacity 0.15s ease; /* Controls how fast the label fades in/out */
-  opacity: 1; /* Default opacity when potentially visible */
-  white-space: nowrap; /* Prevent wrapping during transition */
-  overflow: hidden; /* Hide overflow during transition */
+  transition: opacity 0.15s ease;
+  opacity: 1;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 /* the animated selection bar */
@@ -620,12 +624,26 @@ input[type="number"] {
 }
 .sidebar .menu .menu-label {
   font-family: "Nova Flat", cursive;
-  color: var(--text-secondary);
+  color: var(--text-secondary); /* Default weak color */
   transition: opacity 0.15s ease;
   opacity: 1;
   white-space: nowrap;
   overflow: hidden;
   text-transform: capitalize;
+}
+
+/* Style for ENABLED (not disabled) items */
+.sidebar .menu .menu-item:not(.disabled) .menu-label {
+  color: #40e0d0; /* Bright turquoise for enabled items */
+}
+/* Style for ACTIVE item */
+.sidebar .menu .menu-item.active .menu-label {
+  color: #ffffff; /* Make active label white */
+  opacity: 1;
+}
+/* Ensure hover maintains brightness on enabled items */
+.sidebar .menu .menu-item:not(.disabled):hover .menu-label {
+  color: #6fffea; /* Slightly brighter turquoise on hover */
 }
 
 /* icons-only when collapsed */
@@ -635,79 +653,18 @@ input[type="number"] {
 .app-shell.sb-collapsed .sidebar .menu .menu-label {
   display: none;
 }
-
-/* Styles for the label when sidebar IS NOT collapsed (i.e., expanded or expanding) */
 .app-shell:not(.sb-collapsed) .sidebar .menu .menu-label {
-  opacity: 1; /* Make it visible */
-  /* Delay the fade-in: start slightly after the sidebar expansion begins */
-  /* Adjust 0.15s delay to sync with sidebar width transition */
+  opacity: 1;
   transition-delay: 0.15s;
-}
-
-/* keep our combobox list on top */
-.combo-list {
-  z-index: 2000;
-}
-
-.side-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
-}
-.side-toggle {
-  padding: 6px 8px;
-}
-.side-title {
-  font-weight: 700;
-  color: var(--turq-300);
-  letter-spacing: 0.2px;
-}
-
-.side-menu {
-  display: grid;
-  gap: 4px;
-  padding: 10px;
-  overflow: auto;
-}
-
-.side-item {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-100);
-  border: 1px solid transparent;
-  text-align: left;
-  cursor: pointer;
-}
-.side-item:hover {
-  background: var(--bg-750);
-  border-color: var(--border);
-}
-.side-item.active {
-  background: rgba(47, 183, 173, 0.14);
-  border-color: rgba(47, 183, 173, 0.25);
-}
-.side-item.disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.side-ico {
-  width: 20px;
-  text-align: center;
 }
 
 .side-foot {
   padding: 10px;
   border-top: 1px solid var(--border);
+  margin-top: auto; /* Pushes to bottom */
 }
 
+/* === Summary.jsx Styles === */
 .card {
   padding: 12px;
   background: #0c2b33;
@@ -747,35 +704,23 @@ input[type="number"] {
   font-weight: 800;
 }
 
-/* globals.css (optional helpers) */
-.ew-chip {
-  padding: 6px 10px;
-  border: 1px solid #1a515d;
-  border-radius: 999px;
-  background: #0c2b33;
-  color: #e9f6f8;
-  cursor: pointer;
-}
-.ew-chip:hover {
-  filter: brightness(1.1);
-}
-
 /* === Generic table styling for estimators ================================= */
 .tbl {
   width: 100%;
-  border-collapse: collapse; /* consistent column widths */
-  table-layout: fixed; /* respects <colgroup> widths */
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.825rem; /* Compact */
 }
 
 .tbl th,
 .tbl td {
-  padding: 10px 12px;
+  padding: 4px 12px; /* Antes era 6px 12px */
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
 .tbl thead th {
-  text-align: left; /* default for text columns */
+  text-align: left;
   color: var(--turq-300);
   font-weight: 700;
   background: linear-gradient(180deg, rgba(47, 183, 173, 0.1), transparent 70%);
@@ -787,26 +732,22 @@ input[type="number"] {
   background: rgba(0, 0, 0, 0.06);
 }
 
-/* Right-align numeric columns (headers + cells) */
 .tbl .num {
   text-align: right;
-  font-variant-numeric: tabular-nums; /* keeps digits aligned */
+  font-variant-numeric: tabular-nums;
 }
-
-/* Optional: zebra only for body rows (not head/foot) */
 .tbl tbody tr:nth-child(even) {
   background: var(--bg-750);
 }
 .tbl tbody tr:hover {
   background: var(--bg-700);
 }
-
 .ew-total-panels {
-  color: #ff7a00; /* bright orange */
-  font-weight: 700; /* optional: make it pop */
+  color: #ff7a00;
+  font-weight: 700;
 }
 
-/* AccordionSection */
+/* === AccordionSection (Final Version) === */
 .acc {
   margin: 0 0 12px 0;
 }
@@ -820,7 +761,7 @@ input[type="number"] {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 3px 6px; /* Compact */
   line-height: 1;
   background: var(--bg, transparent);
   border: 1px solid var(--border);
@@ -843,62 +784,31 @@ input[type="number"] {
   border-radius: 10px;
 }
 .acc__body {
-  overflow: clip; /* prevents scrollbars during animation */
+  overflow: hidden; /* Changed from 'clip' */
   transition: max-height 0.35s ease, opacity 0.2s ease;
   max-height: 0;
   opacity: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
 }
-
 /* But if a combobox is expanded inside, allow overflow so the menu can escape */
 .acc__body:has(.combo[aria-expanded="true"]) {
   overflow: visible;
 }
-
 .acc__bodyInner {
-  padding: 16px;
+  padding: 12px; /* Antes era 16px */
+  min-width: 0; 
 }
 
-/* Reserve vertical scrollbar gutter so layout width never changes */
+/* === Scrollbar Utilities === */
 html {
   scrollbar-gutter: stable both-edges; /* modern */
 }
-
 @supports not (scrollbar-gutter: stable) {
   /* Fallback: always show a vertical scrollbar track */
   html {
     overflow-y: scroll;
   }
-}
-
-:root {
-  /* Teal/Turquoise scale */
-  --turq-950: #021617;
-  --turq-900: #042023;
-  --turq-800: #073033;
-  --turq-700: #0a3e41;
-  --turq-600: #0d4f53;
-  --turq-500: #116367;
-  --turq-400: #158085;
-  --turq-300: #2fb7ad; /* you already reference this */
-  --turq-200: #6fd8d0;
-  --turq-100: #b9f0ea;
-
-  /* App surfaces */
-  --bg: var(--turq-900);
-  --card: var(--turq-800);
-  --surface: var(--turq-700);
-  --panel: var(--turq-800);
-  --border: #2fb7ad33;
-
-  /* Text & accents */
-  --text: #e6fffb;
-  --text-weak: #bfe7e4;
-  --accent: var(--turq-300);
-  --accent-strong: #19afa4;
-
-  color-scheme: dark;
 }
 
 /* Themed scrollbars (Firefox + WebKit) */
@@ -922,16 +832,20 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--turq-400);
 }
-
-/* icon-only button */
-.ew-icon-btn {
-  padding: 4px 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.combo .combo-list::-webkit-scrollbar {
+  width: 10px;
+}
+.combo .combo-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.combo .combo-list::-webkit-scrollbar-thumb {
+  background: var(--turq-600);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
-/* Animations */
+/* === Animations === */
 @keyframes dropdown-enter {
   from {
     opacity: 0;
@@ -947,112 +861,4 @@ html {
     opacity: 1;
     transform: none;
   }
-}
-
-/* Optional: pretty scrollbar for the dropdown only */
-.combo .combo-list::-webkit-scrollbar {
-  width: 10px;
-}
-.combo .combo-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.combo .combo-list::-webkit-scrollbar-thumb {
-  background: var(--turq-600);
-  border-radius: 10px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-/* Add these overrides to your globals.css */
-
-/* Reduce padding on rows and headers */
-.ew-row,
-.ew-head,
-.ew-rowhead,
-.tbl th,
-.tbl td {
-  padding-top: 6px; /* Reduced from 10px or 8px */
-  padding-bottom: 6px; /* Reduced from 10px or 8px */
-}
-
-/* Reduce padding on inputs, selects, and buttons */
-.ew-input,
-.ew-select,
-.ew-btn {
-  padding-top: 5px; /* Reduced from 8px */
-  padding-bottom: 5px; /* Reduced from 8px */
-}
-.ew-btn {
-  padding-left: 10px; /* Slightly reduced */
-  padding-right: 10px; /* Slightly reduced */
-}
-.ew-icon-btn {
-  padding: 4px 6px; /* Slightly tighter */
-}
-
-/* Slightly smaller base font size for cards/sections */
-.ew-card,
-.tbl {
-  font-size: 0.825rem;
-  /* Slightly smaller than default small (0.875rem) */
-  /* If using Tailwind, you might use text-xs (0.75rem) or adjust base size */
-}
-
-/* Adjust title sizes if needed */
-.ew-title,
-.ew-h2,
-.ew-h3 {
-  font-size: 1rem; /* Adjust as needed */
-  margin-bottom: 8px; /* Slightly reduced */
-}
-
-/* Adjust hint text size */
-.ew-hint {
-  font-size: 0.7rem; /* Make hints even smaller */
-}
-
-/* Adjust chip size */
-.ew-chip {
-  padding: 1px 6px; /* Tighter padding */
-  font-size: 0.7rem; /* Smaller font */
-}
-
-/* Adjust Accordion button padding */
-.acc__button {
-  padding: 3px 6px;
-}
-
-/* Adjust ItemPicker/SearchableSelect input height */
-.ew-select.combo-input {
-  min-height: 32px; /* Adjust if needed, based on reduced padding */
-}
-
-.nova-flat-turquoise {
-  font-family: "Nova Flat", cursive;
-  color: #40e0d0;
-}
-
-.ew-h2.nova-flat-turquoise {
-  /* You might add !important if needed, but try without first */
-  /* color: #40E0D0 !important; */
-}
-
-.ew-chip.nova-flat-turquoise {
-  font-weight: 700; /* Ensure it stays bold if needed */
-  /* Add other specific overrides for the chip if necessary */
-}
-
-/* Style for ENABLED (not disabled) items */
-.sidebar .menu .menu-item:not(.disabled) .menu-label {
-  color: #40e0d0; /* Bright turquoise for enabled items */
-}
-
-/* Style for ACTIVE item */
-.sidebar .menu .menu-item.active .menu-label {
-  color: #ffffff; /* Make active label white (or brighter turquoise) */
-  opacity: 1; /* Ensure full opacity */
-}
-/* Ensure hover maintains brightness on enabled items */
-.sidebar .menu .menu-item:not(.disabled):hover .menu-label {
-  color: #6fffea; /* Slightly brighter turquoise on hover */
 }

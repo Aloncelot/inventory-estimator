@@ -1,48 +1,45 @@
-[debug] [2025-11-12T13:56:38.884Z] ----------------------------------------------------------------------
-[debug] [2025-11-12T13:56:38.890Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Software 1\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start
-[debug] [2025-11-12T13:56:38.891Z] CLI Version:   14.22.0
-[debug] [2025-11-12T13:56:38.892Z] Platform:      win32
-[debug] [2025-11-12T13:56:38.892Z] Node Version:  v22.18.0
-[debug] [2025-11-12T13:56:38.893Z] Time:          Wed Nov 12 2025 07:56:38 GMT-0600 (hora estándar central)
-[debug] [2025-11-12T13:56:38.898Z] ----------------------------------------------------------------------
+[debug] [2025-11-12T15:38:13.121Z] ----------------------------------------------------------------------
+[debug] [2025-11-12T15:38:13.127Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Software 1\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start
+[debug] [2025-11-12T15:38:13.128Z] CLI Version:   14.22.0
+[debug] [2025-11-12T15:38:13.129Z] Platform:      win32
+[debug] [2025-11-12T15:38:13.129Z] Node Version:  v22.18.0
+[debug] [2025-11-12T15:38:13.129Z] Time:          Wed Nov 12 2025 09:38:13 GMT-0600 (hora estándar central)
+[debug] [2025-11-12T15:38:13.130Z] ----------------------------------------------------------------------
 [debug] 
-[debug] [2025-11-12T13:56:38.903Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
-[debug] [2025-11-12T13:56:39.938Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
-[debug] [2025-11-12T13:56:39.938Z] > authorizing via signed-in user (alonso@sophava.com)
-[debug] [2025-11-12T13:56:40.099Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
-[debug] [2025-11-12T13:56:40.100Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
-[debug] [2025-11-12T13:56:40.699Z] openjdk version "25.0.1" 2025-10-21 LTS
+[debug] [2025-11-12T15:38:13.828Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-12T15:38:13.829Z] > authorizing via signed-in user (alonso@sophava.com)
+[debug] [2025-11-12T15:38:13.957Z] openjdk version "25.0.1" 2025-10-21 LTS
 
-[debug] [2025-11-12T13:56:40.700Z] OpenJDK Runtime Environment Microsoft-12574223 (build 25.0.1+8-LTS)
+[debug] [2025-11-12T15:38:13.958Z] OpenJDK Runtime Environment Microsoft-12574223 (build 25.0.1+8-LTS)
 OpenJDK 64-Bit Server VM Microsoft-12574223 (build 25.0.1+8-LTS, mixed mode, sharing)
 
-[debug] [2025-11-12T13:56:40.723Z] Parsed Java major version: 25
+[debug] [2025-11-12T15:38:13.981Z] Parsed Java major version: 25
 [info] i  emulators: Starting emulators: auth, firestore, hosting {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: auth, firestore, hosting"}}
-[debug] [2025-11-12T13:56:40.760Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
-[debug] [2025-11-12T13:56:40.761Z] [auth] Authentication Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
-[debug] [2025-11-12T13:56:40.761Z] [firestore] Firestore Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
-[debug] [2025-11-12T13:56:40.761Z] [firestore.websocket] websocket server for firestore only supports listening on one address (127.0.0.1). Not listening on ::1
-[debug] [2025-11-12T13:56:40.762Z] [hosting] Hosting Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
-[debug] [2025-11-12T13:56:40.762Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"auth":[{"address":"127.0.0.1","family":"IPv4","port":9099}],"firestore":[{"address":"127.0.0.1","family":"IPv4","port":8080}],"firestore.websocket":[{"address":"127.0.0.1","family":"IPv4","port":9150}],"hosting":[{"address":"127.0.0.1","family":"IPv4","port":5000}]},"metadata":{"message":"assigned listening specs for emulators"}}
-[debug] [2025-11-12T13:56:40.774Z] Emulator locator file path: C:\Users\SOFTWA~1\AppData\Local\Temp\hub-inventory-estimator.json
-[debug] [2025-11-12T13:56:40.775Z] [hub] writing locator at C:\Users\SOFTWA~1\AppData\Local\Temp\hub-inventory-estimator.json
+[debug] [2025-11-12T15:38:14.013Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-11-12T15:38:14.014Z] [auth] Authentication Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-11-12T15:38:14.014Z] [firestore] Firestore Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-11-12T15:38:14.014Z] [firestore.websocket] websocket server for firestore only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-11-12T15:38:14.014Z] [hosting] Hosting Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-11-12T15:38:14.014Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"auth":[{"address":"127.0.0.1","family":"IPv4","port":9099}],"firestore":[{"address":"127.0.0.1","family":"IPv4","port":8080}],"firestore.websocket":[{"address":"127.0.0.1","family":"IPv4","port":9150}],"hosting":[{"address":"127.0.0.1","family":"IPv4","port":5000}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2025-11-12T15:38:14.023Z] Emulator locator file path: C:\Users\SOFTWA~1\AppData\Local\Temp\hub-inventory-estimator.json
+[debug] [2025-11-12T15:38:14.023Z] [hub] writing locator at C:\Users\SOFTWA~1\AppData\Local\Temp\hub-inventory-estimator.json
 [warn] !  firestore: Cloud Firestore Emulator does not support multiple databases yet. {"metadata":{"emulator":{"name":"firestore"},"message":"Cloud Firestore Emulator does not support multiple databases yet."}}
 [warn] !  firestore: Did not find a Cloud Firestore rules file specified in a firebase.json config file. {"metadata":{"emulator":{"name":"firestore"},"message":"Did not find a Cloud Firestore rules file specified in a firebase.json config file."}}
 [warn] !  firestore: The emulator will default to allowing all reads and writes. Learn more about this option: https://firebase.google.com/docs/emulator-suite/install_and_configure#security_rules_configuration. {"metadata":{"emulator":{"name":"firestore"},"message":"The emulator will default to allowing all reads and writes. Learn more about this option: https://firebase.google.com/docs/emulator-suite/install_and_configure#security_rules_configuration."}}
-[debug] [2025-11-12T13:56:40.801Z] Ignoring unsupported arg: auto_download {"metadata":{"emulator":{"name":"firestore"},"message":"Ignoring unsupported arg: auto_download"}}
-[debug] [2025-11-12T13:56:40.801Z] Ignoring unsupported arg: single_project_mode_error {"metadata":{"emulator":{"name":"firestore"},"message":"Ignoring unsupported arg: single_project_mode_error"}}
-[debug] [2025-11-12T13:56:40.802Z] Starting Firestore Emulator with command {"binary":"java","args":["-Dgoogle.cloud_firestore.debug_log_level=FINE","-Duser.language=en","-jar","C:\\Users\\Software 1\\.cache\\firebase\\emulators\\cloud-firestore-emulator-v1.19.8.jar","--host","127.0.0.1","--port",8080,"--websocket_port",9150,"--project_id","inventory-estimator","--single_project_mode",true],"optionalArgs":["port","webchannel_port","host","rules","websocket_port","functions_emulator","seed_from_export","project_id","single_project_mode"],"joinArgs":false,"shell":false,"port":8080} {"metadata":{"emulator":{"name":"firestore"},"message":"Starting Firestore Emulator with command {\"binary\":\"java\",\"args\":[\"-Dgoogle.cloud_firestore.debug_log_level=FINE\",\"-Duser.language=en\",\"-jar\",\"C:\\\\Users\\\\Software 1\\\\.cache\\\\firebase\\\\emulators\\\\cloud-firestore-emulator-v1.19.8.jar\",\"--host\",\"127.0.0.1\",\"--port\",8080,\"--websocket_port\",9150,\"--project_id\",\"inventory-estimator\",\"--single_project_mode\",true],\"optionalArgs\":[\"port\",\"webchannel_port\",\"host\",\"rules\",\"websocket_port\",\"functions_emulator\",\"seed_from_export\",\"project_id\",\"single_project_mode\"],\"joinArgs\":false,\"shell\":false,\"port\":8080}"}}
+[debug] [2025-11-12T15:38:14.040Z] Ignoring unsupported arg: auto_download {"metadata":{"emulator":{"name":"firestore"},"message":"Ignoring unsupported arg: auto_download"}}
+[debug] [2025-11-12T15:38:14.040Z] Ignoring unsupported arg: single_project_mode_error {"metadata":{"emulator":{"name":"firestore"},"message":"Ignoring unsupported arg: single_project_mode_error"}}
+[debug] [2025-11-12T15:38:14.041Z] Starting Firestore Emulator with command {"binary":"java","args":["-Dgoogle.cloud_firestore.debug_log_level=FINE","-Duser.language=en","-jar","C:\\Users\\Software 1\\.cache\\firebase\\emulators\\cloud-firestore-emulator-v1.19.8.jar","--host","127.0.0.1","--port",8080,"--websocket_port",9150,"--project_id","inventory-estimator","--single_project_mode",true],"optionalArgs":["port","webchannel_port","host","rules","websocket_port","functions_emulator","seed_from_export","project_id","single_project_mode"],"joinArgs":false,"shell":false,"port":8080} {"metadata":{"emulator":{"name":"firestore"},"message":"Starting Firestore Emulator with command {\"binary\":\"java\",\"args\":[\"-Dgoogle.cloud_firestore.debug_log_level=FINE\",\"-Duser.language=en\",\"-jar\",\"C:\\\\Users\\\\Software 1\\\\.cache\\\\firebase\\\\emulators\\\\cloud-firestore-emulator-v1.19.8.jar\",\"--host\",\"127.0.0.1\",\"--port\",8080,\"--websocket_port\",9150,\"--project_id\",\"inventory-estimator\",\"--single_project_mode\",true],\"optionalArgs\":[\"port\",\"webchannel_port\",\"host\",\"rules\",\"websocket_port\",\"functions_emulator\",\"seed_from_export\",\"project_id\",\"single_project_mode\"],\"joinArgs\":false,\"shell\":false,\"port\":8080}"}}
 [info] i  firestore: Firestore Emulator logging to firestore-debug.log {"metadata":{"emulator":{"name":"firestore"},"message":"Firestore Emulator logging to \u001b[1mfirestore-debug.log\u001b[22m"}}
-[debug] [2025-11-12T13:56:42.033Z] WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+[debug] [2025-11-12T15:38:14.935Z] WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
 WARNING: sun.misc.Unsafe::objectFieldOffset has been called by io.netty.util.internal.PlatformDependent0$4 (file:/C:/Users/Software%201/.cache/firebase/emulators/cloud-firestore-emulator-v1.19.8.jar)
 WARNING: Please consider reporting this to the maintainers of class io.netty.util.internal.PlatformDependent0$4
 WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
  {"metadata":{"emulator":{"name":"firestore"},"message":"WARNING: A terminally deprecated method in sun.misc.Unsafe has been called\nWARNING: sun.misc.Unsafe::objectFieldOffset has been called by io.netty.util.internal.PlatformDependent0$4 (file:/C:/Users/Software%201/.cache/firebase/emulators/cloud-firestore-emulator-v1.19.8.jar)\nWARNING: Please consider reporting this to the maintainers of class io.netty.util.internal.PlatformDependent0$4\nWARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release\r\n"}}
-[debug] [2025-11-12T13:56:44.698Z] Nov 12, 2025 7:56:44 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start
+[debug] [2025-11-12T15:38:16.980Z] Nov 12, 2025 9:38:16 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start
 INFO: Started WebSocket server on ws://127.0.0.1:9150
- {"metadata":{"emulator":{"name":"firestore"},"message":"Nov 12, 2025 7:56:44 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start\r\nINFO: Started WebSocket server on ws://127.0.0.1:9150\r\n"}}
-[debug] [2025-11-12T13:56:44.796Z] API endpoint: http:// {"metadata":{"emulator":{"name":"firestore"},"message":"API endpoint: http://"}}
-[debug] [2025-11-12T13:56:44.796Z] 127.0.0.1:8080
+ {"metadata":{"emulator":{"name":"firestore"},"message":"Nov 12, 2025 9:38:16 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start\r\nINFO: Started WebSocket server on ws://127.0.0.1:9150\r\n"}}
+[debug] [2025-11-12T15:38:17.063Z] API endpoint: http:// {"metadata":{"emulator":{"name":"firestore"},"message":"API endpoint: http://"}}
+[debug] [2025-11-12T15:38:17.064Z] 127.0.0.1:8080
 If you are using a library that supports the FIRESTORE_EMULATOR_HOST environment variable, run:
 
    export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
@@ -56,29 +53,29 @@ Dev App Server is now running.
 
  {"metadata":{"emulator":{"name":"firestore"},"message":"127.0.0.1:8080\nIf you are using a library that supports the FIRESTORE_EMULATOR_HOST environment variable, run:\r\n\n   export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080\n\nIf you are running a Firestore in Datastore Mode project, run:\r\n\n   export DATASTORE_EMULATOR_HOST=127.0.0.1:8080\n\nNote: Support for Datastore Mode is in preview. If you encounter any bugs please file at https://github.com/firebase/firebase-tools/issues.\r\nDev App Server is now running.\n\r\n"}}
 [info] +  firestore: Firestore Emulator UI websocket is running on 9150. {"metadata":{"emulator":{"name":"firestore"},"message":"Firestore Emulator UI websocket is running on 9150."}}
-[debug] [2025-11-12T13:57:07.012Z] Checked if tokens are valid: false, expires at: 1762871875999
-[debug] [2025-11-12T13:57:07.012Z] Checked if tokens are valid: false, expires at: 1762871875999
-[debug] [2025-11-12T13:57:07.013Z] > refreshing access token with scopes: []
-[debug] [2025-11-12T13:57:07.014Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
-[debug] [2025-11-12T13:57:07.014Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
-[debug] [2025-11-12T13:57:07.146Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
-[debug] [2025-11-12T13:57:07.146Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
-[debug] [2025-11-12T13:57:07.159Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/inventory-estimator/sites 
-[debug] [2025-11-12T13:57:07.614Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/inventory-estimator/sites 200
-[debug] [2025-11-12T13:57:07.614Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/inventory-estimator/sites {"sites":[{"name":"projects/inventory-estimator/sites/inventory-estimator","defaultUrl":"https://inventory-estimator.web.app","appId":"1:867265758215:web:54f62bc943ebb1965a16a2","type":"DEFAULT_SITE"}]}
-[debug] [2025-11-12T13:57:07.614Z] Checked if tokens are valid: true, expires at: 1762959426147
-[debug] [2025-11-12T13:57:07.615Z] Checked if tokens are valid: true, expires at: 1762959426147
-[debug] [2025-11-12T13:57:07.615Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator/webApps/1:867265758215:web:54f62bc943ebb1965a16a2/config [none]
-[debug] [2025-11-12T13:57:08.022Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator/webApps/1:867265758215:web:54f62bc943ebb1965a16a2/config 200
-[debug] [2025-11-12T13:57:08.023Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator/webApps/1:867265758215:web:54f62bc943ebb1965a16a2/config {"projectId":"inventory-estimator","appId":"1:867265758215:web:54f62bc943ebb1965a16a2","storageBucket":"inventory-estimator.firebasestorage.app","apiKey":"AIzaSyBWK-vjvOLq1O5p_3uk1Jxr48hf0eo3kCw","authDomain":"inventory-estimator.firebaseapp.com","messagingSenderId":"867265758215","measurementId":"G-3T901WZ46L","projectNumber":"867265758215","version":"2"}
-[debug] [2025-11-12T13:57:08.031Z] Checked if tokens are valid: true, expires at: 1762959426147
-[debug] [2025-11-12T13:57:08.031Z] Checked if tokens are valid: true, expires at: 1762959426147
-[debug] [2025-11-12T13:57:08.032Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator [none]
-[debug] [2025-11-12T13:57:08.165Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator 200
-[debug] [2025-11-12T13:57:08.165Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator {"projectId":"inventory-estimator","projectNumber":"867265758215","displayName":"Inventory Estimator","name":"projects/inventory-estimator","resources":{"hostingSite":"inventory-estimator"},"state":"ACTIVE","etag":"1_8c84286b-7702-4c23-ae01-2508166435ae"}
+[debug] [2025-11-12T15:38:35.997Z] Checked if tokens are valid: false, expires at: 1762959426147
+[debug] [2025-11-12T15:38:35.998Z] Checked if tokens are valid: false, expires at: 1762959426147
+[debug] [2025-11-12T15:38:35.998Z] > refreshing access token with scopes: []
+[debug] [2025-11-12T15:38:36.003Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-11-12T15:38:36.003Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-11-12T15:38:37.208Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-11-12T15:38:37.208Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-11-12T15:38:37.255Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/inventory-estimator/sites 
+[debug] [2025-11-12T15:38:38.218Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/inventory-estimator/sites 200
+[debug] [2025-11-12T15:38:38.218Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/inventory-estimator/sites {"sites":[{"name":"projects/inventory-estimator/sites/inventory-estimator","defaultUrl":"https://inventory-estimator.web.app","appId":"1:867265758215:web:54f62bc943ebb1965a16a2","type":"DEFAULT_SITE"}]}
+[debug] [2025-11-12T15:38:38.219Z] Checked if tokens are valid: true, expires at: 1762965516208
+[debug] [2025-11-12T15:38:38.219Z] Checked if tokens are valid: true, expires at: 1762965516208
+[debug] [2025-11-12T15:38:38.219Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator/webApps/1:867265758215:web:54f62bc943ebb1965a16a2/config [none]
+[debug] [2025-11-12T15:38:40.324Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator/webApps/1:867265758215:web:54f62bc943ebb1965a16a2/config 200
+[debug] [2025-11-12T15:38:40.324Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator/webApps/1:867265758215:web:54f62bc943ebb1965a16a2/config {"projectId":"inventory-estimator","appId":"1:867265758215:web:54f62bc943ebb1965a16a2","storageBucket":"inventory-estimator.firebasestorage.app","apiKey":"AIzaSyBWK-vjvOLq1O5p_3uk1Jxr48hf0eo3kCw","authDomain":"inventory-estimator.firebaseapp.com","messagingSenderId":"867265758215","measurementId":"G-3T901WZ46L","projectNumber":"867265758215","version":"2"}
+[debug] [2025-11-12T15:38:40.337Z] Checked if tokens are valid: true, expires at: 1762965516208
+[debug] [2025-11-12T15:38:40.337Z] Checked if tokens are valid: true, expires at: 1762965516208
+[debug] [2025-11-12T15:38:40.339Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator [none]
+[debug] [2025-11-12T15:38:40.521Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator 200
+[debug] [2025-11-12T15:38:40.521Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/inventory-estimator {"projectId":"inventory-estimator","projectNumber":"867265758215","displayName":"Inventory Estimator","name":"projects/inventory-estimator","resources":{"hostingSite":"inventory-estimator"},"state":"ACTIVE","etag":"1_8c84286b-7702-4c23-ae01-2508166435ae"}
 [info] i  hosting[inventory-estimator]: Serving hosting files from: out {"metadata":{"emulator":{"name":"hosting"},"message":"Serving hosting files from: \u001b[1mout\u001b[22m"}}
 [info] +  hosting[inventory-estimator]: Local server: http://127.0.0.1:5000 {"metadata":{"emulator":{"name":"hosting"},"message":"Local server: \u001b[4m\u001b[1mhttp://127.0.0.1:5000\u001b[22m\u001b[24m"}}
-[debug] [2025-11-12T13:57:08.218Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[debug] [2025-11-12T15:38:40.592Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
 [info] 
 ┌─────────────────────────────────────────────────────────────┐
 │ ✔  All emulators ready! It is now safe to connect your app. │

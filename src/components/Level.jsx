@@ -144,7 +144,7 @@ export default function Level({
       open={!collapsed}
       onOpenChange={(o) => setCollapsed(!o)}
       bar={({ open, toggle }) => (
-        <div style={{ ...novaMonoStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
             className="acc__button"
@@ -160,11 +160,11 @@ export default function Level({
               className="acc__chev"
               style={{ display: 'inline-block', verticalAlign: 'middle' }}
             />
-            <span className="ew-head">{name}</span>
+            <span className="text-h1">{name}</span>
           </button>
           <div
-            className="ew-right"
-            style={{ marginLeft: 'auto', fontWeight: 800, fontSize: 16, color: '#f18d5b' }}
+            className="text-subtotal-orange"
+            style={{ marginLeft: 'auto', fontWeight: 800, fontSize: 18 }}
             title="Level total (Panels + Loose)"
           >
             Level total: {fmt(levelTotal)}

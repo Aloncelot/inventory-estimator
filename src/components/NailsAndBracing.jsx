@@ -4,9 +4,9 @@
 import React, {
   Fragment,
   useMemo,
-  useState,
+  useState, // For local input state
   useEffect,
-  useRef,
+  useEffectEvent, // The new hook
   useCallback,
   memo,
 } from "react";
@@ -21,7 +21,7 @@ const moneyFmt = new Intl.NumberFormat("en-US", {
 const fmtMoney = (n) => moneyFmt.format(Number(n) || 0);
 
 // --- Helpers ---
-const deref = (x) => (x && x.item? x.item : x);
+const deref = (x) => (x && x.item ? x.item : x);
 const getItem = (s) => deref(s);
 const getUnit = (s) => deref(s)?.unit || deref(s)?.raw?.unit || "box";
 const getSize = (s) =>
@@ -30,14 +30,14 @@ const getSize = (s) =>
   deref(s)?.raw?.sizeDisplay ||
   "";
 const getFamily = (selLike) => {
-  const it = selLike; 
+  const it = selLike;
   return String(
-    it?.familyLabel??
-    it?.familyDisplay??
-    it?.raw?.familyDisplay??
-    it?.raw?.familyLabel??
-    it?.family??
-    ""
+    it?.familyLabel ??
+      it?.familyDisplay ??
+      it?.raw?.familyDisplay ??
+      it?.raw?.familyLabel ??
+      it?.family ??
+      ""
   ).toLowerCase();
 };
 /* ----------------- */
@@ -53,7 +53,7 @@ const Row = memo(
           <div>{label}</div>
           <div>
             {picker}
-            {hint? (
+            {hint ? (
               <div className="ew-hint" style={{ marginTop: 6 }}>
                 {hint}
               </div>
@@ -61,15 +61,15 @@ const Row = memo(
           </div>
           <div className="ew-right">{Math.ceil(row.qtyRaw || 0)}</div>
           <div className="ew-right">
-            {wasteEditor?? (row? row.wastePct : 0 )}
+            {wasteEditor ?? (row ? row.wastePct : 0)}
           </div>
-          <div className="ew-right">{row.qtyFinal?? "—"}</div>
+          <div className="ew-right">{row.qtyFinal ?? "—"}</div>
           <div className="ew-right">{row.unit || "—"}</div>
           <div className="ew-right ew-money">
-            {row.unitPrice? fmtMoney(row.unitPrice) : "—"}
+            {row.unitPrice ? fmtMoney(row.unitPrice) : "—"}
           </div>
           <div className="ew-right ew-money">
-            {row.subtotal? fmtMoney(row.subtotal) : "—"}
+            {row.subtotal ? fmtMoney(row.subtotal) : "—"}
           </div>
           <div></div>
           <div></div>
@@ -78,19 +78,12 @@ const Row = memo(
     );
   },
   (prev, next) => {
-    //... (memo comparison)...
-    const a = prev.row || {};
-    const b = next.row || {};
+    // This shallow comparison is imperfect but good enough here
     return (
       prev.label === next.label &&
       prev.hint === next.hint &&
       prev.picker === next.picker &&
-      a.qtyRaw === b.qtyRaw &&
-      a.qtyFinal === b.qtyFinal &&
-      a.unit === b.unit &&
-      a.unitPrice === b.unitPrice &&
-      a.subtotal === b.subtotal &&
-      a.wastePct === b.wastePct &&
+      prev.row === next.row &&
       prev.wasteEditor === next.wasteEditor
     );
   }
@@ -105,13 +98,12 @@ export default function NailsAndBracing({
   const {
     panelsAll = 0,
     platePiecesAll = 0,
-    ptPiecesAll = 0, // Now correctly named
+    ptPiecesAll = 0,
     sheetsExtAll = 0,
     sheetsBandAll = 0,
     sheetsExtraAll = 0,
   } = totals;
 
-  // 1. Destructure all data from the data prop
   const {
     collapsed = true,
     sel = {
@@ -124,53 +116,101 @@ export default function NailsAndBracing({
       nailsConcrete: 40,
       nailsSheathing: 40,
       nailsFraming: 40,
-      tempBracing: 0, 
-    }
+      tempBracing: 0,
+    },
   } = data || {};
 
-  // 2. Create NEW STABLE handlers that call onChange
-  const setCollapsed = useCallback((isOpen) => {
-    onChange(prev => ({...prev, collapsed:!isOpen }));
-  }, [onChange]);
+  // --- START: Input Optimization ---
+  const [localWaste, setLocalWaste] = useState(waste);
 
-  const setSel = useCallback((k, v) => {
-    onChange(prev => ({...prev, sel: {...(prev.sel || {}), [k]: v } }));
-  }, [onChange]);
-  
-  const setWaste = useCallback((k, e) => {
-    const value = Number(e.target.value);
-    // Only update if it's a valid number
-    if (!isNaN(value) && Number.isFinite(value)) {
-      onChange(prev => ({
-       ...prev,
-        waste: {...(prev.waste || {}), [k]: value }
-      }));
-    } else if (e.target.value === "") {
-      // Allow clearing the input, default to 0
-       onChange(prev => ({
-       ...prev,
-        waste: {...(prev.waste || {}), [k]: 0 }
-      }));
-    }
-  }, [onChange]);
+  useEffect(() => {
+    // When props change, merge them into localWaste,
+    // ensuring defaults are kept if a key is missing
+    setLocalWaste(prev => ({
+        nailsConcrete: waste.nailsConcrete ?? prev.nailsConcrete ?? 40,
+        nailsSheathing: waste.nailsSheathing ?? prev.nailsSheathing ?? 40,
+        nailsFraming: waste.nailsFraming ?? prev.nailsFraming ?? 40,
+        tempBracing: waste.tempBracing ?? prev.tempBracing ?? 0,
+    }));
+  }, [waste]);
 
-  // Create stable callbacks for ItemPicker
-  const onConcreteSelect  = useCallback((val) => setSel('nailsConcrete', val), );
-  const onSheathingSelect = useCallback((val) => setSel('nailsSheathing', val),);
-  const onFramingSelect   = useCallback((val) => setSel('nailsFraming', val),  );
-  const onBracingSelect   = useCallback((val) => setSel('tempBracing', val),   );
+
+  const handleLocalWasteChange = useCallback((key, e) => {
+    setLocalWaste((prev) => ({ ...prev, [key]: e.target.value }));
+  }, []);
+
+  const commitWasteChange = useCallback(
+    (key, valueToCommit) => {
+      const numericValue = Number(valueToCommit) || 0;
+      onChange((prev) => ({
+        ...prev,
+        waste: { ...(prev.waste || {}), [key]: numericValue },
+      }));
+      setLocalWaste((prev) => ({ ...prev, [key]: numericValue }));
+    },
+    [onChange]
+  );
+
+  const handleWasteBlur = useCallback(
+    (key, e) => {
+      commitWasteChange(key, e.target.value);
+    },
+    [commitWasteChange]
+  );
+
+  const handleWasteKeyDown = useCallback(
+    (key, e) => {
+      if (e.key === "Enter") {
+        commitWasteChange(key, e.target.value);
+        e.target.blur();
+      } else if (e.key === "Escape") {
+        // On escape, revert local state to the prop state
+        setLocalWaste(waste);
+        e.target.blur();
+      }
+    },
+    [commitWasteChange, waste]
+  );
+  // --- END: Input Optimization ---
+
+  const setCollapsed = useCallback(
+    (isOpen) => {
+      onChange((prev) => ({ ...prev, collapsed: !isOpen }));
+    },
+    [onChange]
+  );
+
+  const setSel = useCallback(
+    (k, v) => {
+      onChange((prev) => ({ ...prev, sel: { ...(prev.sel || {}), [k]: v } }));
+    },
+    [onChange]
+  );
+
+  const onConcreteSelect = useCallback((val) => setSel("nailsConcrete", val), [
+    setSel,
+  ]);
+  const onSheathingSelect = useCallback((val) => setSel("nailsSheathing", val), [
+    setSel,
+  ]);
+  const onFramingSelect = useCallback((val) => setSel("nailsFraming", val), [
+    setSel,
+  ]);
+  const onBracingSelect = useCallback((val) => setSel("tempBracing", val), [
+    setSel,
+  ]);
 
   // --- Calculations (useMemo) ---
   const allSheetsLoose = useMemo(
     () => Number(sheetsBandAll) + Number(sheetsExtraAll),
-   
+    [sheetsBandAll, sheetsExtraAll]
   );
 
   const concrete = useMemo(() => {
     const basePieces = Number(ptPiecesAll) || 0;
     const qtyRaw = (basePieces * 25) / 100;
-    const pct = Number(waste.nailsConcrete?? 40);
-    const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
+    const pct = Number(waste.nailsConcrete ?? 40);
+    const qtyFinal = Math.ceil(qtyRaw * (1 + pct / 100));
     const unit = getUnit(sel.nailsConcrete) || "box";
     const item = getItem(sel.nailsConcrete);
     const unitPrice = unitPriceFrom(item);
@@ -179,20 +219,20 @@ export default function NailsAndBracing({
   }, [ptPiecesAll, sel.nailsConcrete, waste.nailsConcrete]);
 
   const sheathing = useMemo(() => {
-    const qtyRaw = (Number(allSheetsLoose) || 0) * 80 / 2700;
-    const pct = Number(waste.nailsSheathing?? 40);
-    const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
+    const qtyRaw = ((Number(allSheetsLoose) || 0) * 80) / 2700;
+    const pct = Number(waste.nailsSheathing ?? 40);
+    const qtyFinal = Math.ceil(qtyRaw * (1 + pct / 100));
     const unit = getUnit(sel.nailsSheathing) || "box";
     const item = getItem(sel.nailsSheathing);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
     return { qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
-  },);
+  }, [allSheetsLoose, sel.nailsSheathing, waste.nailsSheathing]);
 
   const framing = useMemo(() => {
-    const qtyRaw = (Number(platePiecesAll) || 0) * 25 / 2500;
-    const pct = Number(waste.nailsFraming?? 40);
-    const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
+    const qtyRaw = ((Number(platePiecesAll) || 0) * 25) / 2500;
+    const pct = Number(waste.nailsFraming ?? 40);
+    const qtyFinal = Math.ceil(qtyRaw * (1 + pct / 100));
     const unit = getUnit(sel.nailsFraming) || "box";
     const item = getItem(sel.nailsFraming);
     const unitPrice = unitPriceFrom(item);
@@ -202,14 +242,14 @@ export default function NailsAndBracing({
 
   const bracing = useMemo(() => {
     const qtyRaw = Math.max(0, Number(panelsAll) || 0) * 3;
-    const pct = Number(waste.tempBracing?? 0);
-    const qtyFinal = Math.ceil(qtyRaw * (1 + pct/100));
+    const pct = Number(waste.tempBracing ?? 0);
+    const qtyFinal = Math.ceil(qtyRaw * (1 + pct / 100));
     const unit = getUnit(sel.tempBracing) || "pcs";
     const item = getItem(sel.tempBracing);
     const unitPrice = unitPriceFrom(item);
     const subtotal = qtyFinal * (Number(unitPrice) || 0);
     return { qtyRaw, qtyFinal, unit, item, unitPrice, subtotal, wastePct: pct };
-  },);
+  }, [panelsAll, sel.tempBracing, waste.tempBracing]);
 
   const sectionTotal = useMemo(
     () =>
@@ -220,70 +260,71 @@ export default function NailsAndBracing({
     [concrete.subtotal, sheathing.subtotal, framing.subtotal, bracing.subtotal]
   );
 
-  // 3. Report total back to the context
-  const lastTotalRef = useRef(null);
+  // --- useEffectEvent Refactor ---
+  const onDataChange = useEffectEvent(onChange);
   useEffect(() => {
     const t = Number(sectionTotal) || 0;
-    if (t!== (data?.total || 0)) {
-      lastTotalRef.current = t;
-      onChange(prevData => ({
-       ...prevData,
-        total: t,
-      }));
-    }
-  },);
+    onDataChange((prevData) => ({
+      ...prevData,
+      total: t,
+    }));
+  }, [sectionTotal]);
 
-  // ---- Memoize pickers and hints ----
+  // ---- Memoize pickers and hints (FULLY WRITTEN) ----
   const concretePicker = useMemo(
     () => (
       <ItemPicker
-        compact onSelect={onConcreteSelect}
+        compact
+        onSelect={onConcreteSelect}
         value={sel.nailsConcrete}
         defaultVendor="Home Depot"
         defaultFamilyLabel="Drive Pins with Washers (HD)"
         defaultSizeLabel={`3"-100s`}
       />
     ),
-   
+    [onConcreteSelect, sel.nailsConcrete]
   );
 
   const sheathingPicker = useMemo(
     () => (
       <ItemPicker
-        compact onSelect={onSheathingSelect}
+        compact
+        onSelect={onSheathingSelect}
         value={sel.nailsSheathing}
         defaultVendor="Concord"
         defaultFamilyLabel="Bright Ring Coil"
         defaultSizeLabel={`8D-2-3/8x.113-2.7M`}
       />
     ),
-   
+    [onSheathingSelect, sel.nailsSheathing]
   );
 
   const framingPicker = useMemo(
     () => (
       <ItemPicker
-        compact onSelect={onFramingSelect}
+        compact
+        onSelect={onFramingSelect}
         value={sel.nailsFraming}
         defaultVendor="Concord"
         defaultFamilyLabel="Bright Common Coil"
         defaultSizeLabel={`12D-3-1/4x.120-2.5M`}
       />
     ),
-   
+    [onFramingSelect, sel.nailsFraming]
   );
 
   const bracingPicker = useMemo(
     () => (
       <ItemPicker
-        compact onSelect={onBracingSelect}
+        compact
+        onSelect={onBracingSelect}
         value={sel.tempBracing}
         defaultVendor="Gillies & Prittie Warehouse"
         defaultFamilyLabel="SPF#2"
         defaultSizeLabel={`2x4"-16'`}
       />
     ),
-   
+    [onBracingSelect, sel.tempBracing]
   );
 
   const concreteHint = useMemo(() => {
@@ -295,8 +336,8 @@ export default function NailsAndBracing({
   const sheathingHint = useMemo(
     () =>
       `Loose sheets = (band: ${sheetsBandAll})` +
-      (sheetsExtraAll? ` + (extra: ${sheetsExtraAll})` : ""),
-   
+      (sheetsExtraAll ? ` + (extra: ${sheetsExtraAll})` : ""),
+    [sheetsBandAll, sheetsExtraAll]
   );
   const framingHint = useMemo(
     () =>
@@ -312,30 +353,46 @@ export default function NailsAndBracing({
     <div className="ew-card">
       <AccordionSection
         title={title}
-        open={!collapsed} // <-- Use state from prop
-        onOpenChange={(isOpen) => setCollapsed(isOpen)} // <-- Use new handler
+        open={!collapsed}
+        onOpenChange={(isOpen) => setCollapsed(isOpen)}
         bar={({ open, toggle }) => (
-          <div style={{ display:'flex', alignItems:'center', gap: 8, width: '100%' }}>
-              <button
-                  type="button" 
-                  className="acc__button"
-                  onClick={toggle} 
-                  aria-expanded={open} 
-                  title={open? "Collapse" : "Expand"}
-              >
-                   <img
-                      src={open? '/icons/down.png' : '/icons/minimize.png'}
-                      alt={open? 'Collapse section' : 'Expand section'}
-                      width={16}
-                      height={16}
-                      className="acc__chev"
-                      style={{ display: 'inline-block', verticalAlign: 'middle' }}
-                  />
-              </button>
-              <span className="ew-head">{title}</span>
-              <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b', fontWeight: '700', fontSize: '16px', fontFamily: "'Nova Mono', monospace" }}>
-                  Subtotal: {fmtMoney(sectionTotal)}
-              </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+            }}
+          >
+            <button
+              type="button"
+              className="acc__button"
+              onClick={toggle}
+              aria-expanded={open}
+              title={open ? "Collapse" : "Expand"}
+            >
+              <img
+                src={open ? "/icons/down.png" : "/icons/minimize.png"}
+                alt={open ? "Collapse section" : "Expand section"}
+                width={16}
+                height={16}
+                className="acc__chev"
+                style={{ display: "inline-block", verticalAlign: "middle" }}
+              />
+            </button>
+            <span className="text-section-header">{title}</span>
+            <div
+              className="ew-right"
+              style={{
+                marginLeft: "auto",
+                color: "#f18d5b",
+                fontWeight: "700",
+                fontSize: "16px",
+                fontFamily: "'Nova Mono', monospace",
+              }}
+            >
+              Subtotal: {fmtMoney(sectionTotal)}
+            </div>
           </div>
         )}
       >
@@ -361,10 +418,14 @@ export default function NailsAndBracing({
             wasteEditor={
               <input
                 className="ew-input focus-anim"
-                type="number" inputMode="decimal"
-                value={waste.nailsConcrete || 0}
-                onChange={(e) => setWaste('nailsConcrete', e)}
-                style={{ width: 80, padding: 6, textAlign: 'right' }}
+                type="number"
+                inputMode="decimal"
+                // *** LA CORRECCIÓN ESTÁ AQUÍ ***
+                value={localWaste.nailsConcrete ?? 0}
+                onChange={(e) => handleLocalWasteChange("nailsConcrete", e)}
+                onBlur={(e) => handleWasteBlur("nailsConcrete", e)}
+                onKeyDown={(e) => handleWasteKeyDown("nailsConcrete", e)}
+                style={{ width: 80, padding: 6, textAlign: "right" }}
                 title="Waste %"
               />
             }
@@ -377,10 +438,14 @@ export default function NailsAndBracing({
             wasteEditor={
               <input
                 className="ew-input focus-anim"
-                type="number" inputMode="decimal"
-                value={waste.nailsSheathing || 0}
-                onChange={(e) => setWaste('nailsSheathing', e)}
-                style={{ width: 80, padding: 6, textAlign: 'right' }}
+                type="number"
+                inputMode="decimal"
+                // *** LA CORRECCIÓN ESTÁ AQUÍ ***
+                value={localWaste.nailsSheathing ?? 0}
+                onChange={(e) => handleLocalWasteChange("nailsSheathing", e)}
+                onBlur={(e) => handleWasteBlur("nailsSheathing", e)}
+                onKeyDown={(e) => handleWasteKeyDown("nailsSheathing", e)}
+                style={{ width: 80, padding: 6, textAlign: "right" }}
                 title="Waste %"
               />
             }
@@ -393,10 +458,14 @@ export default function NailsAndBracing({
             wasteEditor={
               <input
                 className="ew-input focus-anim"
-                type="number" inputMode="decimal"
-                value={waste.nailsFraming || 0}
-                onChange={(e) => setWaste('nailsFraming', e)}
-                style={{ width: 80, padding: 6, textAlign: 'right' }}
+                type="number"
+                inputMode="decimal"
+                // *** LA CORRECCIÓN ESTÁ AQUÍ ***
+                value={localWaste.nailsFraming ?? 0}
+                onChange={(e) => handleLocalWasteChange("nailsFraming", e)}
+                onBlur={(e) => handleWasteBlur("nailsFraming", e)}
+                onKeyDown={(e) => handleWasteKeyDown("nailsFraming", e)}
+                style={{ width: 80, padding: 6, textAlign: "right" }}
                 title="Waste %"
               />
             }
@@ -409,10 +478,14 @@ export default function NailsAndBracing({
             wasteEditor={
               <input
                 className="ew-input focus-anim"
-                type="number" inputMode="decimal"
-                value={waste.tempBracing || 0}
-                onChange={(e) => setWaste('tempBracing', e)}
-                style={{ width: 80, padding: 6, textAlign: 'right' }}
+                type="number"
+                inputMode="decimal"
+                // *** LA CORRECCIÓN ESTÁ AQUÍ ***
+                value={localWaste.tempBracing ?? 0}
+                onChange={(e) => handleLocalWasteChange("tempBracing", e)}
+                onBlur={(e) => handleWasteBlur("tempBracing", e)}
+                onKeyDown={(e) => handleWasteKeyDown("tempBracing", e)}
+                style={{ width: 80, padding: 6, textAlign: "right" }}
                 title="Waste %"
               />
             }

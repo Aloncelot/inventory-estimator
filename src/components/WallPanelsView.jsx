@@ -1,7 +1,14 @@
 // src/components/WallPanelsView.jsx
 'use client';
 
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { 
+  useCallback, 
+  useMemo, 
+  useState, 
+  useEffect,
+  useEffectEvent, // 1. Imported useEffectEvent
+  useRef,         // 2. Imported useRef
+} from 'react';
 import { useProject } from '@/context/ProjectContext';
 import Level from '@/components/Level';
 import PanelsManufactureEstimate from "@/components/PanelsManufactureEstimate";
@@ -10,7 +17,7 @@ import AddButton from './ui/AddButton';
 
 export default function WallPanelsView({ onGrandTotal }) {
   
-  // 1. Get ALL data and helpers from the context
+  // 1. Get ALL data and helpers from the context (unchanged)
   const { 
     projectData, 
     updateProject, // This is the stable function from context
@@ -18,21 +25,17 @@ export default function WallPanelsView({ onGrandTotal }) {
     isLoaded 
   } = useProject();
 
-  // 2. Extract data from context
+  // 2. Extract data from context (unchanged)
   const estimateData = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const levels = useMemo(() => (estimateData.levels || []).filter(Boolean), [estimateData.levels]);
-  const manufactureEstimate = useMemo(() => estimateData.manufactureEstimate || {}, [estimateData.manufactureEstimate]);
-  const nailsAndBracing = useMemo(() => estimateData.nailsAndBracing || {}, [estimateData.nailsAndBracing]);
+  const manufactureEstimate = useMemo(() => estimateData.manufactureEstimate || {}, [projectData]);
+  const nailsAndBracing = useMemo(() => estimateData.nailsAndBracing || {}, [projectData]);
   
-  // --- **THIS IS THE FIX (PART 1)** ---
-  // All handlers are now stable `useCallback` hooks that
-  // pass a functional update to the main `updateProject` setter.
-  
+  // 3. Stable handlers (unchanged, this logic is correct)
   const handleLevelChangeById = useCallback((levelId, levelUpdaterFn) => {
     updateProject(prevEstimate => {
       const newLevels = (prevEstimate.levels || []).map(lvl => {
         if (lvl.id !== levelId) return lvl;
-        // Apply the functional update to the specific level
         return levelUpdaterFn(lvl); 
       });
       return { ...prevEstimate, levels: newLevels };
@@ -72,8 +75,7 @@ export default function WallPanelsView({ onGrandTotal }) {
     }));
   }, [updateProject]);
 
-  // --- **THIS IS THE FIX (PART 2)** ---
-  // This calculation now correctly sums all stats from all sections
+  // 4. `allLevelStats` calculation (unchanged)
   const allLevelStats = useMemo(() => {
     let totalExteriorLF = 0, totalInteriorShearLF = 0, totalInteriorBlockingLF = 0;
     let totalInteriorNonLoadLF = 0, totalKneeWallLF = 0, panelsAll = 0;
@@ -115,7 +117,7 @@ export default function WallPanelsView({ onGrandTotal }) {
     };
   }, [levels]);
 
-  // --- (Grand total logic is unchanged) ---
+  // 5. `grandTotal` calculation (unchanged)
   const grandTotal = useMemo(() => {
     const levelsTotal = levels.reduce((sum, lvl) => sum + (Number(lvl.total) || 0), 0);
     const manufactureTotal = Number(manufactureEstimate.total || 0);
@@ -123,9 +125,25 @@ export default function WallPanelsView({ onGrandTotal }) {
     return levelsTotal + manufactureTotal + nailsTotal;
   }, [levels, manufactureEstimate, nailsAndBracing]);
 
+  // --- *** LA CORRECCIÓN ESTÁ AQUÍ *** ---
+  
+  // 6. Create the stable event handler
+  const onGrandTotalChange = useEffectEvent(onGrandTotal);
+  
+  // 7. Create the ref to track the last sent value
+  const lastSentGrandTotalRef = useRef(null);
+
   useEffect(() => {
-    if (typeof onGrandTotal === 'function') onGrandTotal(grandTotal);
-  }, [grandTotal, onGrandTotal]);
+    if (typeof onGrandTotalChange === 'function') {
+      // 8. Only send the update if the numeric value has changed
+      if (grandTotal !== lastSentGrandTotalRef.current) {
+        onGrandTotalChange(grandTotal);
+        lastSentGrandTotalRef.current = grandTotal;
+      }
+    }
+  }, [grandTotal, onGrandTotalChange]); // Dependency is on the calculated value
+  // --- *** FIN DE LA CORRECCIÓN *** ---
+
 
   const moneyFmt = useMemo(() => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }), []);
   const fmt = (n) => moneyFmt.format(Number(n) || 0);
@@ -134,7 +152,7 @@ export default function WallPanelsView({ onGrandTotal }) {
     return (
        <div className="app-content">
           <div className="ew-card">
-              <h2 className="ew-h2 nova-flat-turquoise" style={{ margin: 0 }}>Wall Panels</h2>
+              <span className="text-h1">Wall Panels</span>
               <p className="ew-subtle" style={{ marginTop: '10px' }}>
                 Please create or load a project from the "Project" section to begin.
               </p>
@@ -147,10 +165,9 @@ export default function WallPanelsView({ onGrandTotal }) {
   return (
     <div className="app-content">
       <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <h1 className="ew-h2 nova-flat-turquoise" style={{ margin: 0, flexShrink: 0 }}>Wall Panels</h1>
+        <span className="text-h1">Wall Panels</span>
         <div
-          className="ew-right nova-flat-turquoise" 
-          style={{ fontSize: '1.25rem' }}
+          className="ew-right text-level-total" 
           title="Sum of all levels (panels + loose)"
         >
           Grand total: {fmt(grandTotal)}

@@ -1,20 +1,17 @@
 // src/components/ui/AccordionSection.jsx
 "use client";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Children, useCallback, useEffect, useId, useRef, useState } from "react";
 
 export default function AccordionSection({
   title,
-  // Use `bar` to render the top row for BOTH states (recommended).
-  // It can be a node or a function receiving { open, toggle, id }.
   bar,
-  // Legacy props (fallback if `bar` not provided):
-  summary, // node or (ctx)=>node  (shown only when collapsed)
-  header, // node or (ctx)=>node  (shown only when expanded)
+  summary,
+  header,
   actions,
   defaultOpen = true,
   open: openProp,
   onOpenChange,
-  hideHeaderWhenCollapsed = false, // ignored if `bar` is provided
+  hideHeaderWhenCollapsed = false,
   children,
   className = "",
 }) {
@@ -33,17 +30,48 @@ export default function AccordionSection({
 
   const toggle = useCallback(() => setOpen(!open), [setOpen, open]);
 
+  // 2. Re-added bodyRef
   const bodyRef = useRef(null);
+  const innerRef = useRef(null);
   const id = useId();
 
+  // 3. Re-added the useEffect to manage max-height
   useEffect(() => {
     const el = bodyRef.current;
-    if (!el) return;
-    const h = el.scrollHeight;
-    el.style.maxHeight = open ? `${h}px` : "0px";
-    el.style.opacity = open ? "1" : "0";
-    el.setAttribute("aria-hidden", open ? "false" : "true");
-  }, [open, children]);
+    const innerEl = innerRef.current;
+    if (!el || !innerEl) return;
+
+    let resizeObserver;
+
+    if (open) {
+      // --- Al abrir ---
+      el.style.maxHeight = `${innerEl.scrollHeight}px`; // Ajustar altura inicial
+      el.style.opacity = "1";
+      el.setAttribute("aria-hidden", "false");
+
+      // 1. Definimos el callback del observador
+      // Esto se disparará CADA VEZ que el tamaño del contenido interno cambie
+      const onResize = () => {
+        el.style.maxHeight = `${innerEl.scrollHeight}px`;
+      };
+
+      // 2. Creamos y activamos el observador
+      resizeObserver = new ResizeObserver(onResize);
+      resizeObserver.observe(innerEl); // Empezamos a observar el div interior
+
+    } else {
+      // --- Al cerrar ---
+      el.style.maxHeight = "0px";
+      el.style.opacity = "0";
+      el.setAttribute("aria-hidden", "true");
+    }
+    
+    return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect(); // Dejamos de observar
+      }
+    };
+  }, [open]);
 
   const resolve = (nodeOrFn) =>
     typeof nodeOrFn === "function" ? nodeOrFn({ open, toggle, id }) : nodeOrFn;
@@ -55,7 +83,6 @@ export default function AccordionSection({
   return (
     <section className={`acc ${open ? "acc--open" : ""} ${className}`}>
       {barNode ? (
-        // One unified row for both states (same wrapper)
         <div className="acc__summary">{barNode}</div>
       ) : (
         <>
@@ -113,8 +140,9 @@ export default function AccordionSection({
         </>
       )}
 
+      {/* 4. Re-added the ref to the body div */}
       <div id={id} ref={bodyRef} className="acc__body">
-        <div className="acc__bodyInner">{children}</div>
+        <div ref={innerRef} className="acc__bodyInner">{children}</div>
       </div>
     </section>
   );

@@ -51,8 +51,8 @@ export default function InteriorWalls({
   return (
         <section className="ew-stack">
             <div className="ew-card" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-              <h2 className="ew-h2" style={{ margin:0 }}>{title}</h2>
-              <div className="ew-right" title="Sum of all interior wall section subtotals for this level" style={{ fontWeight: 700 }}>
+              <h2 className="text-h2">{title}</h2>
+              <div className="ew-right text-level-total" title="Sum of all interior wall section subtotals for this level">
                 Total: {fmt(interiorTotalSubtotal)}
               </div>
             </div>
