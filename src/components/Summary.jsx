@@ -3,9 +3,12 @@
 import { useMemo, useState, useEffect, useCallback, useEffectEvent } from "react";
 import { useProject } from "@/context/ProjectContext";
 
-const LS_KEY = "summary:project";
-
-export default function Summary({ grandTotal = 0 }) {
+// *** CORRECCIÓN: Aceptar los props individuales ***
+export default function Summary({ 
+  wallPanelsTotal = 0, 
+  trussTotal = 0,
+  grandTotal = 0 
+}) {
   const { projectData, updateProject } = useProject();
   const onDataChange = useEffectEvent(updateProject);
 
@@ -16,14 +19,6 @@ export default function Summary({ grandTotal = 0 }) {
     estimateDate: "",
   });
 
-  // useEffect(() => {
-  //   try {
-  //     const raw = localStorage.getItem(LS_KEY);
-  //     if (raw) setForm(JSON.parse(raw));
-  //   } catch {}
-  // }, []);
-
-  // Provide today's date after mount if empty
   useEffect(() => {
     if (!form.estimateDate) {
       const today = new Date();
@@ -34,7 +29,6 @@ export default function Summary({ grandTotal = 0 }) {
     }
   }, [form.estimateDate]);
 
-  // Sumary
   const summaryInfo = useMemo(() => {
     const defaults = { 
       projectName: projectData?.name || "", 
@@ -47,13 +41,10 @@ export default function Summary({ grandTotal = 0 }) {
 
   useEffect(() => {
     if (!projectData) return;
-
     const info = projectData.estimateData?.summaryInfo || {};
     const rootName = projectData.name || "";
-    
     const today = new Date();
     const isoDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0,10);
-
     const needsDate = !info.estimateDate;
     const needsName = !info.projectName && rootName;
 
@@ -72,7 +63,7 @@ export default function Summary({ grandTotal = 0 }) {
     }
   }, [projectData, onDataChange]);
 
-    const moneyFmt = useMemo(
+  const moneyFmt = useMemo(
     () => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol" }),
     []
   );
@@ -110,10 +101,30 @@ export default function Summary({ grandTotal = 0 }) {
           <input className="ew-input" type="date" name="estimateDate" style={{color:'#81eee5'}} value={summaryInfo.estimateDate} onChange={onChange} />
         </label>
       </div> 
+
+      {/* --- *** CORRECCIÓN: Usar los props correctos *** --- */}
+      
       <div className="sum-row">
         <div className="sum-label">Wall panels total</div>
         <div className="text-summary-subcategory">
-          {moneyFmt.format(Number(grandTotal||0))}
+          {/* Usar el prop 'wallPanelsTotal' */}
+          {moneyFmt.format(Number(wallPanelsTotal || 0))}
+        </div>
+      </div>
+      
+      <div className="sum-row">
+        <div className="sum-label">Trusses total (incl. tax)</div>
+        <div className="text-summary-subcategory">
+          {/* Usar el prop 'trussTotal' */}
+          {moneyFmt.format(Number(trussTotal || 0))}
+        </div>
+      </div>
+      
+      <div className="sum-row" style={{marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border)'}}>
+        <div className="sum-label text-level-total" style={{fontSize: '1.25rem'}}>Grand Total</div>
+        <div className="text-level-total" style={{fontSize: '1.25rem'}}>
+          {/* Usar el prop 'grandTotal' */}
+          {moneyFmt.format(Number(grandTotal || 0))}
         </div>
       </div>
     </div>

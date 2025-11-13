@@ -1,14 +1,13 @@
 // src/app/page.jsx
 "use client";
 
-// 1. Importamos 'Activity' desde 'react'
 import {
   useCallback,
   useState,
   useMemo,
   useEffect,
   useRef,
-  Activity, // ¡Añadido!
+  Activity, 
 } from "react";
 import { useLocalStorageJson } from "@/hooks/useLocalStorageJson";
 import { ProjectProvider } from "@/context/ProjectContext";
@@ -18,13 +17,13 @@ import WallPanelsView from "@/components/WallPanelsView";
 import Summary from "@/components/Summary";
 import ProjectView from "@/components/ProjectView";
 import LoginView from "@/components/LoginView";
+import TrussesView from "@/components/TrussesView";
 
-// --- Helper para las vistas "Próximamente" ---
-// Esto limpia la lógica de renderizado principal
+
+// Helper (sin cambios)
 function ComingSoonView({ activeKey }) {
   const titles = {
     auth: "Login / Logout",
-    trusses: "Trusses",
     loose: "Loose Material",
     labor: "Labor",
     takeoff: "Takeoff list",
@@ -44,7 +43,6 @@ function ComingSoonView({ activeKey }) {
     </div>
   );
 }
-// --- Fin del Helper ---
 
 export default function Home() {
   const [ui, setUi] = useLocalStorageJson("inv:v1:ui", {
@@ -57,7 +55,13 @@ export default function Home() {
   const { user, loading: authLoading } = useAuth();
   const prevUserRef = useRef(user);
 
-  const [grandTotal, setGrandTotal] = useState(0);
+  // --- *** CORRECCIÓN: Separar los estados de los totales *** ---
+  const [wallPanelsTotal, setWallPanelsTotal] = useState(0);
+  const [trussTotal, setTrussTotal] = useState(0);
+  
+  // El 'grandTotal' real ahora es una suma calculada
+  const grandTotal = wallPanelsTotal + trussTotal;
+  // --- *** FIN DE LA CORRECCIÓN *** ---
 
   const setActive = useCallback(
     (key) => {
@@ -81,12 +85,7 @@ export default function Home() {
     [setUi]
   );
 
-  // 2. Ya no necesitamos el 'useMemo' para 'content'.
-  // Renderizaremos directamente en el JSX.
-
-  // Definimos las claves que usan el componente "ComingSoonView"
   const placeholderKeys = [
-    "trusses",
     "loose",
     "labor",
     "takeoff",
@@ -106,7 +105,6 @@ export default function Home() {
           onCollapsedChange={setCollapsed}
         />
         <main className="app-main">
-          {/* 3. Movemos la lógica de carga y autenticación aquí */}
           {authLoading ? (
             <div className="app-content">
               <div className="ew-card">Loading Authentication...</div>
@@ -114,24 +112,32 @@ export default function Home() {
           ) : !user ? (
             <LoginView />
           ) : (
-            /* 4. Renderizamos TODAS las vistas principales,
-                  envueltas en <Activity /> */
             <>
               <Activity mode={active === 'project' ? 'visible' : 'hidden'}>
                 <ProjectView />
               </Activity>
               
+              {/* --- *** CORRECCIÓN: Pasar los 3 props al Summary *** --- */}
               <Activity mode={active === 'summary' ? 'visible' : 'hidden'}>
                 <div className="app-content">
-                  <Summary grandTotal={grandTotal} />
+                  <Summary 
+                    wallPanelsTotal={wallPanelsTotal}
+                    trussTotal={trussTotal}
+                    grandTotal={grandTotal}
+                  />
                 </div>
               </Activity>
 
+              {/* --- *** CORRECCIÓN: Usar el setter correcto *** --- */}
               <Activity mode={active === 'wallpanels' ? 'visible' : 'hidden'}>
-                <WallPanelsView onGrandTotal={setGrandTotal} />
+                <WallPanelsView onGrandTotal={setWallPanelsTotal} />
               </Activity>
               
-              {/* 5. Manejamos todas las vistas "Próximamente" */}
+              {/* --- *** CORRECCIÓN: Usar el setter correcto *** --- */}
+              <Activity mode={active === 'trusses' ? 'visible' : 'hidden'}>
+                <TrussesView onTrussTotal={setTrussTotal} />
+              </Activity>
+              
               <Activity mode={isPlaceholder ? 'visible' : 'hidden'}>
                 <ComingSoonView activeKey={active} />
               </Activity>

@@ -9,6 +9,7 @@
  const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
 
  // --- 1. DEFINE THE DEFAULT BLANK STRUCTURE ---
+ // ... (blankSection, blankLevel, blankTrussRow no cambian) ...
  const blankSection = (props = {}) => ({
   id: generateId('section-'),
   name: "",
@@ -34,15 +35,29 @@
   ...props,
  });
 
+ const blankTrussRow = (label, defaultAmount = 0) => ({
+  id: generateId('truss-'),
+  label: label,
+  subtotal: defaultAmount,
+ });
+
+
  const blankEstimateData = () => ({
   levels: [blankLevel({ index: 0 })],
   manufactureEstimate: {},
   nailsAndBracing: {},
+  trusses: [
+    blankTrussRow("Roof Trusses & Hangers"),
+    blankTrussRow("1st Floor Trusses & Hangers")
+  ],
   summaryInfo: {
     projectName: "",
     address: "",
     drawingsDate: "",
-    estimateDate: ""
+    estimateDate: "",
+    // *** NUEVO: Campos de Impuestos ***
+    isTaxExempt: false,
+    taxState: null, // null = auto-detectar
   }
  });
  // ------------------------------------------
@@ -50,6 +65,7 @@
  const ProjectContext = createContext();
 
  export function ProjectProvider({ children, initialProjectId = null }) {
+     // ... (las primeras funciones: useAuth, useState, useEffect, getProjects... no cambian) ...
      const { user } = useAuth();
      const [projectId, setProjectId] = useState(initialProjectId);
      const [projectData, setProjectData] = useState(null); 
@@ -58,7 +74,7 @@
      const [isLoading, setIsLoading] = useState(false); 
      const [isListLoading, setIsListLoading] = useState(false); 
      const [isSaving, setIsSaving] = useState(false);
-     const [appId, setAppId] = useState(null); // <-- Start as null, not 'default-app-id'
+     const [appId, setAppId] = useState(null); 
 
      // --- App ID (from auth user) ---
      useEffect(() => {
@@ -72,19 +88,16 @@
      // --- Firestore Path ---
     const getProjectsCollectionPath = useCallback(() => {
         if (!appId) {
-            // This is noisy, let's remove the console.error
-            // console.error("Cannot get projects collection path: Missing appId.");
             return null;
         };
-         // Using private user path
-         return `artifacts/${appId}/projects`; // <-- Removed 'public'
+         return `artifacts/${appId}/projects`;
      }, [appId]);
 
     const getProjectPath = useCallback((pId) => {
         const collectionPath = getProjectsCollectionPath();
         if (!collectionPath || !pId) return null;
-            return `artifacts/${appId}/projects/${pId}`; // <-- Removed 'public'
-    }, [getProjectsCollectionPath, appId]); // Added appId
+            return `artifacts/${appId}/projects/${pId}`;
+    }, [getProjectsCollectionPath, appId]);
 
     // --- Fetch Project List ---
     const fetchProjectsList = useCallback(async (currentUserId) => {
@@ -124,11 +137,10 @@
                 ownerId: user.uid,
                 createdAt: Timestamp.now(),
                 updatedAt: Timestamp.now(),
-                // **THIS IS THE FIX**: Set the default estimate data
-                estimateData: blankEstimateData(), 
+                estimateData: blankEstimateData(),
             };
             const docRef = await addDoc(collection(db, collectionPath), newProjectData);
-            fetchProjectsList(appId); // Refresh the list
+            fetchProjectsList(appId);
             return docRef.id; 
         } catch (error) {
             console.error("Error creating new project:", error);
@@ -156,13 +168,40 @@
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 
-                // **THIS IS THE FIX**: If project has no estimateData, create it
                 if (!data.estimateData) {
                    data.estimateData = blankEstimateData();
                 }
-                // **THIS IS THE FIX**: If estimateData has no levels, create one
                 if (!data.estimateData.levels || data.estimateData.levels.length === 0) {
                    data.estimateData.levels = [blankLevel({ index: 0 })];
+                }
+                
+                // --- Lógica de Migración de Trusses (sin cambios) ---
+                if (!data.estimateData.trusses) {
+                    data.estimateData.trusses = [
+                        blankTrussRow("Roof Trusses & Hangers"),
+                        blankTrussRow("1st Floor Trusses & Hangers")
+                    ];
+                } else if (
+                    data.estimateData.trusses.length > 0 && 
+                    data.estimateData.trusses[0].base
+                ) {
+                    const oldGroup = data.estimateData.trusses[0];
+                    data.estimateData.trusses = [
+                        ...(oldGroup.base || []),
+                        ...(oldGroup.extras || [])
+                    ];
+                }
+
+                // *** NUEVO: Asegurar que los datos de impuestos existan en proyectos antiguos ***
+                if (!data.estimateData.summaryInfo) {
+                    data.estimateData.summaryInfo = blankEstimateData().summaryInfo;
+                } else {
+                    if (data.estimateData.summaryInfo.isTaxExempt === undefined) {
+                        data.estimateData.summaryInfo.isTaxExempt = false;
+                    }
+                    if (data.estimateData.summaryInfo.taxState === undefined) {
+                        data.estimateData.summaryInfo.taxState = null;
+                    }
                 }
                   
                 setProjectData(data);
@@ -206,11 +245,10 @@
          }
      }, [user, projectId, projectData, isSaving, getProjectPath, db]);
 
-    // **THIS IS THE FIX**: The stable updater function
+    // --- updateProject (no cambia) ---
     const updateProject = useCallback((updaterFn) => {
          setProjectData(prevData => {
              if (!prevData) return null;
-             // updaterFn is (prevEstimate) => newEstimate
              const newEstimateData = updaterFn(prevData.estimateData || blankEstimateData());
              return {
                  ...prevData,
@@ -219,10 +257,9 @@
         });
     }, []); 
 
-    // Legacy function, points to new one
     const updateEstimateData = updateProject;
 
-    // --- Auto-fetch list on user/appId change ---
+    // --- (Resto de los hooks: auto-fetch, auto-load, context value... no cambian) ---
     useEffect(() => {
         if (appId) {
             fetchProjectsList(appId);
@@ -233,14 +270,12 @@
         }
     }, [appId, fetchProjectsList]);
 
-    // --- Auto-load initial project ID ---
      useEffect(() => {
         if (initialProjectId && !projectData && !isLoading && user?.uid) {
             loadProject(initialProjectId);
         }
      }, [initialProjectId, projectData, isLoading, user?.uid, loadProject]);
     
-     // --- Context Value ---
      const value = useMemo(() => ({
          projectId,
          projectData,
@@ -250,8 +285,8 @@
          createNewProject,
          loadProject,
          saveProject,
-         updateEstimateData, // Pass legacy
-         updateProject,      // Pass new stable updater
+         updateEstimateData,
+         updateProject,
          blankLevel,
          blankSection,
          isLoaded,
