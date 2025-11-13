@@ -21,8 +21,13 @@ export default function InteriorWalls({
   // --- **THIS IS THE FIX (PART 1)** ---
   // These handlers now pass an *updater function* to the parent
   const addSection = useCallback(() => {
-    const newSection = blankSection({ kind: 'partition' });
-    onSectionsChange(prevSections => [...(prevSections || []), newSection]);
+    onSectionsChange(prevSections => {
+      const newSection = blankSection({ 
+        kind: 'partition',
+        name: `Section ${prevSections.length + 1}` // Nombre simple
+      });
+      return [...(prevSections || []), newSection];
+    });
   }, [onSectionsChange, blankSection]);
 
   const removeSection = useCallback((idToRemove) => {
@@ -68,14 +73,13 @@ export default function InteriorWalls({
 
             {Array.isArray(sectionsData) && sectionsData.map((sec, i) => (
                 <InteriorWallGroup
-                    key={sec.id}
-                    sectionData={sec}
-                    // --- **THIS IS THE FIX (PART 2)** ---
-                    onUpdateSection={updaterFn => handleSectionChange(sec.id, updaterFn)}
-                    title={`${title} — Section ${i + 1}`}
-                    onRemove={() => removeSection(sec.id)}
-                    bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
-                />
+                key={sec.id}
+                sectionData={sec}
+                onUpdateSection={updaterFn => handleSectionChange(sec.id, updaterFn)}               
+                title={`${title} — ${sec.name}`}
+                onRemove={() => removeSection(sec.id)}
+                bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
+            />
             ))}
 
             <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop: '1rem' }}>

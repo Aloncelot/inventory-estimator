@@ -11,6 +11,7 @@
  // --- 1. DEFINE THE DEFAULT BLANK STRUCTURE ---
  const blankSection = (props = {}) => ({
   id: generateId('section-'),
+  name: "",
   lengthLF: 0,
   heightFt: 12,
   studSpacingIn: 16,
@@ -37,6 +38,12 @@
   levels: [blankLevel({ index: 0 })],
   manufactureEstimate: {},
   nailsAndBracing: {},
+  summaryInfo: {
+    projectName: "",
+    address: "",
+    drawingsDate: "",
+    estimateDate: ""
+  }
  });
  // ------------------------------------------
 

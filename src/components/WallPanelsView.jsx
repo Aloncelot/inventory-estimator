@@ -6,8 +6,8 @@ import {
   useMemo, 
   useState, 
   useEffect,
-  useEffectEvent, // 1. Imported useEffectEvent
-  useRef,         // 2. Imported useRef
+  useEffectEvent, 
+  useRef,         
 } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import Level from '@/components/Level';
@@ -17,7 +17,7 @@ import AddButton from './ui/AddButton';
 
 export default function WallPanelsView({ onGrandTotal }) {
   
-  // 1. Get ALL data and helpers from the context (unchanged)
+  // Get ALL data and helpers from the context
   const { 
     projectData, 
     updateProject, // This is the stable function from context
@@ -25,13 +25,13 @@ export default function WallPanelsView({ onGrandTotal }) {
     isLoaded 
   } = useProject();
 
-  // 2. Extract data from context (unchanged)
+  // Extract data from context
   const estimateData = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const levels = useMemo(() => (estimateData.levels || []).filter(Boolean), [estimateData.levels]);
   const manufactureEstimate = useMemo(() => estimateData.manufactureEstimate || {}, [projectData]);
   const nailsAndBracing = useMemo(() => estimateData.nailsAndBracing || {}, [projectData]);
   
-  // 3. Stable handlers (unchanged, this logic is correct)
+  // Stable handlers (this logic is correct)
   const handleLevelChangeById = useCallback((levelId, levelUpdaterFn) => {
     updateProject(prevEstimate => {
       const newLevels = (prevEstimate.levels || []).map(lvl => {
@@ -75,7 +75,7 @@ export default function WallPanelsView({ onGrandTotal }) {
     }));
   }, [updateProject]);
 
-  // 4. `allLevelStats` calculation (unchanged)
+  // allLevelStats calculation
   const allLevelStats = useMemo(() => {
     let totalExteriorLF = 0, totalInteriorShearLF = 0, totalInteriorBlockingLF = 0;
     let totalInteriorNonLoadLF = 0, totalKneeWallLF = 0, panelsAll = 0;
@@ -117,33 +117,28 @@ export default function WallPanelsView({ onGrandTotal }) {
     };
   }, [levels]);
 
-  // 5. `grandTotal` calculation (unchanged)
+  // grandTotal calculation
   const grandTotal = useMemo(() => {
     const levelsTotal = levels.reduce((sum, lvl) => sum + (Number(lvl.total) || 0), 0);
     const manufactureTotal = Number(manufactureEstimate.total || 0);
     const nailsTotal = Number(nailsAndBracing.total || 0);
     return levelsTotal + manufactureTotal + nailsTotal;
   }, [levels, manufactureEstimate, nailsAndBracing]);
-
-  // --- *** LA CORRECCIÓN ESTÁ AQUÍ *** ---
   
-  // 6. Create the stable event handler
+  // Create the stable event handler
   const onGrandTotalChange = useEffectEvent(onGrandTotal);
   
-  // 7. Create the ref to track the last sent value
+  // Create the ref to track the last sent value
   const lastSentGrandTotalRef = useRef(null);
 
   useEffect(() => {
     if (typeof onGrandTotalChange === 'function') {
-      // 8. Only send the update if the numeric value has changed
       if (grandTotal !== lastSentGrandTotalRef.current) {
         onGrandTotalChange(grandTotal);
         lastSentGrandTotalRef.current = grandTotal;
       }
     }
   }, [grandTotal, onGrandTotalChange]); // Dependency is on the calculated value
-  // --- *** FIN DE LA CORRECCIÓN *** ---
-
 
   const moneyFmt = useMemo(() => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }), []);
   const fmt = (n) => moneyFmt.format(Number(n) || 0);
@@ -161,13 +156,14 @@ export default function WallPanelsView({ onGrandTotal }) {
     );
   }
 
-  // --- (Render is unchanged, but props are now stable) ---
   return (
     <div className="app-content">
-      <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <span className="text-h1">Wall Panels</span>
+      <div className="sticky-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <span className="text-section-title">
+          {projectData?.name ? `${projectData.name} - ` : ''}Wall Panels
+          </span>
         <div
-          className="ew-right text-level-total" 
+          className="ew-right text-grand-total" 
           title="Sum of all levels (panels + loose)"
         >
           Grand total: {fmt(grandTotal)}

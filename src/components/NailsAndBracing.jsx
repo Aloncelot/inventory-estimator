@@ -465,7 +465,7 @@ export default function NailsAndBracing({
                 onChange={(e) => handleLocalWasteChange("nailsFraming", e)}
                 onBlur={(e) => handleWasteBlur("nailsFraming", e)}
                 onKeyDown={(e) => handleWasteKeyDown("nailsFraming", e)}
-                style={{ width: 80, padding: 6, textAlign: "right" }}
+                style={{ width: 80, textAlign: "right" }}
                 title="Waste %"
               />
             }

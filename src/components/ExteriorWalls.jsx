@@ -20,8 +20,13 @@ export default function ExteriorWalls({
   // --- **THIS IS THE FIX (PART 1)** ---
   // These handlers now pass an *updater function* to the parent
    const addSection = useCallback(() => {
-    const newSection = blankSection({ kind: 'exterior' }); 
-    onSectionsChange(prevSections => [...(prevSections || []), newSection]);
+    onSectionsChange(prevSections => {
+      const newSection = blankSection({ 
+        kind: 'exterior', 
+        name: `Exterior walls — section ${prevSections.length + 1}` 
+      });
+      return [...(prevSections || []), newSection];
+    });
   }, [onSectionsChange, blankSection]);
 
   const removeSection = useCallback((idToRemove) => {
@@ -74,12 +79,10 @@ export default function ExteriorWalls({
         <ExteriorWallGroup
           key={sec.id}
           sectionData={sec} 
-          // --- **THIS IS THE FIX (PART 2)** ---
-          // We pass a new function that includes the section's ID
           onUpdateSection={updaterFn => handleSectionChange(sec.id, updaterFn)}
-          title={`Exterior walls — section ${idx + 1}`}
-          onRemove={() => removeSection(sec.id)}
-          bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
+            title={sec.name} 
+            onRemove={() => removeSection(sec.id)}
+            bottomDefaultFamily={isLevelOne ? 'PT' : 'SPF#2'}
         />
       ))}
 

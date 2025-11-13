@@ -2,10 +2,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import ExteriorWalls from '@/components/ExteriorWalls';
-import InteriorWalls from '@/components/InteriorWalls';
 import LoosePanelMaterials from '@/components/LoosePanelMaterials';
 import AccordionSection from '@/components/ui/AccordionSection';
+import ExteriorWalls from '@/components/ExteriorWalls';
+import InteriorWalls from '@/components/InteriorWalls';
+import EditableTitle from './ui/EditableTitle';
 import RemoveButton from './ui/RemoveButton';
 import PanelNails from '@/components/PanelNails';
 
@@ -160,8 +161,12 @@ export default function Level({
               className="acc__chev"
               style={{ display: 'inline-block', verticalAlign: 'middle' }}
             />
-            <span className="text-h1">{name}</span>
           </button>
+            <EditableTitle 
+              value={name} 
+              onChange={handleNameChange}
+              textClass='text-h1'
+            />
           <div
             className="text-subtotal-orange"
             style={{ marginLeft: 'auto', fontWeight: 800, fontSize: 18 }}

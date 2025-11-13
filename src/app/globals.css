@@ -16,8 +16,12 @@
   /* Text */
   --text-100: #e6f1ff;
   --text-300: #a9c1d9;
+  --text-400: #FEC2A3;
+  --text-500: #E98167;
+  --text-600: #007180;
 
   /* Brand / accents */
+  --turq-200: #81eee5;
   --turq-300: #59d2c8;
   --turq-400: #2fb7ad;
   --turq-500: #21a399;
@@ -53,6 +57,25 @@ body {
 
 /* === FONT HIERARCHY & COLORS === */
 /* Clases de utilidad para las fuentes */
+.text-section-title{
+  font-size: 1.65rem; 
+  font-weight: 700;
+  font-family: 'Nova Flat', cursive;
+  color: var(--turq-200);
+  margin: 0;
+}
+
+.text-grand-total{
+  font-size: 1.4rem; 
+  font-weight: 700;
+  font-family: 'Nova flat', cursive;
+  color: var(--turq-200);
+  margin: 0;
+}
+.text-input-summary{
+  color: var(--turq-300);
+}
+
 .text-h1 {
   font-size: 1.5rem; /* 24px */
   font-weight: 700;
@@ -85,7 +108,7 @@ body {
   font-family: 'Nova Flat', cursive;
   font-weight: 700;
   color: var(--color-level-total) !important;
-  font-size: 1.125rem; /* 18px */
+  font-size: 1.125rem; 
 }
 
 /* Subtotal de Sub-sección (Naranja) */
@@ -93,7 +116,11 @@ body {
   font-family: 'Nova Flat', cursive;
   font-weight: 700;
   color: var(--color-subtotal-orange) !important;
-  font-size: 1.0rem; /* 16px */
+  font-size: 1.0rem; 
+}
+
+.text-summary-subcategory{
+  color: var(--text-1);
 }
 
 /* === Cards / layout ===================================================== */
@@ -102,25 +129,28 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: var(--shadow);
-  padding: 10px;
-  margin-bottom: 8px; /* Antes era 10px */
+  padding: 8px 10px;
+  margin-bottom: 8px;
   overflow: visible;
+  font-size: 0.8rem;
 }
 
 .ew-stack {
-  margin-top: 8px; /* Antes era 10px */
+  margin-top: 8px;
 }
 
 .sticky-header {
   position: sticky;
-  top: 15px;
-  z-index: 100;
-  background: var(--bg-800);
-  border: 1px solid var(--border);
+  top: 0;
+  background-color: var(--bg-900);
+  background-image: radial-gradient(var(--turq-700) 1px, transparent 1px);
+  background-size: 20px 20px;  
+  border: 1px solid var(--turq-200);
   border-radius: 14px;
-  box-shadow: var(--shadow);
-  padding: 10px;
-  margin-bottom: 10px;
+  box-shadow: 0 0 15px 3px rgba(47, 183, 173, 0.5);
+  padding: 2px 10px;
+  margin-bottom: 5px;
+  z-index: 100;
 }
 
 .ew-grid {
@@ -153,7 +183,7 @@ body {
   border-radius: 10px;
 }
 .ew-row {
-  padding: 4px 10px; /* Antes era 6px 10px */
+  padding: 2px 4px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-800);
   overflow: visible;
@@ -168,13 +198,14 @@ body {
 /* Utilities */
 .ew-inline {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: end;
+  margin-top: 4px;
 }
 .ew-hint {
-  font-size: 0.7rem; /* Compact */
+  font-size: 0.7rem;
   color: var(--text-300);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .ew-footer {
   display: flex;
@@ -187,7 +218,7 @@ body {
 }
 .ew-subtle {
   color: var(--text-300);
-  font-size: 12px;
+  font-size: 0.7rem;
 }
 
 /* Money / chip */
@@ -218,13 +249,13 @@ body {
 .ew-input,
 .ew-select {
   width: 100%;
-  padding: 4px 8px; /* Antes era 5px 10px */
+  padding: 4px 10px; 
   background: #0b1524;
   color: var(--text-100);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   outline: none;
-  font-size: 0.825rem;
+  font-size: 0.8rem;
 }
 .ew-input:focus,
 .ew-select:focus {
@@ -235,14 +266,20 @@ body {
   min-height: auto;
 }
 
+.ew-input[type="date"]::-webkit-calendar-picker-indicator {
+  background: url(/icons/calendar.png) no-repeat center;
+  background-size: 16px 16px;
+  cursor: pointer;  
+}
+
 .ew-btn {
-  padding: 4px 8px; /* Antes era 5px 10px */
-  border-radius: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
   border: 1px solid var(--border);
   background: linear-gradient(180deg, #102036, #0f1b2e);
   color: var(--text-100);
   cursor: pointer;
-  font-size: 0.825rem;
+  font-size: 0.8rem;
 }
 .ew-btn:hover {
   border-color: var(--turq-400);
@@ -253,7 +290,7 @@ body {
   border-color: #1b4f56;
 }
 .ew-icon-btn {
-  padding: 4px; /* Antes era 4px 6px */
+  padding: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -284,7 +321,7 @@ select:focus {
   position: relative;
   outline: none;
   z-index: 0;
-  border-radius: 10px;
+  border-radius: 6px;
 }
 .focus-anim:focus-visible::after,
 .focus-anim:focus::after {
@@ -330,7 +367,7 @@ select:focus {
 /* For wrappers around elements that don't expose :focus nicely */
 .focus-anim-wrap {
   position: relative;
-  border-radius: 10px;
+  border-radius: 6px;
   isolation: isolate;
 }
 .focus-anim-wrap:focus-within {
@@ -364,13 +401,13 @@ select:focus {
 .controls4 {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap: 8px; /* Antes era 12px */
+  gap: 8px;
   align-items: end;
 }
 .controls2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(140px, 1fr));
-  gap: 8px; /* Antes era 12px */
+  gap: 8px;
   align-items: end;
   margin-top: 8px;
 }
@@ -378,7 +415,7 @@ select:focus {
 .controls2 > label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 
 /* === Number inputs: remove spinners ==================================== */
@@ -709,7 +746,7 @@ input[type="number"] {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 0.825rem; /* Compact */
+  font-size: 0.8rem;
 }
 
 .tbl th,
@@ -749,7 +786,7 @@ input[type="number"] {
 
 /* === AccordionSection (Final Version) === */
 .acc {
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
 }
 .acc__header {
   display: flex;
@@ -760,8 +797,8 @@ input[type="number"] {
 .acc__button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 6px; /* Compact */
+  gap: 6px;
+  padding: 2px 4px;
   line-height: 1;
   background: var(--bg, transparent);
   border: 1px solid var(--border);
@@ -796,7 +833,7 @@ input[type="number"] {
   overflow: visible;
 }
 .acc__bodyInner {
-  padding: 12px; /* Antes era 16px */
+  padding: 8px;
   min-width: 0; 
 }
 

@@ -13,6 +13,7 @@ import {
 import ItemPicker from '@/components/ItemPicker';
 import AccordionSection from '@/components/ui/AccordionSection';
 import RemoveButton from './ui/RemoveButton';
+import EditableTitle from './ui/EditableTitle';
 import {
   calcPlates,
   calcStuds,
@@ -276,6 +277,16 @@ export default function InteriorWallGroup({
     },
     [commitExtraWasteChange, extras]
   );
+
+  const handleNameChange = useCallback((newName) => {
+  const parts = newName.split('—');
+  const nameOnly = parts[parts.length - 1]?.trim() || newName;
+
+  onUpdate(prev => ({ ...prev, name: nameOnly }));
+}, [onUpdate]); // onUpdate es estable
+
+
+
   // --- END: Input Optimization ---
 
   const setCollapsed = useCallback((isOpen) => {
@@ -565,18 +576,20 @@ export default function InteriorWallGroup({
                   aria-expanded={open} 
                   title={open ? "Collapse" : "Expand"}
               >
-                   <img
-                      src={open ? '/icons/down.png' : '/icons/minimize.png'} 
-                      alt={open ? 'Collapse section' : 'Expand section'}
-                      width={16}
-                      height={16}
-                      className="acc__chev"
-                      style={{ display: 'inline-block', verticalAlign: 'middle' }}
-                  />
+                <img
+                  src={open ? '/icons/down.png' : '/icons/minimize.png'} 
+                  alt={open ? 'Collapse section' : 'Expand section'}
+                  width={16}
+                  height={16}
+                  className="acc__chev"
+                  style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                />
               </button>
-              {/* Aplicamos la clase de header de sección */}
-              <span className="text-section-header">{title}</span>
-              {/* Aplicamos la clase de subtotal naranja */}
+              <EditableTitle 
+                value={title} 
+                onChange={handleNameChange}
+                textClass="text-section-header" 
+              />
               <div 
                 className="ew-right text-subtotal-orange" 
                 style={{ marginLeft: 'auto' }}
@@ -676,7 +689,16 @@ export default function InteriorWallGroup({
         </div>
 
         <div className="ew-grid ew-head" style={{ '--cols': gridCols }}>
-          {/* ... (Header row unchanged) ... */}
+          <div>Item</div>
+          <div>Family · Size · Vendor</div>
+          <div className="ew-right">Qty</div>
+          <div className="ew-right">Waste %</div>
+          <div className="ew-right">Final qty</div>
+          <div className="ew-right">Unit</div>
+          <div className="ew-right">Unit price</div>
+          <div className="ew-right">Subtotal</div>
+          <div>Plan & Notes</div>
+          <div></div>
         </div>
 
         <div className="ew-rows">
@@ -726,7 +748,7 @@ export default function InteriorWallGroup({
                       onChange={(e) => handleLocalWasteChange(row.key, e)}
                       onBlur={(e) => handleWasteBlur(row.key, e)}
                       onKeyDown={(e) => handleWasteKeyDown(row.key, e)}
-                      style={{ width: 80, padding: 6, textAlign: 'right' }}
+                      style={{ width: 80, textAlign: 'right' }}
                     />
                   </div>
                   <div className="ew-right">{row.qtyFinal}</div>

@@ -384,7 +384,7 @@ function PanelNailsComponent({
                        onChange={(e) => handleLocalWasteChange('frame12d', e)}
                        onBlur={(e) => handleWasteBlur('frame12d', e)}
                        onKeyDown={(e) => handleWasteKeyDown('frame12d', e)}
-                       style={{ width: 80, padding: 6, textAlign: 'right' }}
+                       style={{ width: 80, textAlign: 'right' }}
                        title="Waste %"
                    />
                }

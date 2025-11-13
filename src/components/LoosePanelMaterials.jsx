@@ -510,7 +510,7 @@ export default function LoosePanelMaterials({
               />
               <button
                 type="button"
-                className="ew-btn ew-btn--turq"
+                className="ew-btn"
                 onClick={() => {
                   setPanelBandEdited(false);
                   setExtInputs(prev => ({
@@ -519,19 +519,24 @@ export default function LoosePanelMaterials({
                   }));
                 }}
                 title="Use Exterior LF"
-                style={{ padding: '5px 8px', fontSize: '12px' }}
-              >
-                ↺
+                style={{ padding: '5px 8px'}}>
+                <img src="/icons/undo.png" alt="Use Exterior LF" width={18} height={18}/>
               </button>
             </div>
-          </label>
-          {/* Removed Band Height Input */}
+          </label>    
         </div>
-
         <div className="ew-grid ew-head" style={{ '--cols': gridCols }}>
-          {/* ... (Header row unchanged) ... */}
+          <div>Item</div>
+          <div>Family · Size · Vendor</div>
+          <div className="ew-right">Qty</div>
+          <div className="ew-right">Waste %</div>
+          <div className="ew-right">Final qty</div>
+          <div className="ew-right">Unit</div>
+          <div className="ew-right">Unit price</div>
+          <div className="ew-right">Subtotal</div>
+          <div>Plan & Notes</div>
+          <div></div>        
         </div>
-
         <div className="ew-rows">
           <Row
             gridCols={gridCols} label="PT Bottom Plates – Loose"
@@ -793,7 +798,16 @@ export default function LoosePanelMaterials({
         </div>
 
         <div className="ew-grid ew-head" style={{ '--cols': gridCols }}>
-          {/* ... (Header row is unchanged) ... */}
+          <div>Item</div>
+          <div>Family · Size · Vendor</div>
+          <div className="ew-right">Qty</div>
+          <div className="ew-right">Waste %</div>
+          <div className="ew-right">Final qty</div>
+          <div className="ew-right">Unit</div>
+          <div className="ew-right">Unit price</div>
+          <div className="ew-right">Subtotal</div>
+          <div>Plan & Notes</div>
+          <div></div>
         </div>
 
         <div className="ew-rows">

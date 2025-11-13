@@ -29,6 +29,7 @@ import {
 } from '@/domain/lib/families';
 import AccordionSection from '@/components/ui/AccordionSection';
 import RemoveButton from '@/components/ui/RemoveButton';
+import EditableTitle from './ui/EditableTitle';
 
 // --- HELPER FUNCTIONS (unchanged) ---
 const moneyFmt = new Intl.NumberFormat('en-US', {
@@ -261,6 +262,11 @@ export default function ExteriorWallGroup({
     },
     [commitExtraWasteChange, extras]
   );
+
+  const handleNameChange = useCallback((newName) => {
+  onUpdate(prev => ({ ...prev, name: newName }));
+}, [onUpdate]);
+
   // --- END: Input Optimization ---
 
   const setCollapsed = useCallback((isOpen) => {
@@ -526,7 +532,11 @@ export default function ExteriorWallGroup({
                       style={{ display: 'inline-block', verticalAlign: 'middle' }}
                   />
               </button>
-              <span className="text-section-header">{title}</span>
+              <EditableTitle 
+                value={title} 
+                onChange={handleNameChange}
+                textClass="text-section-header" 
+              />
               <div 
                 className="ew-right text-subtotal-orange" 
                 style={{ marginLeft: 'auto' }}
@@ -611,7 +621,16 @@ export default function ExteriorWallGroup({
         {/* --- End Optimized Inputs --- */}
 
         <div className="ew-grid ew-head" style={{ '--cols': gridCols }}>
-          {/* ... (Header row unchanged) ... */}
+          <div>Item</div>
+          <div>Family · Size · Vendor</div>
+          <div className="ew-right">Qty</div>
+          <div className="ew-right">Waste %</div>
+          <div className="ew-right">Final qty</div>
+          <div className="ew-right">Unit</div>
+          <div className="ew-right">Unit price</div>
+          <div className="ew-right">Subtotal</div>
+          <div>Plan & Notes</div>
+          <div></div>
         </div>
 
         <div className="ew-rows">
@@ -660,7 +679,7 @@ export default function ExteriorWallGroup({
                       onChange={(e) => handleLocalWasteChange(row.key, e)}
                       onBlur={(e) => handleWasteBlur(row.key, e)}
                       onKeyDown={(e) => handleWasteKeyDown(row.key, e)}
-                      style={{ width: 80, padding: 6, textAlign: 'right' }}
+                      style={{ width: 80, textAlign: 'right' }}
                     />
                   </div>
                   <div className="ew-right">{row.qtyFinal}</div>
@@ -670,8 +689,7 @@ export default function ExteriorWallGroup({
                   </div>
                   <div className="ew-right ew-money">
                     {row.subtotal ? fmt(row.subtotal) : '—'}
-                  </div>
-                  {/* ... (Note logic unchanged) ... */}
+                  </div>            
                   <div>
                     <div className="ew-subtle" style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
                       <span className="ew-chip" title={n.plan || ''}>{n.plan || '—'}</span>
