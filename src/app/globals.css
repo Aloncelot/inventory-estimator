@@ -4,8 +4,78 @@
 @custom-variant dark (&:is(.dark *));
 
 /* === Theme tokens ======================================================= */
+
+/* :root defines the default (light) theme */
+:root {
+  /* Surfaces & borders (Light) */
+  --bg-900: #ffffff; /* page background */
+  --bg-800: #ffffff; /* cards */
+  --bg-750: #f4f8f7; /* row alt */
+  --bg-700: #eaf0ef; /* row hover */
+  --border: #d8e0de;
+  --shadow: 0 8px 20px rgba(0, 0, 0, 0.07);
+
+  /* Text (Light) - Forest Green Tones */
+  --text-100: #1d3832; /* Primary text */
+  --text-300: #4a635d; /* Subtle text */
+  --text-400: #E98167; /* Kept orange accent */
+  --text-500: #d95f23; /* Kept orange accent (darker) */
+  --text-600: #21a399; /* Kept turquoise accent */
+
+  /* Brand / accents (Light) - Forest Green */
+  --turq-200: #2a6055; /* Main green for headers */
+  --turq-300: #224f46;
+  --turq-400: #1e463f;
+  --turq-500: #1a3c36;
+  --turq-700: #cceae4; /* Very light green for header gradient */
+  --nova-flat-turquoise: #2a6055;
+
+  /* Dropdown (Light) */
+  --dropdown-bg: #ffffff;
+  --dropdown-fg: #1d3832;
+  --dropdown-active: #d6f2ec;
+  --dropdown-border: #d8e0de;
+
+  /* Focus ring (Light) */
+  --ring-color: var(--turq-400); /* #1e463f */
+  --ring-shadow-1: color-mix(in oklab, var(--ring-color) 35%, #fff 65%);
+  --ring-shadow-2: color-mix(in oklab, var(--ring-color) 60%, #fff 40%);
+
+  /* Aliases & Hierarchy (Light) */
+  --surface-2: var(--bg-800);
+  --text-1: var(--text-100);
+  --brand-6: var(--turq-400);
+  --color-level-total: #0b69a3; /* Dark blue */
+  --color-subtotal-orange: #8c5341;
+
+  /* NEW Component-specific variables (Light) */
+  --header-glow: 0 0 15px 3px rgba(42, 96, 85, 0.3);
+  --chip-bg: #eaf0ef;
+  --chip-border: #d8e0de;
+  --chip-text: #4a635d;
+  --btn-turq-bg: linear-gradient(180deg, #f4f8f7, #eaf0ef);
+  --btn-turq-border: #d8e0de;
+  --btn-turq-text: #1e463f;
+  --select-native-bg: var(--bg-800);
+  --select-native-text: var(--text-100);
+  --input-bg: #ffffff;
+
+  --btn-bg: #f4f8f7;                  /* Fondo de botón (casi blanco) */
+  --btn-border: #d8e0de;
+  --btn-text: #1e463f;                 /* Texto de botón (verde oscuro) */
+  --btn-hover-bg: #eaf0ef;             /* Fondo de botón (hover) */
+  --btn-hover-border: #2a6055;         /* Borde de botón (verde) */
+  
+  --sidebar-bg: rgba(255, 255, 255, 0.5); /* Fondo de Sidebar (claro) */
+  --sidebar-hover-bg: rgba(0, 0, 0, 0.05); /* Hover de ítem (oscuro muy sutil) */
+  --sidebar-text-hover: #224f46;
+
+  --icon-filter-themed: grayscale(1) sepia(1) hue-rotate(85deg) saturate(3) brightness(0.6) contrast(2);
+}
+
+/* .dark defines the dark theme overrides */
 .dark {
-  /* Surfaces & borders */
+  /* Surfaces & borders (Dark) */
   --bg-900: #0a0f1a; /* page background */
   --bg-800: #0e1624; /* cards */
   --bg-750: #111c2d; /* row alt */
@@ -13,41 +83,65 @@
   --border: #1f344f;
   --shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
 
-  /* Text */
+  /* Text (Dark) */
   --text-100: #e6f1ff;
   --text-300: #a9c1d9;
   --text-400: #FEC2A3;
   --text-500: #E98167;
   --text-600: #007180;
 
-  /* Brand / accents */
+  /* Brand / accents (Dark) - Turquoise */
   --turq-200: #81eee5;
   --turq-300: #59d2c8;
   --turq-400: #2fb7ad;
   --turq-500: #21a399;
-  --nova-flat-turquoise: #40e0d0; /* Legacy alias */
+  --turq-700: #0e494e; /* Dark turquoise for header gradient */
+  --nova-flat-turquoise: #40e0d0;
 
-  /* Dropdown (applies to native <select> + SearchableSelect menu) */
+  /* Dropdown (Dark) */
   --dropdown-bg: #0f172a;
   --dropdown-fg: #e2f1ee;
   --dropdown-active: #155e75;
   --dropdown-border: #1f2a44;
 
-  /* Focus ring */
-  --ring-color: var(--turq-400);
-  --ring-size: 2px;
-  --ring-gap: 2px;
-  --ring-speed: 2.2s;
+  /* Focus ring (Dark) */
+  --ring-color: var(--turq-400); /* #2fb7ad */
+  --ring-shadow-1: color-mix(in oklab, var(--ring-color) 35%, #000 65%);
+  --ring-shadow-2: color-mix(in oklab, var(--ring-color) 60%, #000 40%);
 
-  /* Aliases for legacy refs found in file (avoid undefined fallbacks) */
+  /* Aliases & Hierarchy (Dark) */
   --surface-2: var(--bg-800);
   --text-1: var(--text-100);
   --brand-6: var(--turq-400);
+  --color-level-total: #67e8f9;
+  --color-subtotal-orange: #d19974;
 
-  /* Hierarchy Colors */
-  --color-level-total: #67e8f9; 
-  --color-subtotal-orange: #f18d5b;
+  /* NEW Component-specific variables (Dark) */
+  --header-glow: 0 0 15px 3px rgba(47, 183, 173, 0.5);
+  --chip-bg: #0c2b33;
+  --chip-border: #1a515d;
+  --chip-text: #e9f6f8;
+  --btn-turq-bg: linear-gradient(180deg, #143a40, #113237);
+  --btn-turq-border: #1b4f56;
+  --btn-turq-text: var(--text-100); /* Uses default text */
+  --select-native-bg: var(--surface-2);
+  --select-native-text: var(--text-1);
+  --input-bg: #0b1524;
+
+  --btn-bg: linear-gradient(180deg, #102036, #0f1b2e); /* Fondo original */
+  --btn-border: var(--border);
+  --btn-text: var(--text-100);             /* Texto de botón (blanco) */
+  --btn-hover-bg: linear-gradient(180deg, #102036, #0f1b2e); /* Sin cambio de fondo */
+  --btn-hover-border: var(--turq-400);     /* Borde turquesa (hover) */
+
+  --sidebar-bg: rgba(0, 0, 0, 0.4);        /* Fondo original */
+  --sidebar-hover-bg: rgba(0, 0, 0, 0.8); /* Hover más oscuro (como pediste) */
+  --sidebar-text-hover: #6fffea;
+  
+  --icon-filter-themed: none;
 }
+
+/* === End Theme tokens =================================================== */
 
 html,
 body {
@@ -144,10 +238,9 @@ body {
   top: 0;
   background-color: var(--bg-900);
   background-image: radial-gradient(var(--turq-700) 1px, transparent 1px);
-  background-size: 20px 20px;  
   border: 1px solid var(--turq-200);
   border-radius: 14px;
-  box-shadow: 0 0 15px 3px rgba(47, 183, 173, 0.5);
+  box-shadow: var(--header-glow);
   padding: 2px 10px;
   margin-bottom: 5px;
   z-index: 100;
@@ -226,12 +319,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .ew-chip {
-  padding: 1px 6px; /* Compact */
-  font-size: 0.7rem; /* Compact */
-  border: 1px solid #1a515d;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  border: 1px solid var(--chip-border);
   border-radius: 999px;
-  background: #0c2b33;
-  color: #e9f6f8;
+  background: var(--chip-bg);
+  color: var(--chip-text);
   cursor: pointer;
 }
 .ew-chip:hover {
@@ -250,7 +343,7 @@ body {
 .ew-select {
   width: 100%;
   padding: 4px 10px; 
-  background: #0b1524;
+  background: var(--input-bg);
   color: var(--text-100);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -269,25 +362,28 @@ body {
 .ew-input[type="date"]::-webkit-calendar-picker-indicator {
   background: url(/icons/calendar.png) no-repeat center;
   background-size: 16px 16px;
-  cursor: pointer;  
+  cursor: pointer;
+  filter: var(--icon-filter-themed);
 }
 
 .ew-btn {
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, #102036, #0f1b2e);
-  color: var(--text-100);
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-text);
   cursor: pointer;
   font-size: 0.8rem;
+  transition: background 0.1s ease, border-color 0.1s ease;
 }
 .ew-btn:hover {
-  border-color: var(--turq-400);
-  color: #fff;
+  border-color: var(--btn-hover-border);
+  background: var(--btn-hover-bg);
 }
 .ew-btn--turq {
-  background: linear-gradient(180deg, #143a40, #113237);
-  border-color: #1b4f56;
+  background: var(--btn-turq-bg);
+  border-color: var(--btn-turq-border);
+  color: var(--btn-turq-text);
 }
 .ew-icon-btn {
   padding: 4px;
@@ -298,8 +394,8 @@ body {
 
 /* === Native <select> theming (kept for places you still use it) ========= */
 select {
-  background-color: var(--surface-2);
-  color: var(--text-1);
+  background-color: var(--select-native-bg);
+  color: var(--select-native-text);
   border: 1px solid var(--dropdown-border);
 }
 select option {
@@ -344,8 +440,8 @@ select:focus {
 }
 .focus-anim:focus-visible,
 .focus-anim:focus {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ring-color) 35%, #000 65%),
-    0 0 14px -2px color-mix(in oklab, var(--ring-color) 60%, #000 40%);
+  box-shadow: 0 0 0 1px var(--ring-shadow-1),
+    0 0 14px -2px var(--ring-shadow-2);
 }
 @keyframes ring-spin {
   to {
@@ -517,7 +613,7 @@ input[type="number"] {
 .combo .combo-option.active,
 .combo .combo-option[aria-selected="true"],
 .combo .combo-option:hover {
-  background: color-mix(in oklab, var(--dropdown-active) 60%, black 0%);
+  background: var(--dropdown-active); /* <-- CAMBIADO */
 }
 .combo-empty {
   padding: 10px;
@@ -568,7 +664,7 @@ input[type="number"] {
   flex-direction: column;
   width: var(--sidebar-w);
   border-radius: 16px;
-  background: rgb(0 0 0 / 40%);
+  background: var(--sidebar-bg);
   border: 1px solid var(--border);
   backdrop-filter: blur(20px);
   box-shadow: var(--shadow);
@@ -617,10 +713,18 @@ input[type="number"] {
   left: 0;
   height: 56px;
   width: 6px;
-  background: var(--turq-400, #6199f7);
+  background: var(--turq-200);
   translate: 0 var(--top);
   transition: 0.3s;
   border-radius: 0 4px 4px 0;
+}
+
+.ew-icon-btn img,
+.acc__button img,
+.menu-ico,
+.sidebar-burger img {
+  filter: var(--icon-filter-themed);
+  transition: filter 0.2s ease;
 }
 
 /* menu buttons */
@@ -642,7 +746,7 @@ input[type="number"] {
   transition: background 0.2s, opacity 0.2s;
 }
 .sidebar .menu .menu-item:hover {
-  background: rgb(0 0 0 / 20%);
+  background: var(--sidebar-hover-bg);
 }
 .sidebar .menu .menu-item.active {
   background: rgb(0 0 0 / 28%);
@@ -671,16 +775,16 @@ input[type="number"] {
 
 /* Style for ENABLED (not disabled) items */
 .sidebar .menu .menu-item:not(.disabled) .menu-label {
-  color: #40e0d0; /* Bright turquoise for enabled items */
+  color: var(--turq-200); /* <-- CAMBIADO */
 }
 /* Style for ACTIVE item */
 .sidebar .menu .menu-item.active .menu-label {
-  color: #ffffff; /* Make active label white */
+  color: var(--text-100); /* <-- CAMBIADO */
   opacity: 1;
 }
 /* Ensure hover maintains brightness on enabled items */
 .sidebar .menu .menu-item:not(.disabled):hover .menu-label {
-  color: #6fffea; /* Slightly brighter turquoise on hover */
+  color: var(--sidebar-text-hover); /* <-- CAMBIADO */
 }
 
 /* icons-only when collapsed */

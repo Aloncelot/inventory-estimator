@@ -5,11 +5,8 @@
  import { db, auth } from '@/lib/firebase'; 
  import { useAuth } from '@/AuthContext'; 
 
- // Helper to generate unique IDs
  const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
 
- // --- 1. DEFINE THE DEFAULT BLANK STRUCTURE ---
- // ... (blankSection, blankLevel, blankTrussRow no cambian) ...
  const blankSection = (props = {}) => ({
   id: generateId('section-'),
   name: "",
@@ -55,9 +52,9 @@
     address: "",
     drawingsDate: "",
     estimateDate: "",
-    // *** NUEVO: Campos de Impuestos ***
     isTaxExempt: false,
-    taxState: null, // null = auto-detectar
+    taxState: null,
+    shipping: 0,
   }
  });
  // ------------------------------------------
@@ -201,6 +198,9 @@
                     }
                     if (data.estimateData.summaryInfo.taxState === undefined) {
                         data.estimateData.summaryInfo.taxState = null;
+                    }
+                    if (data.estimateData.summaryInfo.shipping === undefined) {
+                        data.estimateData.summaryInfo.shipping = 0;
                     }
                 }
                   

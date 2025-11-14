@@ -1,6 +1,5 @@
 'use client';
-// *** CORRECCIÓN: 'useEffectEvent' eliminado de la importación ***
-import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef, useEffectEvent } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import EditableTitle from '@/components/ui/EditableTitle';
 import AddButton from '@/components/ui/AddButton';
@@ -53,29 +52,7 @@ const formatNumberString = (numStr) => {
   return formattedInteger;
 };
 
-const TAX_RATES = {
-  'MA': 6.25,
-  'RI': 7.0,
-  'CT': 6.35,
-  'ME': 5.5,
-  'NH': 0.0,
-  'NO TAX': 0.0,
-};
-
-const parseStateFromAddress = (address) => {
-  if (!address) return null;
-  const match = address.match(/\b([A-Z]{2})\b(?=.*$|\s+\d{5})?/g);
-  
-  if (!match) return null;
-  
-  const potentialState = match[match.length - 1];
-  
-  if (Object.keys(TAX_RATES).includes(potentialState)) {
-    return potentialState;
-  }
-  
-  return null;
-};
+// --- Constantes de Impuestos ELIMINADAS ---
 
 function TrussRow({
   row,
@@ -195,9 +172,7 @@ export default function TrussesView({ onTrussTotal }) {
     return projectData?.estimateData?.trusses || [];
   }, [projectData]);
   
-  const summaryInfo = useMemo(() => {
-    return projectData?.estimateData?.summaryInfo || {};
-  }, [projectData]);
+  // --- summaryInfo ya no es necesario aquí ---
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -213,15 +188,7 @@ export default function TrussesView({ onTrussTotal }) {
     }));
   }, [updateProject]);
 
-  const handleTaxSettingChange = useCallback((key, value) => {
-    updateProject(prevEstimate => ({
-      ...prevEstimate,
-      summaryInfo: {
-        ...(prevEstimate.summaryInfo || {}),
-        [key]: value
-      }
-    }));
-  }, [updateProject]);
+  // --- Handlers de Impuestos ELIMINADOS ---
 
   const handleLabelChange = useCallback((id, newLabel) => {
     updateTrussRows(rows => rows.map(row => row.id === id ? { ...row, label: newLabel } : row));
@@ -272,45 +239,17 @@ export default function TrussesView({ onTrussTotal }) {
      return trussRows.reduce((sum, r) => sum + (Number(r.subtotal) || 0), 0);
   }, [trussRows]);
 
-  const effectiveState = useMemo(() => {
-    if (summaryInfo.taxState) {
-      return summaryInfo.taxState;
-    }
-    const parsed = parseStateFromAddress(summaryInfo.address);
-    return parsed || 'NO TAX';
-  }, [summaryInfo.taxState, summaryInfo.address]);
-
-  const taxRate = useMemo(() => {
-    if (summaryInfo.isTaxExempt) {
-      return 0;
-    }
-    return TAX_RATES[effectiveState] || 0;
-  }, [summaryInfo.isTaxExempt, effectiveState]);
-  
-  const taxAmount = useMemo(() => {
-    return trussSubtotal * (taxRate / 100);
-  }, [trussSubtotal, taxRate]);
-  
-  const totalWithTax = useMemo(() => {
-    return trussSubtotal + taxAmount;
-  }, [trussSubtotal, taxAmount]);
-  
-  
-  // *** CORRECCIÓN: Eliminado useEffectEvent ***
+  const onTotalChange = useEffectEvent(onTrussTotal);
   const lastSentTotalRef = useRef(null);
 
   useEffect(() => {
-    // Llama a 'onTrussTotal' directamente.
-    // 'onTrussTotal' es la función 'setTrussTotal' de 'page.jsx',
-    // que es estable por defecto.
-    if (typeof onTrussTotal === 'function') {
-      if (totalWithTax !== lastSentTotalRef.current) {
-        onTrussTotal(totalWithTax);
-        lastSentTotalRef.current = totalWithTax;
+    if (typeof onTotalChange === 'function') {
+      if (trussSubtotal !== lastSentTotalRef.current) {
+        onTotalChange(trussSubtotal);
+        lastSentTotalRef.current = trussSubtotal;
       }
     }
-  }, [totalWithTax, onTrussTotal]); // Añadido onTrussTotal al array
-  // *** FIN DE LA CORRECCIÓN ***
+  }, [trussSubtotal, onTotalChange]);
 
 
   if (!isLoaded || !projectData) {
@@ -334,12 +273,11 @@ export default function TrussesView({ onTrussTotal }) {
         </span>
         <div
           className="ew-right text-grand-total"
-          title="Sum of all truss items + tax"
+          title="Sum of all truss items (pre-tax)"
         >
-          Total: {fmt(totalWithTax)}
+          Total: {fmt(trussSubtotal)}
         </div>
       </div>
-
       <DndContext
         sensors={sensors}
         onDragStart={handleDragStart}
@@ -361,59 +299,7 @@ export default function TrussesView({ onTrussTotal }) {
                 />
               ))}
             </SortableContext>
-          </div>
-          
-          <div className="ew-row" style={{ padding: '12px 10px', background: 'var(--bg-800)', borderTop: '1px solid var(--border)'}}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <span className="text-summary-subcategory" style={{fontWeight: 700}}>Subtotal</span>
-              <span className="text-summary-subcategory" style={{fontWeight: 700, fontSize: '1.1rem'}}>{fmt(trussSubtotal)}</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 90px', gap: '16px', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                  <input
-                    type="checkbox"
-                    style={{ width: '18px', height: '18px' }}
-                    checked={summaryInfo.isTaxExempt || false}
-                    onChange={(e) => handleTaxSettingChange('isTaxExempt', e.target.checked)}
-                  />
-                  <span className="text-summary-subcategory">Tax Exempt</span>
-                </label>
-                
-                {!summaryInfo.isTaxExempt && (
-                  <select
-                    className="ew-select focus-anim"
-                    value={effectiveState}
-                    onChange={(e) => handleTaxSettingChange('taxState', e.target.value)}
-                    title="Select tax state (auto-detected from address)"
-                    style={{maxWidth: '120px'}}
-                  >
-                    {Object.keys(TAX_RATES).map(stateAbbr => (
-                      <option key={stateAbbr} value={stateAbbr}>
-                        {stateAbbr}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              <div className="ew-right" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                {!summaryInfo.isTaxExempt && (
-                  <span className="text-summary-subcategory" style={{color: 'var(--text-300)'}}>
-                    ({taxRate.toFixed(2)}%)
-                  </span>
-                )}
-                <span className="text-summary-subcategory" style={{fontWeight: 700, fontSize: '1.1rem'}}>
-                  {fmt(taxAmount)}
-                </span>
-              </div>
-              <div></div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-              <span className="text-level-total">Total</span>
-              <span className="text-level-total" style={{fontSize: '1.25rem'}}>{fmt(totalWithTax)}</span>
-            </div>
-          </div>
-          
+          </div>         
           <div className="ew-footer" style={{ justifyContent: 'flex-start', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
             <AddButton 
               onClick={addExtraRow} 
@@ -422,7 +308,6 @@ export default function TrussesView({ onTrussTotal }) {
             />
           </div>
         </div>
-
         <DragOverlay>
           {activeRow ? (
             <TrussRow
@@ -433,7 +318,6 @@ export default function TrussesView({ onTrussTotal }) {
             />
           ) : null}
         </DragOverlay>
-
       </DndContext>
     </div>
   );

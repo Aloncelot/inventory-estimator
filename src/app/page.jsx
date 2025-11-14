@@ -19,8 +19,6 @@ import ProjectView from "@/components/ProjectView";
 import LoginView from "@/components/LoginView";
 import TrussesView from "@/components/TrussesView";
 
-
-// Helper (sin cambios)
 function ComingSoonView({ activeKey }) {
   const titles = {
     auth: "Login / Logout",
@@ -54,15 +52,9 @@ export default function Home() {
   const { collapsed, active, currentProjectId } = ui;
   const { user, loading: authLoading } = useAuth();
   const prevUserRef = useRef(user);
-
-  // --- *** CORRECCIÓN: Separar los estados de los totales *** ---
   const [wallPanelsTotal, setWallPanelsTotal] = useState(0);
-  const [trussTotal, setTrussTotal] = useState(0);
-  
-  // El 'grandTotal' real ahora es una suma calculada
+  const [trussTotal, setTrussTotal] = useState(0);  
   const grandTotal = wallPanelsTotal + trussTotal;
-  // --- *** FIN DE LA CORRECCIÓN *** ---
-
   const setActive = useCallback(
     (key) => {
       setUi((prev) => ({ ...prev, active: key }));
@@ -115,9 +107,7 @@ export default function Home() {
             <>
               <Activity mode={active === 'project' ? 'visible' : 'hidden'}>
                 <ProjectView />
-              </Activity>
-              
-              {/* --- *** CORRECCIÓN: Pasar los 3 props al Summary *** --- */}
+              </Activity>    
               <Activity mode={active === 'summary' ? 'visible' : 'hidden'}>
                 <div className="app-content">
                   <Summary 
@@ -127,17 +117,12 @@ export default function Home() {
                   />
                 </div>
               </Activity>
-
-              {/* --- *** CORRECCIÓN: Usar el setter correcto *** --- */}
               <Activity mode={active === 'wallpanels' ? 'visible' : 'hidden'}>
                 <WallPanelsView onGrandTotal={setWallPanelsTotal} />
               </Activity>
-              
-              {/* --- *** CORRECCIÓN: Usar el setter correcto *** --- */}
               <Activity mode={active === 'trusses' ? 'visible' : 'hidden'}>
                 <TrussesView onTrussTotal={setTrussTotal} />
-              </Activity>
-              
+              </Activity>              
               <Activity mode={isPlaceholder ? 'visible' : 'hidden'}>
                 <ComingSoonView activeKey={active} />
               </Activity>

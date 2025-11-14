@@ -31,7 +31,7 @@ import AccordionSection from '@/components/ui/AccordionSection';
 import RemoveButton from '@/components/ui/RemoveButton';
 import EditableTitle from './ui/EditableTitle';
 
-// --- HELPER FUNCTIONS (unchanged) ---
+// Helpers
 const moneyFmt = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -65,6 +65,78 @@ const getFamily = (selLike) => {
       ''
   ).toLowerCase();
 };
+
+const defaultNote = { plan: '', comment: '', open: false };
+
+function DebouncedInput({ value: propValue, onChange, ...props }) {
+  const [localValue, setLocalValue] = useState(propValue);
+
+  useEffect(() => {
+    setLocalValue(propValue);
+  }, [propValue]);
+
+  const commitChange = () => {
+    if (localValue !== propValue) {
+      onChange(localValue);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      commitChange();
+      e.target.blur();
+    } else if (e.key === 'Escape') {
+      setLocalValue(propValue);
+      e.target.blur();
+    }
+  };
+
+  return (
+    <input
+      {...props}
+      className="ew-input focus-anim"
+      value={localValue}
+      onChange={e => setLocalValue(e.target.value)}
+      onBlur={commitChange}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
+
+function DebouncedTextarea({ value: propValue, onChange, ...props }) {
+  const [localValue, setLocalValue] = useState(propValue);
+
+  useEffect(() => {
+    setLocalValue(propValue);
+  }, [propValue]);
+
+  const commitChange = () => {
+    if (localValue !== propValue) {
+      onChange(localValue);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      commitChange();
+      e.target.blur();
+    } else if (e.key === 'Escape') {
+      setLocalValue(propValue);
+      e.target.blur();
+    }
+  };
+  
+  return (
+    <textarea
+      {...props}
+      className="ew-input focus-anim"
+      value={localValue}
+      onChange={e => setLocalValue(e.target.value)}
+      onBlur={commitChange}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export default function ExteriorWallGroup({
@@ -99,14 +171,11 @@ export default function ExteriorWallGroup({
     collapsed=false,
   } = sectionData;
 
-  // --- START: Input Optimization ---
-
   const [inputValueLF, setInputValueLF] = useState(String(lengthLF));
   const [inputValueHeight, setInputValueHeight] = useState(String(heightFt));
   const [inputValueSpacing, setInputValueSpacing] = useState(
     String(studSpacingIn)
   );
-  // This state now holds the value for the <select>
   const [inputValueMultiplier, setInputValueMultiplier] = useState(
     String(studMultiplier)
   );
@@ -291,14 +360,14 @@ export default function ExteriorWallGroup({
     [onUpdate]
   );
 
-  const getNote = (k) => (notes || {})[k] || { plan: '', comment: '', open: false };
+  const getNote = (k) => ({ ...defaultNote, ...(notes || {})[k] });
   const setNote = useCallback(
     (k, patch) => {
       onUpdate((prevData) => {
         const currentNotes = prevData.notes || {};
         const newNotes = {
           ...currentNotes,
-          [k]: { ...(currentNotes[k] || {}), ...patch },
+          [k]: { ...defaultNote, ...(currentNotes[k] || {}), ...patch },
         };
         return { ...prevData, notes: newNotes };
       });
@@ -708,20 +777,20 @@ export default function ExteriorWallGroup({
                     <div className="controls2" style={{ width:'100%' }}>
                       <label>
                         <span className="ew-subtle">Plan label</span>
-                        <input
-                          className="ew-input focus-anim" type="text"
+                        <DebouncedInput
+                          type="text"
                           placeholder="e.g., A2.4 / S5 – Detail 03"
-                          value={getNote(noteKey).plan}
-                          onChange={e=>setNote(noteKey, { plan: e.target.value })}
+                          value={n.plan}
+                          onChange={v => setNote(noteKey, { plan: v })}
                         />
                       </label>
                       <label>
                         <span className="ew-subtle">Comment</span>
-                        <textarea
-                          className="ew-input focus-anim" rows={3}
+                        <DebouncedTextarea
+                          rows={3}
                           placeholder="Add any notes for this item…"
-                          value={getNote(noteKey).comment}
-                          onChange={e=>setNote(noteKey, { comment: e.target.value })}
+                          value={n.comment}
+                          onChange={v => setNote(noteKey, { comment: v })}
                         />
                       </label>
                     </div>
@@ -1015,18 +1084,20 @@ export default function ExteriorWallGroup({
                     <div className="controls2" style={{ width:'100%' }}>
                       <label>
                         <span className="ew-subtle">Plan label</span>
-                        <input
-                          className="ew-input focus-anim" type="text"
-                          value={getNote(noteKey).plan}
-                          onChange={e=>setNote(noteKey, { plan: e.target.value })}
+                        <DebouncedInput
+                          type="text"
+                          placeholder="e.g., A2.4 / S5 – Detail 03"
+                          value={n.plan}
+                          onChange={v => setNote(noteKey, { plan: v })}
                         />
                       </label>
                       <label>
                         <span className="ew-subtle">Comment</span>
-                        <textarea
-                          className="ew-input focus-anim" rows={3}
-                          value={getNote(noteKey).comment}
-                          onChange={e=>setNote(noteKey, { comment: e.target.value })}
+                        <DebouncedTextarea
+                          rows={3}
+                          placeholder="Add any notes for this item…"
+                          value={n.comment}
+                          onChange={v => setNote(noteKey, { comment: v })}
                         />
                       </label>
                     </div>
