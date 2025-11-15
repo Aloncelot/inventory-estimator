@@ -51,3 +51,8 @@ serviceAccount*.json
 .vscode/
 
 _backup/
+
+# Archivos de Log y Debug
+*.log
+firebase-debug.log
+firestore-debug.log
