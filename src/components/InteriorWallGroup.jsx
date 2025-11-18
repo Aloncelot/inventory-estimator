@@ -669,7 +669,6 @@ export default function InteriorWallGroup({
               >
                   Subtotal: {fmt(groupSubtotal)}
               </div>
-              {/* Movemos el botón 'Remove' aquí dentro */}
               {onRemove ? (
                 <RemoveButton
                   onClick={onRemove}

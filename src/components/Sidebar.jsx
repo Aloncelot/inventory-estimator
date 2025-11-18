@@ -113,17 +113,17 @@ export default function Sidebar({
       <header>
         <button
           type="button"
+          style={{paddingLeft:'15px'}}
           className="sidebar-burger"
           onClick={() => onCollapsedChange?.(!collapsed)}
           title={collapsed ? "Expand" : "Collapse"}
         >
-          {/* Este <img> ahora será filtrado por la regla CSS */}
           <img
             src="/icons/menu.png"
             alt={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             width={24}
             height={24}
-            aria-hidden
+            aria-hidden           
           />
         </button>
       </header>
@@ -136,11 +136,10 @@ export default function Sidebar({
       >
         {items.map((it, idx) => {
           const isActive =
-            it.key === active && !["save", "mode", "auth"].includes(it.key);
-
+            it.key === active && !["save", "mode", "auth", "items", "wallpanels", "trusses", "loose"].includes(it.key);
           const comingSoonKeys = [
             "loose", "labor", "takeoff",
-            "quote", "export", "items",
+            "quote", "export",
           ];
 
           let isDisabled = false;

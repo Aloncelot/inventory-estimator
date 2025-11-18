@@ -55,19 +55,16 @@ function splitFamilySizeFallback(description, familyFromSheet) {
   
   const firstSpaceIndex = desc.indexOf(' ');
 
-  // Check if a space exists and it's not at the beginning or end
   if (firstSpaceIndex > 0 && firstSpaceIndex < desc.length - 1) {
     const size = desc.substring(0, firstSpaceIndex).trim();
     const family = desc.substring(firstSpaceIndex + 1).trim();
     return { family, size };
   }
 
-  // If no space is found, use the 'familyFromSheet' if available
   if (familyFromSheet) {
     return { family: familyFromSheet, size: desc };
   }
 
-  // Failsafe: return the whole description as the family
   return { family: desc, size: desc };
 }
 
@@ -82,13 +79,11 @@ function canonicalVendorName(s = '') {
   if (/home\s*depot/i.test(name)) {
     return { vendorId: 'home_depot', displayName: 'The Home Depot' };
   }
-  // Added HardFine from your screenshot
   if (/hardfine/i.test(name)) {
     return { vendorId: 'hardfine', displayName: 'HardFine' };
   }
-  // Added Lowes from your screenshot
   if (/lowes/i.test(name)) {
-    return { vendorId: 'lowes', displayName: 'Lowe\'s' };
+    return { vendorId: 'lowes', displayName: "Lowe's" };
   }
   const id = slug(name || 'unknown_supplier');
   return { vendorId: id, displayName: name || 'Unknown Supplier' };
@@ -140,7 +135,7 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
     const unit          = pick(row, 'UNIT');
     const supplierRaw   = pick(row, 'SUPPLIER') || 'Unknown Supplier';
     const materialType  = pick(row, 'MATERIAL TYPE') || '';
-    const familySheet   = pick(row, 'SHEATHING', 'ADV', 'FAMILY', 'MATERIAL', 'GROUP', 'TYPE'); // Added 'SHEATHING' from screenshot
+    const familySheet   = pick(row, 'SHEATHING', 'ADV', 'FAMILY', 'MATERIAL', 'GROUP', 'TYPE');
 
     const rawBasePrice = pick(row, 'Supplier Price Sep 2025', 'Base Price') || null;
     const rawMarkup = pick(row, 'Markup %') || null;
@@ -149,9 +144,7 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
     const markupPct = pct(rawMarkup);
     const priceWithMarkup = money(rawPriceWithMarkup);    
     
-    // const priceWithSheet= money(pick(row, 'CK PRICE with markup', 'PRICE WITH MARKUP'));
-    
-    const link          = pick(row, 'LINK', 'URL');
+    const link          = pick(row, 'URL'); // Uses your fix from before
 
     // 1) Find family/size via Data map
     const key = normalizeKey(description);
@@ -171,7 +164,7 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
         if (family && size) {
           console.warn(`SKIPPING: Invalid or missing basePrice for "${family} | ${size}". Raw value: "${rawBasePrice}"`);
         }
-        skipped++; //
+        skipped++;
         continue;
     }
     const joinKey = `${family}|${size}`;
@@ -183,6 +176,7 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
     const docId = slug(joinKey); // ID within vendor's items subcollection
     const itemLookupId = `${familySlug}_${sizeSlug}`; // Unique ID for the item across vendors
 
+    // This is the NEW data from the CSV
     const data = {
       familyDisplay: family,
       sizeDisplay:   size,
@@ -197,16 +191,16 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       basePrice: basePrice,
       markupPct:  (markupPct != null) ? Number(markupPct) : null,
       priceWithMarkup: (priceWithMarkup != null) ? Number(priceWithMarkup) : null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      source: `sheet:${path.basename(pricesCsvPath)}`, // Store which file it came from
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(), // This is the NEW timestamp
+      source: `sheet:${path.basename(pricesCsvPath)}`,
     };
 
+    // (This logic for lookup maps is fine)
     if (familySlug && !uniqueFamilies.has(familySlug)) {
              uniqueFamilies.set(familySlug, family); 
          }
          if (familySlug && sizeSlug) {
              if (!itemVendorMap.has(itemLookupId)) {
-                 // **MODIFIED:** Store an object with display names
                  itemVendorMap.set(itemLookupId, {
                     vendorSet: new Set(),
                     familyDisplay: family,
@@ -217,7 +211,10 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
              }            
              itemVendorMap.get(itemLookupId).vendorSet.add(vendorId); 
          }
+         
+    // --- *** NEW PRICE HISTORY LOGIC *** ---
     try {
+      // 1. Set vendor info (no change)
       const vendorDoc = {
         displayName,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -227,7 +224,33 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       }
       await db.collection('priceLists').doc(vendorId).set(vendorDoc, { merge: true });
 
-      await db.collection('priceLists').doc(vendorId).collection('items').doc(docId).set(data, { merge: true });
+      // 2. Get reference to the item
+      const itemRef = db.collection('priceLists').doc(vendorId).collection('items').doc(docId);
+      const docSnap = await itemRef.get();
+
+      // 3. Check for price change and create history
+      if (docSnap.exists()) {
+        const oldData = docSnap.data();
+        // Check if price is different
+        if (oldData.basePrice !== data.basePrice) {
+          console.log(`Price change for ${docId} (${vendorId}): ${oldData.basePrice} -> ${data.basePrice}`);
+          
+          // Create history entry from OLD data
+          const historyEntry = {
+            basePrice: oldData.basePrice,
+            markupPct: oldData.markupPct,
+            priceWithMarkup: oldData.priceWithMarkup,
+            updatedAt: oldData.updatedAt || admin.firestore.FieldValue.serverTimestamp(), // Use old timestamp
+            source: oldData.source || 'unknown'
+          };
+          
+          // Save old data to history sub-collection (let Firestore auto-gen ID)
+          await itemRef.collection('priceHistory').add(historyEntry);
+        }
+      }
+
+      // 4. Set/overwrite the main item doc with NEW data
+      await itemRef.set(data, { merge: true });
 
       written++;
       if (written % 250 === 0) console.log(`...processed ${written}`);
@@ -235,13 +258,14 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       console.error(`Failed row "${description}" for vendor "${vendorId}":`, e.message);
       skipped++;
     }
+    // --- *** END OF NEW LOGIC *** ---
   }
 
   console.log(`[import] Done ${path.basename(file)}. Written to priceLists: ${written}, Skipped: ${skipped}`);
      return { written, skipped };
 }
 
-// --- Function to write lookup collections ---
+// --- Function to write lookup collections (no change) ---
 async function writeLookupCollections() {
     console.log('\n[import] Writing lookup collections...');
     const batchSize = 400; 
@@ -275,11 +299,9 @@ async function writeLookupCollections() {
     batch = db.batch(); 
     count = 0;
     batchNum = 1;
-    // **MODIFIED:** Loop over new object structure
     for (const [itemLookupId, data] of itemVendorMap.entries()) {
         if (data.vendorSet.size > 0) {
             const docRef = db.collection('itemVendorLookup').doc(itemLookupId);
-            // **MODIFIED:** Save the full object with display names
             batch.set(docRef, { 
                 vendorIds: Array.from(data.vendorSet),
                 familyDisplay: data.familyDisplay,
@@ -304,7 +326,7 @@ async function writeLookupCollections() {
     console.log('[import] Finished writing lookup collections.');
 }
 
-// ---------- main ----------
+// ---------- main (no change) ----------
 async function run() {
   const args = process.argv.slice(2);
   if (args.length < 2) {

@@ -4,6 +4,7 @@
  import { doc, getDoc, setDoc, addDoc, collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
  import { db, auth } from '@/lib/firebase'; 
  import { useAuth } from '@/AuthContext'; 
+ import { getFinalItem } from '@/lib/catalog';
 
  const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
 
@@ -55,14 +56,14 @@
     isTaxExempt: false,
     taxState: null,
     shipping: 0,
-  }
+  },
+  snapshotTotals: null
  });
  // ------------------------------------------
 
  const ProjectContext = createContext();
 
  export function ProjectProvider({ children, initialProjectId = null }) {
-     // ... (las primeras funciones: useAuth, useState, useEffect, getProjects... no cambian) ...
      const { user } = useAuth();
      const [projectId, setProjectId] = useState(initialProjectId);
      const [projectData, setProjectData] = useState(null); 
@@ -170,9 +171,7 @@
                 }
                 if (!data.estimateData.levels || data.estimateData.levels.length === 0) {
                    data.estimateData.levels = [blankLevel({ index: 0 })];
-                }
-                
-                // --- Lógica de Migración de Trusses (sin cambios) ---
+                }                
                 if (!data.estimateData.trusses) {
                     data.estimateData.trusses = [
                         blankTrussRow("Roof Trusses & Hangers"),
@@ -202,8 +201,11 @@
                     if (data.estimateData.summaryInfo.shipping === undefined) {
                         data.estimateData.summaryInfo.shipping = 0;
                     }
+                }                  
+                if (data.estimateData.snapshotTotals === undefined) {
+                  data.estimateData.snapshotTotals = null;
                 }
-                  
+
                 setProjectData(data);
             } else {
                   console.log("No such project document! Cannot load:", pId);
@@ -245,7 +247,7 @@
          }
      }, [user, projectId, projectData, isSaving, getProjectPath, db]);
 
-    // --- updateProject (no cambia) ---
+    // --- updateProject ---
     const updateProject = useCallback((updaterFn) => {
          setProjectData(prevData => {
              if (!prevData) return null;
@@ -258,6 +260,94 @@
     }, []); 
 
     const updateEstimateData = updateProject;
+
+    const refreshProjectPrices = useCallback(async () => {
+      if (!projectData) {
+        console.error("No project data to refresh.");
+        return;
+      }
+
+      console.log("Starting price refresh...");
+      setIsSaving(true); // Show loading spinner
+
+      try {
+        // Create a deep copy of the estimate data to modify
+        let newEstimateData = JSON.parse(JSON.stringify(projectData.estimateData));
+
+        // Helper function to refresh a single item selection object (like sel.studs)
+        const refreshItem = async (selItem) => {
+          if (!selItem || !selItem.vendorId || !selItem.familyLabel || !selItem.sizeLabel) {
+            return selItem; // Can't refresh this item
+          }
+          
+          const latestItemData = await getFinalItem({
+            familyLabel: selItem.familyLabel,
+            sizeLabel: selItem.sizeLabel,
+            vendorId: selItem.vendorId,
+          });
+
+          if (latestItemData) {
+            // Overwrite the 'item' object with the fresh data from Firestore
+            return { ...selItem, item: latestItemData };
+          } else {
+            // If item not found (maybe discontinued), keep the old one
+            console.warn(`Could not refresh price for ${selItem.familyLabel} | ${selItem.sizeLabel}`);
+            return selItem;
+          }
+        };
+
+        // 1. Refresh Levels (Exterior/Interior/Loose/Nails)
+        for (const level of newEstimateData.levels) {
+          // --- Exterior/Interior Sections ---
+          const allSections = [
+            ...(level.exteriorSections || []), 
+            ...(level.interiorSections || [])
+          ];
+          for (const section of allSections) {
+            // Refresh 'sel' object (studs, plates, etc.)
+            for (const key in section.sel) {
+              section.sel[key] = await refreshItem(section.sel[key]);
+            }
+            // Refresh 'extras' array
+            for (let i = 0; i < section.extras.length; i++) {
+              section.extras[i].item = await refreshItem(section.extras[i].item);
+            }
+          }
+          
+          // --- LoosePanelMaterials & PanelNails ---
+          if (level.looseMaterials?.sel) {
+            for (const key in level.looseMaterials.sel) {
+              level.looseMaterials.sel[key] = await refreshItem(level.looseMaterials.sel[key]);
+            }
+          }
+          if (level.panelNails?.sel) {
+             for (const key in level.panelNails.sel) {
+              level.panelNails.sel[key] = await refreshItem(level.panelNails.sel[key]);
+            }
+          }
+        }
+        
+        // 2. Refresh General Nails & Bracing
+        if (newEstimateData.nailsAndBracing?.sel) {
+           for (const key in newEstimateData.nailsAndBracing.sel) {
+              newEstimateData.nailsAndBracing.sel[key] = await refreshItem(newEstimateData.nailsAndBracing.sel[key]);
+            }
+        }
+        
+        // 3. Refresh Trusses (Trusses are manual $, no items to refresh)
+
+        // 4. Update the main project state with the new data
+        updateProject(prev => ({ ...prev, ...newEstimateData }));
+        
+        console.log("Price refresh complete!");
+
+      } catch (err) {
+        console.error("Error during price refresh:", err);
+      } finally {
+        setIsSaving(false); // Hide loading spinner
+      }
+
+    }, [projectData, updateProject]);
 
     // --- (Resto de los hooks: auto-fetch, auto-load, context value... no cambian) ---
     useEffect(() => {
@@ -287,6 +377,7 @@
          saveProject,
          updateEstimateData,
          updateProject,
+         refreshProjectPrices,
          blankLevel,
          blankSection,
          isLoaded,
@@ -296,7 +387,7 @@
      }), [
          projectId, projectData, projectsList, appId, fetchProjectsList, createNewProject,
          loadProject, saveProject, updateEstimateData, updateProject,
-         isLoaded, isLoading, isSaving, isListLoading
+         isLoaded, isLoading, isSaving, isListLoading, refreshProjectPrices
      ]);
 
      return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;

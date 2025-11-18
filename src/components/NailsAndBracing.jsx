@@ -382,12 +382,10 @@ export default function NailsAndBracing({
             </button>
             <span className="text-section-header">{title}</span>
             <div
-              className="ew-right"
+              className="ew-right text-subtotal-orange"
               style={{
-                marginLeft: "auto",
-                color: "#f18d5b",
+                marginLeft: "auto",                
                 fontWeight: "700",
-                fontSize: "16px",
                 fontFamily: "'Nova Mono', monospace",
               }}
             >

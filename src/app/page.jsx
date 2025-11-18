@@ -18,7 +18,9 @@ import Summary from "@/components/Summary";
 import ProjectView from "@/components/ProjectView";
 import LoginView from "@/components/LoginView";
 import TrussesView from "@/components/TrussesView";
+import MaterialListView from "@/components/MaterialListView"; // <-- 1. Importar
 
+// Helper (sin cambios)
 function ComingSoonView({ activeKey }) {
   const titles = {
     auth: "Login / Logout",
@@ -27,7 +29,7 @@ function ComingSoonView({ activeKey }) {
     takeoff: "Takeoff list",
     quote: "Quote (QuickBooks)",
     export: "Export",
-    items: "Material List",
+    // items: "Material List", // <-- Quitado
   };
   
   return (
@@ -52,9 +54,10 @@ export default function Home() {
   const { collapsed, active, currentProjectId } = ui;
   const { user, loading: authLoading } = useAuth();
   const prevUserRef = useRef(user);
+
   const [wallPanelsTotal, setWallPanelsTotal] = useState(0);
-  const [trussTotal, setTrussTotal] = useState(0);  
-  const grandTotal = wallPanelsTotal + trussTotal;
+  const [trussTotal, setTrussTotal] = useState(0);
+  
   const setActive = useCallback(
     (key) => {
       setUi((prev) => ({ ...prev, active: key }));
@@ -77,15 +80,36 @@ export default function Home() {
     [setUi]
   );
 
+  // --- 2. Quitar 'items' de la lista de placeholders ---
   const placeholderKeys = [
     "loose",
     "labor",
     "takeoff",
     "quote",
     "export",
-    "items",
+    // "items", // <-- Quitado
   ];
   const isPlaceholder = placeholderKeys.includes(active);
+
+  const projectStyle = {
+    display: active === 'project' ? 'block' : 'none'
+  };
+  const summaryStyle = {
+    display: active === 'summary' ? 'block' : 'none'
+  };
+  const wallPanelsStyle = {
+    display: active === 'wallpanels' ? 'block' : 'none'
+  };
+  const trussesStyle = {
+    display: active === 'trusses' ? 'block' : 'none'
+  };
+  // --- 3. Añadir estilo para 'items' ---
+  const itemsStyle = {
+    display: active === 'items' ? 'block' : 'none'
+  };
+  const placeholderStyle = {
+    display: isPlaceholder ? 'block' : 'none'
+  };
 
   return (
     <ProjectProvider initialProjectId={currentProjectId}>
@@ -105,27 +129,36 @@ export default function Home() {
             <LoginView />
           ) : (
             <>
-              <Activity mode={active === 'project' ? 'visible' : 'hidden'}>
-                <ProjectView />
-              </Activity>    
-              <Activity mode={active === 'summary' ? 'visible' : 'hidden'}>
+              {/* --- 4. Usar <div> en lugar de <Activity> --- */}
+              <div style={projectStyle}>
+                <ProjectView /> 
+              </div>
+              
+              <div style={summaryStyle}>
                 <div className="app-content">
                   <Summary 
                     wallPanelsTotal={wallPanelsTotal}
                     trussTotal={trussTotal}
-                    grandTotal={grandTotal}
                   />
                 </div>
-              </Activity>
-              <Activity mode={active === 'wallpanels' ? 'visible' : 'hidden'}>
+              </div>
+
+              <div style={wallPanelsStyle}>
                 <WallPanelsView onGrandTotal={setWallPanelsTotal} />
-              </Activity>
-              <Activity mode={active === 'trusses' ? 'visible' : 'hidden'}>
+              </div>
+              
+              <div style={trussesStyle}>
                 <TrussesView onTrussTotal={setTrussTotal} />
-              </Activity>              
-              <Activity mode={isPlaceholder ? 'visible' : 'hidden'}>
+              </div>
+              
+              {/* --- 5. Añadir el nuevo <div> para MaterialListView --- */}
+              <div style={itemsStyle}>
+                <MaterialListView />
+              </div>
+              
+              <div style={placeholderStyle}>
                 <ComingSoonView activeKey={active} />
-              </Activity>
+              </div>
             </>
           )}
         </main>

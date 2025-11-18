@@ -353,12 +353,10 @@ export default function PanelsManufactureEstimate({
               Panels Manufacture Estimate
             </h2>      
             <div
-              className="ew-right"
+              className="ew-right text-subtotal-orange"
               style={{
                 marginLeft: "auto",
-                color: "#f18d5b",
                 fontWeight: "700",
-                fontSize: "16px",
                 fontFamily: "'Nova Mono', monospace",
               }}
             >
@@ -469,12 +467,12 @@ export default function PanelsManufactureEstimate({
             </tbody>
             <tfoot>
               <tr>
-                <th colSpan={3} style={{ textAlign: "right" }}>
+                <th className="text-subtotal-manufacture" colSpan={3} style={{ textAlign: "right" }}>
                   TOTALS
                 </th>
-                <th className="num ew-total-panels">{fmt(totals.panels)}</th>
+                <th className="num ew-total-panels text-sum-manufacture">{fmt(totals.panels)}</th>
                 <th colSpan={2}></th>
-                <th className="num ew-total-panels">{money(totals.total)}</th>
+                <th className="num ew-total-panels text-sum-manufacture">{money(totals.total)}</th>
               </tr>
             </tfoot>
           </table>

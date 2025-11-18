@@ -45,7 +45,7 @@
   --surface-2: var(--bg-800);
   --text-1: var(--text-100);
   --brand-6: var(--turq-400);
-  --color-level-total: #0b69a3; /* Dark blue */
+  --color-level-total: var(--turq-200);
   --color-subtotal-orange: #8c5341;
 
   /* NEW Component-specific variables (Light) */
@@ -215,6 +215,19 @@ body {
 
 .text-summary-subcategory{
   color: var(--text-1);
+}
+
+.text-subtotal-manufacture{
+  font-family: 'Nova Flat', cursive;
+  font-weight: 700;
+  color: var(--turq-200);
+  font-size: 1.0rem;
+}
+
+.text-sum-manufacture{
+  font-family: 'Nova Flat', cursive;
+  font-weight: 700;
+  font-size: 1.0rem;
 }
 
 /* === Cards / layout ===================================================== */

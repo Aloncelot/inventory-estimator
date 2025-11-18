@@ -312,7 +312,7 @@ function PanelNailsComponent({
                     />
                 </button>
                 <span className="text-section-header">{title}</span>
-                <div className="ew-right" style={{ marginLeft: 'auto', color: '#f18d5b', fontWeight: '700', fontSize: '16px', fontFamily: "'Nova Mono', monospace" }}>
+                <div className="ew-right text-subtotal-orange" style={{ marginLeft: 'auto', fontWeight: '700', fontFamily: "'Nova Mono', monospace" }}>
                     Subtotal: {fmtMoney(sectionTotal)}
                 </div>
             </div>
