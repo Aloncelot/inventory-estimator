@@ -1016,3 +1016,153 @@ html {
     transform: none;
   }
 }
+
+/* === Material List View Styles ========================================== */
+
+/* Utility: Makes the card match the sidebar height exactly */
+.full-height-card {
+  display: flex;
+  flex-direction: column;
+  /* 100vh - (24px top margin + 24px bottom margin) */
+  height: calc(100dvh - 48px);
+  /* 9px margin + 15px padding parent = 24px total top spacing */
+  margin-top: 9px; 
+  padding: 0;
+  overflow: hidden;
+}
+
+/* The main grid container */
+.material-view {
+  display: grid;
+  /* 300px Families | 250px Items | Remaining for Prices */
+  grid-template-columns: 300px 250px 1fr; 
+  flex: 1; /* Takes all remaining vertical space in the card */
+  min-height: 0; /* Critical for nested flex scrolling */
+  /* No border needed here, the card has it */
+}
+
+/* Individual columns */
+.material-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0; 
+  border-right: 1px solid var(--border);
+  height: 100%;
+}
+.material-col:last-child {
+  border-right: none;
+}
+
+/* Sticky Headers inside columns */
+.material-header {
+  height: 40px; /* Fixed height */
+  padding: 0 12px;
+  background: var(--bg-750);
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  
+  /* Flex layout for title + button */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0; /* Don't shrink */
+}
+
+/* Scrollable content area */
+.material-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* List items (Buttons) */
+.material-list-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-300);
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  transition: background 0.15s ease;
+}
+.material-list-btn:hover {
+  background: var(--bg-700);
+}
+.material-list-btn.active {
+  background: var(--turq-500);
+  color: white;
+  font-weight: 700;
+}
+
+/* Search Bar Grid */
+.search-wrapper {
+  display: grid;
+  grid-template-columns: 300px 250px 1fr; /* Matches material-view */
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-800);
+  flex-shrink: 0;
+}
+.search-cell {
+  padding: 10px;
+  border-right: 1px solid var(--border);
+}
+.search-cell:last-child {
+  border-right: none;
+}
+
+/* Links in tables */
+.ew-link {
+  color: var(--turq-200);
+  text-decoration: underline;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: inherit;
+}
+.ew-link:hover {
+  color: var(--turq-300);
+}
+
+/* === Modal / Dialog Styles ============================================== */
+
+/* Read-only Info Rows */
+.info-row {
+  margin-bottom: 8px;
+}
+.info-label {
+  font-size: 0.75rem;
+  color: var(--text-300);
+  display: block;
+  margin-bottom: 2px;
+}
+.info-value {
+  font-size: 0.9rem;
+  color: var(--text-100);
+  font-weight: 600;
+}
+
+/* Text-only buttons (like "Select Existing") */
+.text-btn {
+  font-size: 0.75rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--turq-200);
+  text-decoration: underline;
+  padding: 0;
+}
+.text-btn:hover {
+  color: var(--turq-300);
+}
+
+/* Utilities */
+.flex-between-center {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
