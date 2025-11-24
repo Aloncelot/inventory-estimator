@@ -7,8 +7,7 @@ import LooseMaterialSection from './LooseMaterialSection';
 import AddButton from '@/components/ui/AddButton';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { unitPriceFrom } from '@/domain/lib/parsing';
-
-// --- DnD Kit Imports ---
+// ... (DnD Imports unchanged) ...
 import {
   DndContext,
   DragOverlay,
@@ -41,7 +40,7 @@ const calcSectionTotal = (rows = []) => {
     }, 0);
 };
 
-// --- Sortable Wrapper Component ---
+// --- Sortable Wrapper (Unchanged) ---
 function SortableSection({ section, ...props }) {
   const {
     attributes,
@@ -73,7 +72,7 @@ function SortableSection({ section, ...props }) {
 }
 
 export default function LooseMaterialView({ onTotalChange }) {
-    const { projectData, updateProject, blankLooseSection, isLoaded } = useProject();
+    const { projectData, updateProject, blankLooseSection, blankLevelLooseSection, isLoaded } = useProject();
     const [sectionToDelete, setSectionToDelete] = useState(null);
     const [activeId, setActiveId] = useState(null); 
 
@@ -81,11 +80,9 @@ export default function LooseMaterialView({ onTotalChange }) {
         return projectData?.estimateData?.looseList || [];
     }, [projectData]);
 
-    // --- FIX: Find Foundation by NAME, not ID ---
     const foundationSection = useMemo(() => {
         return looseList.find(s => s.name === 'Foundation');
     }, [looseList]);
-    // --------------------------------------------
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), 
@@ -112,10 +109,19 @@ export default function LooseMaterialView({ onTotalChange }) {
         );
     };
 
+    // --- ADD LOGIC ---
     const addSection = () => {
         const newSection = blankLooseSection("New Section");
         updateLooseList(prevList => [...prevList, newSection]);
     };
+
+    const addLevelSection = () => {
+        // Calculate the next level index based on existing "X Level" sections
+        const levelCount = looseList.filter(s => s.name.includes('Level')).length;
+        const newSection = blankLevelLooseSection(levelCount); // index 0 = 1st, 1 = 2nd...
+        updateLooseList(prevList => [...prevList, newSection]);
+    };
+    // -----------------
 
     const requestDeleteSection = (id) => { setSectionToDelete(id); };
     
@@ -173,7 +179,8 @@ export default function LooseMaterialView({ onTotalChange }) {
         return <div className="app-content"><div className="ew-card">Loading...</div></div>;
     }
 
-    const defaultSections = ['Foundation', 'Basement', '1st Level', 'Roof'];
+    // Update default sections list to NOT prevent deletion of "1st Level" since it's dynamic now
+    const defaultSections = ['Foundation', 'Basement', 'Roof'];
     
     const visibleSections = looseList.filter(s => !s.isHidden);
     const hiddenSections = looseList.filter(s => s.isHidden);
@@ -208,7 +215,6 @@ export default function LooseMaterialView({ onTotalChange }) {
                                 onUpdate={updater => handleSectionChange(section.id, updater)}
                                 onRemove={defaultSections.includes(section.name) ? undefined : () => requestDeleteSection(section.id)}
                                 onToggleHidden={() => toggleSectionVisibility(section.id)}
-                                // Pass foundation data correctly now!
                                 foundationData={foundationSection} 
                                 isHidden={false}
                             />
@@ -229,10 +235,13 @@ export default function LooseMaterialView({ onTotalChange }) {
                 </DragOverlay>
             </DndContext>
 
-
             <div className="ew-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem' }}>
-                <div className="ew-subtle">Add another custom section (e.g. Stairs, Deck, Porch)</div>
-                <AddButton onClick={addSection} title="Add Section" label="Add Section" />
+                <div className="ew-subtle">Add another section</div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    {/* --- NEW BUTTON --- */}
+                    <AddButton onClick={addLevelSection} title="Add Level" label="Add Level" />
+                    <AddButton onClick={addSection} title="Add Custom Section" label="Add Custom" />
+                </div>
             </div>
 
             {hiddenSections.length > 0 && (

@@ -43,7 +43,11 @@ const blankTrussRow = (label, defaultAmount = 0) => ({
 
 const blankLooseRow = () => ({
   id: generateId('loose-item-'),
+  type: type || 'Custom Item',
   item: null, // El objeto del ItemPicker
+  defaultVendor: vendor,
+  defaultFamily: family,
+  defaultSize: size,
   qty: 0,
   wastePct: 0,
   notes: '',
@@ -61,6 +65,29 @@ const blankLooseSection = (name = "New Section") => ({
   waste: {}, 
 });
 
+const blankLevelLooseSection = (index) => {
+    const name = `${index === 0 ? '1st' : index === 1 ? '2nd' : (index + 1) + 'th'} Level`;
+    return {
+        id: generateId('loose-sec-'),
+        name: name,
+        collapsed: false,
+        inputs: {}, 
+        sel: {},    
+        waste: {},
+        rows: [
+            blankLooseRow("Rimboard", "Gillies & Prittie Warehouse", "SPF#2", `2x4"-16'`),
+            blankLooseRow("Joist", "Gillies & Prittie Warehouse", "SPF#2", `2x12"-16'`),
+            blankLooseRow("I-Joist", "Gillies & Prittie Warehouse", "NI-60 I-Joists", `2-1/2x14"`),
+            blankLooseRow("Beams", "Gillies & Prittie Warehouse", "LVL", `1-3/4x9-1/2"`),
+            blankLooseRow("Beams", "Gillies & Prittie Warehouse", "SPF#2", `2x12"-10'`),
+            blankLooseRow("Blocking", "Gillies & Prittie Warehouse", "SPF#2", `2x12"-16'`),
+            blankLooseRow("Subfloor", "Gillies & Prittie Warehouse", "OSB T&G", `4x8'-3/4"`),
+            blankLooseRow("Glue", "Gillies & Prittie Warehouse", "Construction Adhesive", `28oz-ea`),
+            blankLooseRow("Strapping", "Gillies & Prittie Warehouse", "Strapping", `1x3"-16'`),
+        ]
+    };
+};
+
 const blankEstimateData = () => ({
   levels: [blankLevel({ index: 0 })],
   manufactureEstimate: {},
@@ -69,7 +96,12 @@ const blankEstimateData = () => ({
     blankTrussRow("Roof Trusses & Hangers"),
     blankTrussRow("1st Floor Trusses & Hangers")
   ],
-  looseList: DEFAULT_LOOSE_SECTIONS.map(name => blankLooseSection(name)),
+  looseList: [
+    blankLooseSection("Foundation"),
+    blankLooseSection("Basement"),
+    blankLevelLooseSection(0), 
+    blankLooseSection("Roof"),
+  ],
   summaryInfo: {
     projectName: "",
     address: "",
@@ -199,20 +231,21 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                     data.estimateData.trusses = [...(oldGroup.base || []), ...(oldGroup.extras || [])];
                 }
 
-                if (!data.estimateData.summaryInfo) {
-                    data.estimateData.summaryInfo = blankEstimateData().summaryInfo;
-                } else {
-                    // ... (checkeos de summaryInfo) ...
-                     if (data.estimateData.summaryInfo.shipping === undefined) data.estimateData.summaryInfo.shipping = 0;
+                if (!data.estimateData.summaryInfo) data.estimateData.summaryInfo = blankEstimateData().summaryInfo;
+                else {
+                    if (data.estimateData.summaryInfo.isTaxExempt === undefined) data.estimateData.summaryInfo.isTaxExempt = false;
+                    if (data.estimateData.summaryInfo.taxState === undefined) data.estimateData.summaryInfo.taxState = null;
+                    if (data.estimateData.summaryInfo.shipping === undefined) data.estimateData.summaryInfo.shipping = 0;
                 }
-                
-                if (data.estimateData.snapshotTotals === undefined) {
-                  data.estimateData.snapshotTotals = null;
-                }
+                if (data.estimateData.snapshotTotals === undefined) data.estimateData.snapshotTotals = null;
 
-                // *** NUEVO: Migración para Loose Material ***
                 if (!data.estimateData.looseList) {
-                   data.estimateData.looseList = DEFAULT_LOOSE_SECTIONS.map(name => blankLooseSection(name));
+                   data.estimateData.looseList = [
+                    blankLooseSection("Foundation"),
+                    blankLooseSection("Basement"),
+                    blankLevelLooseSection(0), // Use new template for migration
+                    blankLooseSection("Roof"),
+                   ];
                 }
                   
                 setProjectData(data);
@@ -228,17 +261,14 @@ export function ProjectProvider({ children, initialProjectId = null }) {
             setIsLoaded(true); 
         }
     }, [isLoading, getProjectPath, db]);
-
+     
      const saveProject = useCallback(async (pId = projectId, data = projectData) => {
-        // ... (sin cambios) ...
-         if (!user || !pId || !data || isSaving) {
-            return;
-        }
-         const path = getProjectPath(pId);
-          if (!path) return; 
+        if (!user || !pId || !data || isSaving) return;
+        const path = getProjectPath(pId);
+        if (!path) return; 
 
-         setIsSaving(true);
-         try {
+        setIsSaving(true);
+        try {
              const docRef = doc(db, path);
              const saveData = {
                  ...data,
@@ -248,19 +278,19 @@ export function ProjectProvider({ children, initialProjectId = null }) {
              await setDoc(docRef, saveData, { merge: true }); 
              setProjectData(saveData);
              setProjectsList(list => list.map(p => p.id === pId ? {...p, updatedAt: saveData.updatedAt.toDate()} : p).sort((a,b) => b.updatedAt - a.updatedAt));
-         } catch (error) {
+        } catch (error) {
              console.error("Error saving project:", error);
-         } finally {
+        } finally {
              setIsSaving(false);
-         }
+        }
      }, [user, projectId, projectData, isSaving, getProjectPath, db]);
 
     const updateProject = useCallback((updaterFn) => {
-         setProjectData(prevData => {
-             if (!prevData) return null;
-             const newEstimateData = updaterFn(prevData.estimateData || blankEstimateData());
-             return {
-                 ...prevData,
+        setProjectData(prevData => {
+            if (!prevData) return null;
+            const newEstimateData = updaterFn(prevData.estimateData || blankEstimateData());
+            return {
+                ...prevData,
                 estimateData: newEstimateData
             };
         });
@@ -268,7 +298,6 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
     const updateEstimateData = updateProject;
 
-    // --- REFRESH PRICES FUNCTION (Actualizada para incluir Loose List) ---
     const refreshProjectPrices = useCallback(async () => {
       if (!projectData) return;
       setIsSaving(true); 
@@ -289,7 +318,6 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
         // 1. Refresh Levels (Exterior/Interior/Loose/Nails)
         for (const level of newEstimateData.levels) {
-           // ... (lógica existente de levels) ...
           const allSections = [...(level.exteriorSections || []), ...(level.interiorSections || [])];
           for (const section of allSections) {
             for (const key in section.sel) section.sel[key] = await refreshItem(section.sel[key]);
@@ -306,8 +334,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         if (newEstimateData.nailsAndBracing?.sel) {
            for (const key in newEstimateData.nailsAndBracing.sel) newEstimateData.nailsAndBracing.sel[key] = await refreshItem(newEstimateData.nailsAndBracing.sel[key]);
         }
-        
-        // *** NUEVO: Refresh Loose Material List ***
+
         if (newEstimateData.looseList) {
            for (const section of newEstimateData.looseList) {
                for (let i = 0; i < section.rows.length; i++) {
@@ -356,8 +383,9 @@ export function ProjectProvider({ children, initialProjectId = null }) {
          refreshProjectPrices, 
          blankLevel,
          blankSection,
-         blankLooseRow, // <-- Exported
-         blankLooseSection, // <-- Exported
+         blankLooseRow,
+         blankLooseSection,
+         blankLevelLooseSection,
          isLoaded,
          isLoading,
          isSaving,
