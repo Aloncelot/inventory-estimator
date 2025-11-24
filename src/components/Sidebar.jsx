@@ -5,12 +5,11 @@ import { useMemo, useEffect, useState } from "react";
 import { useProject } from "@/context/ProjectContext";
 import { useAuth } from "@/AuthContext";
 
-// *** MODIFICADO: Revertido al array de MENÚ original ***
 const MENU = [
   { key: "auth",        label: "Login / Logout",      icon: "/icons/login.png" },
   { key: "project",     label: "Project",             icon: "/icons/files.png" },
   { key: "summary",     label: "Summary",             icon: "/icons/search.png" },
-  { key: "trusses",     label: "Trusses",             icon: "/icons/line-chart.png" },
+  { key: "trusses",     label: "Trusses",             icon: "/icons/trusses.png" },
   { key: "wallpanels",  label: "Wall Panels",         icon: "/icons/framing.png" },
   { key: "loose",       label: "Loose Material",      icon: "/icons/loose.png" },
   { key: "labor",       label: "Labor",               icon: "/icons/worker.png" },
@@ -63,9 +62,7 @@ export default function Sidebar({
   };
 
   const items = useMemo(() => {
-    return MENU.map(item => {
-      // *** MODIFICADO: Lógica de iconos simplificada ***
-      // Solo actualiza etiquetas e iconos especiales (como el de 'mode')
+    return MENU.map(item => {    
       let icon = item.icon;
       let label = item.label;
 
@@ -79,11 +76,9 @@ export default function Sidebar({
       if (item.key === 'save' && isSaving) {
         label = "Saving...";
       }
-
-      // Devuelve el objeto con la etiqueta y el icono correctos
       return { ...item, label, icon };
     });
-  }, [isDark, user, isSaving]); // Se recalcula si el tema, usuario o estado de guardado cambian
+  }, [isDark, user, isSaving]);
 
   const activeVisualIdx = items.findIndex((i) => i.key === active);
   const topOffset = 6 + (activeVisualIdx >= 0 ? activeVisualIdx * 56 : 0);
@@ -136,9 +131,9 @@ export default function Sidebar({
       >
         {items.map((it, idx) => {
           const isActive =
-            it.key === active && !["save", "mode", "auth", "items", "wallpanels", "trusses", "loose"].includes(it.key);
+            it.key === active && !["save", "mode", "auth", "items", "wallpanels", "trusses", "loose", "summary"].includes(it.key);
           const comingSoonKeys = [
-            "loose", "labor", "takeoff",
+            "labor", "takeoff",
             "quote", "export",
           ];
 
@@ -175,7 +170,6 @@ export default function Sidebar({
               aria-current={isActive ? "page" : undefined}
               aria-disabled={isDisabled ? true : undefined}
             >
-              {/* Este <img> ahora será filtrado por la regla CSS */}
               <img
                 src={it.icon}
                 alt=""

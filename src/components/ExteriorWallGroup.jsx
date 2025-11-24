@@ -762,7 +762,7 @@ export default function ExteriorWallGroup({
                   <div>
                     <div className="ew-subtle" style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
                       <span className="ew-chip" title={n.plan || ''}>{n.plan || '—'}</span>
-                      <button className="ew-btn" style={{ padding:'4px 8px' }} onClick={()=>toggleOpen(noteKey)}>
+                      <button className="ew-btn ew-btn-note" onClick={()=>toggleOpen(noteKey)}>
                         {n.open ? 'Hide' : 'Notes'}
                       </button>
                     </div>
@@ -1065,11 +1065,11 @@ export default function ExteriorWallGroup({
                   <div className="ew-right ew-money">
                     {ex.subtotal ? fmt(ex.subtotal) : '—'}
                   </div>
-                  {/* ... (Note logic unchanged) ... */}
+                  {/* ... (Note logic) ... */}
                   <div>
                     <div className="ew-subtle" style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
                       <span className="ew-chip" title={n.plan || ''}>{n.plan || '—'}</span>
-                      <button className="ew-btn" style={{ padding:'4px 8px' }} onClick={()=>toggleOpen(noteKey)}>
+                      <button className="ew-btn ew-btn-note" onClick={()=>toggleOpen(noteKey)}>
                         {n.open ? 'Hide' : 'Notes'}
                       </button>
                     </div>

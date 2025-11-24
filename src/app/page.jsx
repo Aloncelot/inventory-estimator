@@ -4,10 +4,8 @@
 import {
   useCallback,
   useState,
-  useMemo,
   useEffect,
   useRef,
-  Activity, 
 } from "react";
 import { useLocalStorageJson } from "@/hooks/useLocalStorageJson";
 import { ProjectProvider } from "@/context/ProjectContext";
@@ -18,18 +16,17 @@ import Summary from "@/components/Summary";
 import ProjectView from "@/components/ProjectView";
 import LoginView from "@/components/LoginView";
 import TrussesView from "@/components/TrussesView";
-import MaterialListView from "@/components/MaterialListView"; // <-- 1. Importar
+import MaterialListView from "@/components/MaterialListView"; 
+import LooseMaterialView from "@/components/LooseMaterialView";
 
-// Helper (sin cambios)
+// Helper 
 function ComingSoonView({ activeKey }) {
   const titles = {
-    auth: "Login / Logout",
-    loose: "Loose Material",
+
     labor: "Labor",
     takeoff: "Takeoff list",
     quote: "Quote (QuickBooks)",
     export: "Export",
-    // items: "Material List", // <-- Quitado
   };
   
   return (
@@ -80,14 +77,11 @@ export default function Home() {
     [setUi]
   );
 
-  // --- 2. Quitar 'items' de la lista de placeholders ---
   const placeholderKeys = [
-    "loose",
     "labor",
     "takeoff",
     "quote",
     "export",
-    // "items", // <-- Quitado
   ];
   const isPlaceholder = placeholderKeys.includes(active);
 
@@ -103,9 +97,11 @@ export default function Home() {
   const trussesStyle = {
     display: active === 'trusses' ? 'block' : 'none'
   };
-  // --- 3. Añadir estilo para 'items' ---
   const itemsStyle = {
     display: active === 'items' ? 'block' : 'none'
+  };
+  const looseStyle = {
+    display: active === 'loose' ? 'block' : 'none'
   };
   const placeholderStyle = {
     display: isPlaceholder ? 'block' : 'none'
@@ -129,7 +125,6 @@ export default function Home() {
             <LoginView />
           ) : (
             <>
-              {/* --- 4. Usar <div> en lugar de <Activity> --- */}
               <div style={projectStyle}>
                 <ProjectView /> 
               </div>
@@ -151,9 +146,12 @@ export default function Home() {
                 <TrussesView onTrussTotal={setTrussTotal} />
               </div>
               
-              {/* --- 5. Añadir el nuevo <div> para MaterialListView --- */}
               <div style={itemsStyle}>
                 <MaterialListView />
+              </div>
+
+              <div style={looseStyle}>
+                <LooseMaterialView />
               </div>
               
               <div style={placeholderStyle}>

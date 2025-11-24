@@ -4,82 +4,86 @@
 @custom-variant dark (&:is(.dark *));
 
 /* === Theme tokens ======================================================= */
-
-/* :root defines the default (light) theme */
 :root {
+  /* ... (Previous variables unchanged) ... */
   /* Surfaces & borders (Light) */
-  --bg-900: #ffffff; /* page background */
-  --bg-800: #ffffff; /* cards */
-  --bg-750: #f4f8f7; /* row alt */
-  --bg-700: #eaf0ef; /* row hover */
+  --bg-900: #ffffff;
+  --bg-800: #ffffff;
+  --bg-750: #f4f8f7;
+  --bg-700: #eaf0ef;
   --border: #d8e0de;
   --shadow: 0 8px 20px rgba(0, 0, 0, 0.07);
 
-  /* Text (Light) - Forest Green Tones */
-  --text-100: #1d3832; /* Primary text */
-  --text-300: #4a635d; /* Subtle text */
-  --text-400: #E98167; /* Kept orange accent */
-  --text-500: #d95f23; /* Kept orange accent (darker) */
-  --text-600: #21a399; /* Kept turquoise accent */
+  /* Text (Light) */
+  --text-100: #1d3832;
+  --text-300: #4a635d;
+  --text-400: #E98167;
+  --text-500: #d95f23;
+  --text-600: #21a399;
 
-  /* Brand / accents (Light) - Forest Green */
-  --turq-200: #2a6055; /* Main green for headers */
+  /* Brand (Light) */
+  --turq-200: #2a6055;
   --turq-300: #224f46;
   --turq-400: #1e463f;
   --turq-500: #1a3c36;
-  --turq-700: #cceae4; /* Very light green for header gradient */
+  --turq-700: #cceae4;
   --nova-flat-turquoise: #2a6055;
 
-  /* Dropdown (Light) */
+  /* UI Elements (Light) */
   --dropdown-bg: #ffffff;
   --dropdown-fg: #1d3832;
   --dropdown-active: #d6f2ec;
   --dropdown-border: #d8e0de;
-
-  /* Focus ring (Light) */
-  --ring-color: var(--turq-400); /* #1e463f */
+  --ring-color: var(--turq-400);
   --ring-shadow-1: color-mix(in oklab, var(--ring-color) 35%, #fff 65%);
   --ring-shadow-2: color-mix(in oklab, var(--ring-color) 60%, #fff 40%);
-
-  /* Aliases & Hierarchy (Light) */
+  
+  /* Colors */
   --surface-2: var(--bg-800);
   --text-1: var(--text-100);
   --brand-6: var(--turq-400);
   --color-level-total: var(--turq-200);
   --color-subtotal-orange: #8c5341;
 
-  /* NEW Component-specific variables (Light) */
+  /* Components (Light) */
   --header-glow: 0 0 15px 3px rgba(42, 96, 85, 0.3);
   --chip-bg: #eaf0ef;
   --chip-border: #d8e0de;
   --chip-text: #4a635d;
+  --input-bg: #ffffff;
+  
+  --btn-bg: #f4f8f7;
+  --btn-border: #d8e0de;
+  --btn-text: #1e463f;
+  --btn-hover-bg: #eaf0ef;
+  --btn-hover-border: #2a6055;
+  
   --btn-turq-bg: linear-gradient(180deg, #f4f8f7, #eaf0ef);
   --btn-turq-border: #d8e0de;
   --btn-turq-text: #1e463f;
+  
   --select-native-bg: var(--bg-800);
   --select-native-text: var(--text-100);
-  --input-bg: #ffffff;
 
-  --btn-bg: #f4f8f7;                  /* Fondo de botón (casi blanco) */
-  --btn-border: #d8e0de;
-  --btn-text: #1e463f;                 /* Texto de botón (verde oscuro) */
-  --btn-hover-bg: #eaf0ef;             /* Fondo de botón (hover) */
-  --btn-hover-border: #2a6055;         /* Borde de botón (verde) */
-  
-  --sidebar-bg: rgba(255, 255, 255, 0.5); /* Fondo de Sidebar (claro) */
-  --sidebar-hover-bg: rgba(0, 0, 0, 0.05); /* Hover de ítem (oscuro muy sutil) */
+  --sidebar-bg: rgba(255, 255, 255, 0.5);
+  --sidebar-hover-bg: rgba(0, 0, 0, 0.05);
   --sidebar-text-hover: #224f46;
+
+  --btn-danger-bg: #fee2e2;
+  --btn-danger-border: #fca5a5;
+  --btn-danger-text: #991b1b;
+  --btn-danger-hover-bg: #fecaca;
+  --btn-danger-hover-border: #ef4444;
 
   --icon-filter-themed: grayscale(1) sepia(1) hue-rotate(85deg) saturate(3) brightness(0.6) contrast(2);
 }
 
-/* .dark defines the dark theme overrides */
 .dark {
   /* Surfaces & borders (Dark) */
-  --bg-900: #0a0f1a; /* page background */
-  --bg-800: #0e1624; /* cards */
-  --bg-750: #111c2d; /* row alt */
-  --bg-700: #13243a; /* row hover */
+  --bg-900: #0a0f1a;
+  --bg-800: #0e1624;
+  --bg-750: #111c2d;
+  --bg-700: #13243a;
   --border: #1f344f;
   --shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
 
@@ -90,53 +94,59 @@
   --text-500: #E98167;
   --text-600: #007180;
 
-  /* Brand / accents (Dark) - Turquoise */
+  /* Brand (Dark) */
   --turq-200: #81eee5;
   --turq-300: #59d2c8;
   --turq-400: #2fb7ad;
   --turq-500: #21a399;
-  --turq-700: #0e494e; /* Dark turquoise for header gradient */
+  --turq-700: #0e494e;
   --nova-flat-turquoise: #40e0d0;
 
-  /* Dropdown (Dark) */
+  /* UI Elements (Dark) */
   --dropdown-bg: #0f172a;
   --dropdown-fg: #e2f1ee;
   --dropdown-active: #155e75;
   --dropdown-border: #1f2a44;
-
-  /* Focus ring (Dark) */
-  --ring-color: var(--turq-400); /* #2fb7ad */
+  --ring-color: var(--turq-400);
   --ring-shadow-1: color-mix(in oklab, var(--ring-color) 35%, #000 65%);
   --ring-shadow-2: color-mix(in oklab, var(--ring-color) 60%, #000 40%);
-
-  /* Aliases & Hierarchy (Dark) */
+  
+  /* Colors */
   --surface-2: var(--bg-800);
   --text-1: var(--text-100);
   --brand-6: var(--turq-400);
   --color-level-total: #67e8f9;
   --color-subtotal-orange: #d19974;
 
-  /* NEW Component-specific variables (Dark) */
+  /* Components (Dark) */
   --header-glow: 0 0 15px 3px rgba(47, 183, 173, 0.5);
   --chip-bg: #0c2b33;
   --chip-border: #1a515d;
   --chip-text: #e9f6f8;
+  --input-bg: #0b1524;
+  
+  --btn-bg: linear-gradient(180deg, #102036, #0f1b2e);
+  --btn-border: var(--border);
+  --btn-text: var(--text-100);
+  --btn-hover-bg: linear-gradient(180deg, #102036, #0f1b2e);
+  --btn-hover-border: var(--turq-400);
+  
   --btn-turq-bg: linear-gradient(180deg, #143a40, #113237);
   --btn-turq-border: #1b4f56;
-  --btn-turq-text: var(--text-100); /* Uses default text */
+  --btn-turq-text: var(--text-100);
+  
   --select-native-bg: var(--surface-2);
   --select-native-text: var(--text-1);
-  --input-bg: #0b1524;
 
-  --btn-bg: linear-gradient(180deg, #102036, #0f1b2e); /* Fondo original */
-  --btn-border: var(--border);
-  --btn-text: var(--text-100);             /* Texto de botón (blanco) */
-  --btn-hover-bg: linear-gradient(180deg, #102036, #0f1b2e); /* Sin cambio de fondo */
-  --btn-hover-border: var(--turq-400);     /* Borde turquesa (hover) */
-
-  --sidebar-bg: rgba(0, 0, 0, 0.4);        /* Fondo original */
-  --sidebar-hover-bg: rgba(0, 0, 0, 0.8); /* Hover más oscuro (como pediste) */
+  --sidebar-bg: rgba(0, 0, 0, 0.4);
+  --sidebar-hover-bg: rgba(0, 0, 0, 0.8);
   --sidebar-text-hover: #6fffea;
+
+  --btn-danger-bg: linear-gradient(180deg, #3f1010, #280808);
+  --btn-danger-border: #7f1d1d;
+  --btn-danger-text: #fecaca;
+  --btn-danger-hover-bg: #7f1d1d;
+  --btn-danger-hover-border: #ef4444;
   
   --icon-filter-themed: none;
 }
@@ -150,7 +160,6 @@ body {
 }
 
 /* === FONT HIERARCHY & COLORS === */
-/* Clases de utilidad para las fuentes */
 .text-section-title{
   font-size: 1.65rem; 
   font-weight: 700;
@@ -171,7 +180,7 @@ body {
 }
 
 .text-h1 {
-  font-size: 1.5rem; /* 24px */
+  font-size: 1.5rem;
   font-weight: 700;
   font-family: 'Nova Flat', cursive;
   color: var(--nova-flat-turquoise, #40e0d0); 
@@ -179,16 +188,15 @@ body {
 }
 
 .text-h2 {
-  font-size: 1.25rem; /* 20px */
+  font-size: 1.25rem;
   font-weight: 700;
   font-family: 'Nova Flat', cursive;
   color: var(--nova-flat-turquoise, #40e0d0);
   margin: 0;
 }
 
-/* Esta es la clase para sub-secciones (Wall Groups) */
 .text-section-header {
-  font-size: 1.0rem;  /* 16px */
+  font-size: 1.0rem;
   font-weight: 700;
   font-family: 'Nova Flat', cursive;
   color: var(--nova-flat-turquoise, #40e0d0);
@@ -197,7 +205,6 @@ body {
   background: none;
 }
 
-/* Total de Nivel y Sección (Azul) */
 .text-level-total {
   font-family: 'Nova Flat', cursive;
   font-weight: 700;
@@ -205,7 +212,6 @@ body {
   font-size: 1.125rem; 
 }
 
-/* Subtotal de Sub-sección (Naranja) */
 .text-subtotal-orange {
   font-family: 'Nova Flat', cursive;
   font-weight: 700;
@@ -266,7 +272,7 @@ body {
   align-items: center;
 }
 
-/* Section/row headers (unify .ew-head and .ew-rowhead styles) */
+/* Section/row headers */
 .ew-head,
 .ew-rowhead {
   display: grid;
@@ -379,6 +385,7 @@ body {
   filter: var(--icon-filter-themed);
 }
 
+/* Generic Buttons */
 .ew-btn {
   padding: 4px 8px;
   border-radius: 6px;
@@ -393,19 +400,111 @@ body {
   border-color: var(--btn-hover-border);
   background: var(--btn-hover-bg);
 }
+/* Turquoise variation */
 .ew-btn--turq {
   background: var(--btn-turq-bg);
   border-color: var(--btn-turq-border);
   color: var(--btn-turq-text);
 }
+/* Danger variation */
+.ew-btn--danger {
+  background: var(--btn-danger-bg);
+  border-color: var(--btn-danger-border);
+  color: var(--btn-danger-text);
+}
+.ew-btn--danger:hover {
+  background: var(--btn-danger-hover-bg);
+  border-color: var(--btn-danger-hover-border);
+}
+/* Icon buttons (Trash, etc) */
 .ew-icon-btn {
   padding: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
+.ew-icon-btn:hover {
+  background: var(--btn-hover-bg);
+}
+.ew-btn-note {
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  height: 20px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
-/* === Native <select> theming (kept for places you still use it) ========= */
+/* === Loose Material Specific Styles (Terracotta Theme) === */
+.ew-chip-loose {
+  border: 1px solid #8c5341;
+  background: #3f1a1a;
+  color: #e9f6f8;
+}
+
+.ew-btn-note-loose {
+  background: linear-gradient(180deg, #5c2b2b, #3f1a1a);
+  border-color: #8c5341;
+  color: #fecaca;
+}
+.ew-btn-note-loose:hover {
+  border-color: #fca5a5;
+  background: #7f1d1d;
+}
+
+/* NEW: Icons inside text buttons (e.g., "Add Studs") */
+.ew-icon-inline {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+  width: 12px;
+  height: 12px;
+}
+
+/* Filter white icons to themed color */
+.ew-icon-btn img,
+.acc__button img,
+.menu-ico,
+.sidebar-burger img {
+  filter: var(--icon-filter-themed);
+  transition: filter 0.2s ease;
+}
+
+/* Waste inputs in tables */
+.ew-input-waste {
+  width: 80px; 
+  padding: 6px; 
+  text-align: right;
+}
+
+/* Standard right alignment */
+.text-right {
+  text-align: right;
+}
+
+/* Auto margins */
+.ml-auto {
+  margin-left: auto;
+}
+
+/* Width utilities for labels in extras */
+.label-w-100 { min-width: 100px; }
+.label-w-120 { min-width: 120px; }
+.label-w-140 { min-width: 140px; }
+.label-w-160 { min-width: 160px; }
+
+.checkbox-label {
+  display: flex; 
+  flex-direction: row; 
+  align-items: center; 
+  gap: 6px; 
+  min-width: 100px; 
+  height: 40px; 
+  padding-bottom: 2px;
+}
+
+/* === Native <select> theming ========= */
 select {
   background-color: var(--select-native-bg);
   color: var(--select-native-text);
@@ -425,7 +524,7 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.25);
 }
 
-/* === Fancy focus ring (inputs/selects/buttons) ========================== */
+/* === Fancy focus ring ========================== */
 .focus-anim {
   position: relative;
   outline: none;
@@ -544,7 +643,7 @@ input[type="number"] {
 }
 .combo-input {
   padding-right: 28px;
-} /* room for caret */
+} 
 .combo-caret {
   position: absolute;
   top: 50%;
@@ -558,12 +657,11 @@ input[type="number"] {
   pointer-events: none;
 }
 .combo[aria-expanded="true"] {
-  z-index: 1000000; /* higher than any sibling */
+  z-index: 1000000; 
 }
 .combo[aria-expanded="true"] .combo-list {
   z-index: 1000001;
 }
-/* Dropdown menu uses the same theme vars as native <select> */
 .combo-list {
   position: absolute;
   top: calc(100% + 6px);
@@ -578,12 +676,12 @@ input[type="number"] {
   padding: 6px;
   margin: 0;
 
-  display: none; /* shown when expanded (see below) */
+  display: none; 
   max-height: min(320px, 45vh);
   overflow: auto;
 
   transform-origin: top;
-  z-index: 2000; /* Keep on top */
+  z-index: 2000; 
 }
 .combo[aria-expanded="true"] .combo-list {
   display: block;
@@ -605,43 +703,31 @@ input[type="number"] {
   transform: translateY(4px);
   animation: dropdown-item-enter 0.22s ease forwards;
 }
-/* stagger like the menu demo (first few items) */
-.combo .combo-option:nth-child(1) {
-  animation-delay: 0s;
-}
-.combo .combo-option:nth-child(2) {
-  animation-delay: 0.04s;
-}
-.combo .combo-option:nth-child(3) {
-  animation-delay: 0.08s;
-}
-.combo .combo-option:nth-child(4) {
-  animation-delay: 0.12s;
-}
-.combo .combo-option:nth-child(5) {
-  animation-delay: 0.16s;
-}
+.combo .combo-option:nth-child(1) { animation-delay: 0s; }
+.combo .combo-option:nth-child(2) { animation-delay: 0.04s; }
+.combo .combo-option:nth-child(3) { animation-delay: 0.08s; }
+.combo .combo-option:nth-child(4) { animation-delay: 0.12s; }
+.combo .combo-option:nth-child(5) { animation-delay: 0.16s; }
 
-/* hover/active/selected states */
 .combo .combo-option.active,
 .combo .combo-option[aria-selected="true"],
 .combo .combo-option:hover {
-  background: var(--dropdown-active); /* <-- CAMBIADO */
+  background: var(--dropdown-active); 
 }
 .combo-empty {
   padding: 10px;
   color: var(--text-300);
 }
 .combo .combo-option.danger {
-  color: #f87171; /* red-400 */
+  color: #f87171; 
 }
 .combo .combo-option.danger:hover {
-  background: #450a0a; /* red-900 */
-  color: #fecaca; /* red-200 */
+  background: #450a0a; 
+  color: #fecaca; 
 }
 
 
-/* === App shell sizing (sidebar width reacts to collapse) ================== */
+/* === App shell sizing ================================================== */
 .app-shell {
   --sidebar-w: 260px;
 }
@@ -651,14 +737,14 @@ input[type="number"] {
 
 .app-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr; /* Defines sidebar and main columns */
+  grid-template-columns: var(--sidebar-w) 1fr;
   min-height: 100dvh;
   background: var(--bg-900);
   transition: grid-template-columns 0.3s ease;
 }
 
 .app-main {
-  min-width: 0; /* Crucial: Allows main content to shrink */
+  min-width: 0;
 }
 .app-content {
   display: grid;
@@ -666,7 +752,7 @@ input[type="number"] {
   padding: 15px;
 }
 
-/* === Sidebar (screenshot style) ========================================== */
+/* === Sidebar =========================================================== */
 .sidebar {
   position: sticky;
   top: 24px;
@@ -732,14 +818,6 @@ input[type="number"] {
   border-radius: 0 4px 4px 0;
 }
 
-.ew-icon-btn img,
-.acc__button img,
-.menu-ico,
-.sidebar-burger img {
-  filter: var(--icon-filter-themed);
-  transition: filter 0.2s ease;
-}
-
 /* menu buttons */
 .sidebar .menu .menu-item {
   display: flex;
@@ -778,7 +856,7 @@ input[type="number"] {
 }
 .sidebar .menu .menu-label {
   font-family: "Nova Flat", cursive;
-  color: var(--text-secondary); /* Default weak color */
+  color: var(--text-secondary);
   transition: opacity 0.15s ease;
   opacity: 1;
   white-space: nowrap;
@@ -786,18 +864,16 @@ input[type="number"] {
   text-transform: capitalize;
 }
 
-/* Style for ENABLED (not disabled) items */
+/* Text colors for menu items */
 .sidebar .menu .menu-item:not(.disabled) .menu-label {
-  color: var(--turq-200); /* <-- CAMBIADO */
+  color: var(--turq-200);
 }
-/* Style for ACTIVE item */
 .sidebar .menu .menu-item.active .menu-label {
-  color: var(--text-100); /* <-- CAMBIADO */
+  color: var(--text-100);
   opacity: 1;
 }
-/* Ensure hover maintains brightness on enabled items */
 .sidebar .menu .menu-item:not(.disabled):hover .menu-label {
-  color: var(--sidebar-text-hover); /* <-- CAMBIADO */
+  color: var(--sidebar-text-hover);
 }
 
 /* icons-only when collapsed */
@@ -815,7 +891,7 @@ input[type="number"] {
 .side-foot {
   padding: 10px;
   border-top: 1px solid var(--border);
-  margin-top: auto; /* Pushes to bottom */
+  margin-top: auto;
 }
 
 /* === Summary.jsx Styles === */
@@ -858,34 +934,30 @@ input[type="number"] {
   font-weight: 800;
 }
 
-/* === Generic table styling for estimators ================================= */
+/* === Generic table styling ============================================ */
 .tbl {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 0.8rem;
 }
-
 .tbl th,
 .tbl td {
-  padding: 4px 12px; /* Antes era 6px 12px */
+  padding: 4px 12px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
-
 .tbl thead th {
   text-align: left;
   color: var(--turq-300);
   font-weight: 700;
   background: linear-gradient(180deg, rgba(47, 183, 173, 0.1), transparent 70%);
 }
-
 .tbl tfoot th,
 .tbl tfoot td {
   font-weight: 700;
   background: rgba(0, 0, 0, 0.06);
 }
-
 .tbl .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -901,7 +973,7 @@ input[type="number"] {
   font-weight: 700;
 }
 
-/* === AccordionSection (Final Version) === */
+/* === AccordionSection === */
 .acc {
   margin: 0 0 8px 0;
 }
@@ -924,6 +996,9 @@ input[type="number"] {
 }
 .acc__chev {
   width: 1.1em;
+  /* Moved from inline style */
+  display: inline-block;
+  vertical-align: middle;
 }
 .acc__title {
   font: inherit;
@@ -938,14 +1013,13 @@ input[type="number"] {
   border-radius: 10px;
 }
 .acc__body {
-  overflow: hidden; /* Changed from 'clip' */
+  overflow: hidden; 
   transition: max-height 0.35s ease, opacity 0.2s ease;
   max-height: 0;
   opacity: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
 }
-/* But if a combobox is expanded inside, allow overflow so the menu can escape */
 .acc__body:has(.combo[aria-expanded="true"]) {
   overflow: visible;
 }
@@ -956,31 +1030,28 @@ input[type="number"] {
 
 /* === Scrollbar Utilities === */
 html {
-  scrollbar-gutter: stable both-edges; /* modern */
+  scrollbar-gutter: stable both-edges; 
 }
 @supports not (scrollbar-gutter: stable) {
-  /* Fallback: always show a vertical scrollbar track */
   html {
     overflow-y: scroll;
   }
 }
-
-/* Themed scrollbars (Firefox + WebKit) */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--turq-500) transparent;
-} /* Firefox */
+}
 ::-webkit-scrollbar {
   width: 12px;
   height: 12px;
-} /* WebKit */
+}
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background-color: var(--turq-600);
   border-radius: 8px;
-  border: 3px solid transparent; /* creates a “pill” */
+  border: 3px solid transparent; 
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -1001,18 +1072,175 @@ html {
 
 /* === Animations === */
 @keyframes dropdown-enter {
-  from {
-    opacity: 0;
-    transform: scaleY(0.98) translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: scaleY(0.98) translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes dropdown-item-enter {
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  to { opacity: 1; transform: none; }
+}
+
+/* === Material List View Styles ========================================== */
+
+/* Utility: Makes the card match the sidebar height exactly */
+.full-height-card {
+  display: flex;
+  flex-direction: column;
+  /* 100vh - (24px top margin + 24px bottom margin) */
+  height: calc(100dvh - 48px);
+  /* 9px margin + 15px padding parent = 24px total top spacing */
+  margin-top: 9px; 
+  padding: 0;
+  overflow: hidden;
+}
+
+/* The main grid container */
+.material-view {
+  display: grid;
+  /* 300px Families | 250px Items | Remaining for Prices */
+  grid-template-columns: 300px 250px 1fr; 
+  flex: 1; /* Takes all remaining vertical space in the card */
+  min-height: 0; /* Critical for nested flex scrolling */
+  /* No border needed here, the card has it */
+}
+
+/* Individual columns */
+.material-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0; 
+  border-right: 1px solid var(--border);
+  height: 100%;
+}
+.material-col:last-child {
+  border-right: none;
+}
+
+/* Sticky Headers inside columns */
+.material-header {
+  height: 40px; /* Fixed height */
+  padding: 0 12px;
+  background: var(--bg-750);
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  
+  /* Flex layout for title + button */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0; /* Don't shrink */
+}
+
+/* Scrollable content area */
+.material-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* List items (Buttons) */
+.material-list-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-300);
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  transition: background 0.15s ease;
+}
+.material-list-btn:hover {
+  background: var(--bg-700);
+}
+.material-list-btn.active {
+  background: var(--turq-500);
+  color: white;
+  font-weight: 700;
+}
+
+/* Search Bar Grid */
+.search-wrapper {
+  display: grid;
+  grid-template-columns: 300px 250px 1fr; /* Matches material-view */
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-800);
+  flex-shrink: 0;
+}
+.search-cell {
+  padding: 10px;
+  border-right: 1px solid var(--border);
+}
+.search-cell:last-child {
+  border-right: none;
+}
+
+/* Links in tables */
+.ew-link {
+  color: var(--turq-200);
+  text-decoration: underline;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: inherit;
+}
+.ew-link:hover {
+  color: var(--turq-300);
+}
+
+/* === Modal / Dialog Styles ============================================== */
+
+/* Read-only Info Rows */
+.info-row {
+  margin-bottom: 8px;
+}
+.info-label {
+  font-size: 0.75rem;
+  color: var(--text-300);
+  display: block;
+  margin-bottom: 2px;
+}
+.info-value {
+  font-size: 0.9rem;
+  color: var(--text-100);
+  font-weight: 600;
+}
+
+/* Text-only buttons (like "Select Existing") */
+.text-btn {
+  font-size: 0.75rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--turq-200);
+  text-decoration: underline;
+  padding: 0;
+}
+.text-btn:hover {
+  color: var(--turq-300);
+}
+
+/* === NEW Utilities for PanelsManufactureEstimate ======================== */
+.text-right {
+  text-align: right;
+}
+
+.ml-auto {
+  margin-left: auto;
+}
+
+/* Standard input style for tables */
+.ew-input-table {
+  width: 100%;
+  max-width: 110px;
+  text-align: right;
+  padding: 4px 8px;
+}
+
+.flex-between-center {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }

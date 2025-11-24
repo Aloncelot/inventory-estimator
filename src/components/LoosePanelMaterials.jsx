@@ -510,7 +510,7 @@ export default function LoosePanelMaterials({
               />
               <button
                 type="button"
-                className="ew-btn"
+                className="ew-btn ew-icon-btn"
                 onClick={() => {
                   setPanelBandEdited(false);
                   setExtInputs(prev => ({
@@ -997,8 +997,7 @@ const Row = memo(
                 {n.plan || "—"}
               </span>
               <button
-                className="ew-btn"
-                style={{ padding: "4px 8px" }}
+                className="ew-btn ew-btn-note"
                 onClick={() => toggleOpen(noteKey)}
               >
                 {n.open ? "Hide" : "Notes"}

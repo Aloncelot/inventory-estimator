@@ -4,10 +4,10 @@
 import React, {
   Fragment,
   useMemo,
-  useState, // For local input state
+  useState,
   useEffect,
-  useEffectEvent, // The new hook
   useCallback,
+  useRef,
   memo,
 } from "react";
 import ItemPicker from "@/components/ItemPicker";
@@ -78,7 +78,6 @@ const Row = memo(
     );
   },
   (prev, next) => {
-    // This shallow comparison is imperfect but good enough here
     return (
       prev.label === next.label &&
       prev.hint === next.hint &&
@@ -92,7 +91,7 @@ const Row = memo(
 export default function NailsAndBracing({
   title = "General — Nails & bracing (all levels)",
   data,
-  onChange, // This is a stable function: (updaterFn) => void
+  onChange,
   totals = {},
 }) {
   const {
@@ -123,17 +122,17 @@ export default function NailsAndBracing({
   // --- START: Input Optimization ---
   const [localWaste, setLocalWaste] = useState(waste);
 
-  useEffect(() => {
-    // When props change, merge them into localWaste,
-    // ensuring defaults are kept if a key is missing
-    setLocalWaste(prev => ({
-        nailsConcrete: waste.nailsConcrete ?? prev.nailsConcrete ?? 40,
-        nailsSheathing: waste.nailsSheathing ?? prev.nailsSheathing ?? 40,
-        nailsFraming: waste.nailsFraming ?? prev.nailsFraming ?? 40,
-        tempBracing: waste.tempBracing ?? prev.tempBracing ?? 0,
-    }));
-  }, [waste]);
+  // Corrección: Desestructuramos los valores primitivos para evitar el loop
+  const { nailsConcrete, nailsSheathing, nailsFraming, tempBracing } = waste;
 
+  useEffect(() => {
+    setLocalWaste((prev) => ({
+      nailsConcrete: nailsConcrete ?? prev.nailsConcrete ?? 40,
+      nailsSheathing: nailsSheathing ?? prev.nailsSheathing ?? 40,
+      nailsFraming: nailsFraming ?? prev.nailsFraming ?? 40,
+      tempBracing: tempBracing ?? prev.tempBracing ?? 0,
+    }));
+  }, [nailsConcrete, nailsSheathing, nailsFraming, tempBracing]);
 
   const handleLocalWasteChange = useCallback((key, e) => {
     setLocalWaste((prev) => ({ ...prev, [key]: e.target.value }));
@@ -164,7 +163,6 @@ export default function NailsAndBracing({
         commitWasteChange(key, e.target.value);
         e.target.blur();
       } else if (e.key === "Escape") {
-        // On escape, revert local state to the prop state
         setLocalWaste(waste);
         e.target.blur();
       }
@@ -200,7 +198,7 @@ export default function NailsAndBracing({
     setSel,
   ]);
 
-  // --- Calculations (useMemo) ---
+  // --- Calculations ---
   const allSheetsLoose = useMemo(
     () => Number(sheetsBandAll) + Number(sheetsExtraAll),
     [sheetsBandAll, sheetsExtraAll]
@@ -260,17 +258,23 @@ export default function NailsAndBracing({
     [concrete.subtotal, sheathing.subtotal, framing.subtotal, bracing.subtotal]
   );
 
-  // --- useEffectEvent Refactor ---
-  const onDataChange = useEffectEvent(onChange);
+  // --- CORRECCIÓN: Usar patrón de Ref en lugar de useEffectEvent ---
+  const lastSentTotalRef = useRef(null);
+
   useEffect(() => {
     const t = Number(sectionTotal) || 0;
-    onDataChange((prevData) => ({
-      ...prevData,
-      total: t,
-    }));
-  }, [sectionTotal]);
+    
+    if (t !== lastSentTotalRef.current) {
+        // Solo actualizamos al padre si el valor numérico cambió
+        onChange((prevData) => ({
+          ...prevData,
+          total: t,
+        }));
+        lastSentTotalRef.current = t;
+    }
+  }, [sectionTotal, onChange]);
 
-  // ---- Memoize pickers and hints (FULLY WRITTEN) ----
+  // ---- Pickers ----
   const concretePicker = useMemo(
     () => (
       <ItemPicker
@@ -327,6 +331,7 @@ export default function NailsAndBracing({
     [onBracingSelect, sel.tempBracing]
   );
 
+  // Hints
   const concreteHint = useMemo(() => {
     const base = Number(ptPiecesAll) || 0;
     const n = new Intl.NumberFormat("en-US").format(base);
@@ -382,10 +387,12 @@ export default function NailsAndBracing({
             </button>
             <span className="text-section-header">{title}</span>
             <div
-              className="ew-right text-subtotal-orange"
+              className="ew-right"
               style={{
-                marginLeft: "auto",                
+                marginLeft: "auto",
+                color: "#f18d5b",
                 fontWeight: "700",
+                fontSize: "16px",
                 fontFamily: "'Nova Mono', monospace",
               }}
             >
@@ -418,7 +425,6 @@ export default function NailsAndBracing({
                 className="ew-input focus-anim"
                 type="number"
                 inputMode="decimal"
-                // *** LA CORRECCIÓN ESTÁ AQUÍ ***
                 value={localWaste.nailsConcrete ?? 0}
                 onChange={(e) => handleLocalWasteChange("nailsConcrete", e)}
                 onBlur={(e) => handleWasteBlur("nailsConcrete", e)}
@@ -438,7 +444,6 @@ export default function NailsAndBracing({
                 className="ew-input focus-anim"
                 type="number"
                 inputMode="decimal"
-                // *** LA CORRECCIÓN ESTÁ AQUÍ ***
                 value={localWaste.nailsSheathing ?? 0}
                 onChange={(e) => handleLocalWasteChange("nailsSheathing", e)}
                 onBlur={(e) => handleWasteBlur("nailsSheathing", e)}
@@ -458,7 +463,6 @@ export default function NailsAndBracing({
                 className="ew-input focus-anim"
                 type="number"
                 inputMode="decimal"
-                // *** LA CORRECCIÓN ESTÁ AQUÍ ***
                 value={localWaste.nailsFraming ?? 0}
                 onChange={(e) => handleLocalWasteChange("nailsFraming", e)}
                 onBlur={(e) => handleWasteBlur("nailsFraming", e)}
@@ -478,7 +482,6 @@ export default function NailsAndBracing({
                 className="ew-input focus-anim"
                 type="number"
                 inputMode="decimal"
-                // *** LA CORRECCIÓN ESTÁ AQUÍ ***
                 value={localWaste.tempBracing ?? 0}
                 onChange={(e) => handleLocalWasteChange("tempBracing", e)}
                 onBlur={(e) => handleWasteBlur("tempBracing", e)}
