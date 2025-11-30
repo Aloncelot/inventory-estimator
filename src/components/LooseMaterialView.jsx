@@ -7,7 +7,6 @@ import LooseMaterialSection from './LooseMaterialSection';
 import AddButton from '@/components/ui/AddButton';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { unitPriceFrom } from '@/domain/lib/parsing';
-// ... (DnD Imports unchanged) ...
 import {
   DndContext,
   DragOverlay,
@@ -40,7 +39,6 @@ const calcSectionTotal = (rows = []) => {
     }, 0);
 };
 
-// --- Sortable Wrapper (Unchanged) ---
 function SortableSection({ section, ...props }) {
   const {
     attributes,
@@ -72,6 +70,7 @@ function SortableSection({ section, ...props }) {
 }
 
 export default function LooseMaterialView({ onTotalChange }) {
+    // --- NEW: Import blankLevelLooseSection ---
     const { projectData, updateProject, blankLooseSection, blankLevelLooseSection, isLoaded } = useProject();
     const [sectionToDelete, setSectionToDelete] = useState(null);
     const [activeId, setActiveId] = useState(null); 
@@ -109,19 +108,19 @@ export default function LooseMaterialView({ onTotalChange }) {
         );
     };
 
-    // --- ADD LOGIC ---
     const addSection = () => {
         const newSection = blankLooseSection("New Section");
         updateLooseList(prevList => [...prevList, newSection]);
     };
 
+    // --- NEW: Add Level Function ---
     const addLevelSection = () => {
-        // Calculate the next level index based on existing "X Level" sections
+        // Count how many existing sections have "Level" in their name to determine number
         const levelCount = looseList.filter(s => s.name.includes('Level')).length;
-        const newSection = blankLevelLooseSection(levelCount); // index 0 = 1st, 1 = 2nd...
+        const newSection = blankLevelLooseSection(levelCount); // 0=1st, 1=2nd, etc.
         updateLooseList(prevList => [...prevList, newSection]);
     };
-    // -----------------
+    // -------------------------------
 
     const requestDeleteSection = (id) => { setSectionToDelete(id); };
     
@@ -179,8 +178,8 @@ export default function LooseMaterialView({ onTotalChange }) {
         return <div className="app-content"><div className="ew-card">Loading...</div></div>;
     }
 
-    // Update default sections list to NOT prevent deletion of "1st Level" since it's dynamic now
-    const defaultSections = ['Foundation', 'Basement', 'Roof'];
+    // Prevent deleting Foundation/Basement/Roof, but allow deleting Levels
+    const protectedSections = ['Foundation', 'Basement', 'Roof'];
     
     const visibleSections = looseList.filter(s => !s.isHidden);
     const hiddenSections = looseList.filter(s => s.isHidden);
@@ -213,7 +212,8 @@ export default function LooseMaterialView({ onTotalChange }) {
                                 key={section.id}
                                 section={section}
                                 onUpdate={updater => handleSectionChange(section.id, updater)}
-                                onRemove={defaultSections.includes(section.name) ? undefined : () => requestDeleteSection(section.id)}
+                                // Only protect specific named sections
+                                onRemove={protectedSections.includes(section.name) ? undefined : () => requestDeleteSection(section.id)}
                                 onToggleHidden={() => toggleSectionVisibility(section.id)}
                                 foundationData={foundationSection} 
                                 isHidden={false}
@@ -238,7 +238,7 @@ export default function LooseMaterialView({ onTotalChange }) {
             <div className="ew-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem' }}>
                 <div className="ew-subtle">Add another section</div>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    {/* --- NEW BUTTON --- */}
+                    {/* --- NEW BUTTON: Add Level --- */}
                     <AddButton onClick={addLevelSection} title="Add Level" label="Add Level" />
                     <AddButton onClick={addSection} title="Add Custom Section" label="Add Custom" />
                 </div>

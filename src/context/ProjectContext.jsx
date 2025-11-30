@@ -8,8 +8,7 @@ import { getFinalItem } from '@/lib/catalog';
 
 const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
 
-export const DEFAULT_LOOSE_SECTIONS = ["Foundation", "Basement", "1st Level", "Roof"];
-
+// --- 1. DEFINE THE DEFAULT BLANK STRUCTURE ---
 const blankSection = (props = {}) => ({
   id: generateId('section-'),
   name: "",
@@ -41,15 +40,16 @@ const blankTrussRow = (label, defaultAmount = 0) => ({
   subtotal: defaultAmount,
 });
 
-const blankLooseRow = () => ({
+// Helper to create rows with defaults
+const blankLooseRow = (type, vendor, family, size) => ({
   id: generateId('loose-item-'),
   type: type || 'Custom Item',
-  item: null, // El objeto del ItemPicker
+  item: null, 
   defaultVendor: vendor,
   defaultFamily: family,
   defaultSize: size,
   qty: 0,
-  wastePct: 0,
+  wastePct: 5,
   notes: '',
   plan: '',
   inputs: {},
@@ -61,10 +61,11 @@ const blankLooseSection = (name = "New Section") => ({
   rows: [], 
   collapsed: false,
   inputs: {}, 
-  sel: {}, 
-  waste: {}, 
+  sel: {},    
+  waste: {},  
 });
 
+// --- Template for Level sections (1st Level, etc.) ---
 const blankLevelLooseSection = (index) => {
     const name = `${index === 0 ? '1st' : index === 1 ? '2nd' : (index + 1) + 'th'} Level`;
     return {
@@ -99,7 +100,7 @@ const blankEstimateData = () => ({
   looseList: [
     blankLooseSection("Foundation"),
     blankLooseSection("Basement"),
-    blankLevelLooseSection(0), 
+    blankLevelLooseSection(0), // Default with rows
     blankLooseSection("Roof"),
   ],
   summaryInfo: {
@@ -136,9 +137,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     }, [user]);
 
     const getProjectsCollectionPath = useCallback(() => {
-        if (!appId) {
-            return null;
-        };
+        if (!appId) return null;
          return `artifacts/${appId}/projects`;
      }, [appId]);
 
@@ -151,7 +150,6 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     const fetchProjectsList = useCallback(async (currentUserId) => {
         const collectionPath = currentUserId ? `artifacts/${currentUserId}/projects` : null;
         if (!collectionPath || isListLoading) return;
-        
         setIsListLoading(true);
         try {
             const q = query(collection(db, collectionPath), orderBy('updatedAt', 'desc'));
@@ -172,10 +170,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
     const createNewProject = useCallback(async (name) => {
         const collectionPath = getProjectsCollectionPath();
-        if (!user || !collectionPath || isSaving) {
-            return null;
-        }
-
+        if (!user || !collectionPath || isSaving) return null;
         setIsSaving(true); 
         try {
             const newProjectData = {
@@ -213,14 +208,10 @@ export function ProjectProvider({ children, initialProjectId = null }) {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 
-                // Migraciones de datos antiguos
-                if (!data.estimateData) {
-                   data.estimateData = blankEstimateData();
-                }
+                if (!data.estimateData) data.estimateData = blankEstimateData();
                 if (!data.estimateData.levels || data.estimateData.levels.length === 0) {
                    data.estimateData.levels = [blankLevel({ index: 0 })];
                 }
-                
                 if (!data.estimateData.trusses) {
                     data.estimateData.trusses = [
                         blankTrussRow("Roof Trusses & Hangers"),
@@ -239,13 +230,26 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                 }
                 if (data.estimateData.snapshotTotals === undefined) data.estimateData.snapshotTotals = null;
 
+                // --- Migration for Loose List ---
                 if (!data.estimateData.looseList) {
                    data.estimateData.looseList = [
                     blankLooseSection("Foundation"),
                     blankLooseSection("Basement"),
-                    blankLevelLooseSection(0), // Use new template for migration
+                    blankLevelLooseSection(0), // New project structure
                     blankLooseSection("Roof"),
                    ];
+                } else {
+                    // --- NEW: Check if 1st Level is empty in existing project ---
+                    const looseList = data.estimateData.looseList;
+                    const level1Index = looseList.findIndex(s => s.name === "1st Level");
+                    if (level1Index !== -1) {
+                        // If 1st Level exists but has 0 rows, inject the defaults
+                        if (!looseList[level1Index].rows || looseList[level1Index].rows.length === 0) {
+                            const template = blankLevelLooseSection(0);
+                            // Copy default rows to the existing section
+                            looseList[level1Index].rows = template.rows;
+                        }
+                    }
                 }
                   
                 setProjectData(data);
@@ -261,14 +265,14 @@ export function ProjectProvider({ children, initialProjectId = null }) {
             setIsLoaded(true); 
         }
     }, [isLoading, getProjectPath, db]);
-     
-     const saveProject = useCallback(async (pId = projectId, data = projectData) => {
-        if (!user || !pId || !data || isSaving) return;
-        const path = getProjectPath(pId);
-        if (!path) return; 
 
-        setIsSaving(true);
-        try {
+     const saveProject = useCallback(async (pId = projectId, data = projectData) => {
+         if (!user || !pId || !data || isSaving) return;
+         const path = getProjectPath(pId);
+          if (!path) return; 
+
+         setIsSaving(true);
+         try {
              const docRef = doc(db, path);
              const saveData = {
                  ...data,
@@ -278,19 +282,19 @@ export function ProjectProvider({ children, initialProjectId = null }) {
              await setDoc(docRef, saveData, { merge: true }); 
              setProjectData(saveData);
              setProjectsList(list => list.map(p => p.id === pId ? {...p, updatedAt: saveData.updatedAt.toDate()} : p).sort((a,b) => b.updatedAt - a.updatedAt));
-        } catch (error) {
+         } catch (error) {
              console.error("Error saving project:", error);
-        } finally {
+         } finally {
              setIsSaving(false);
-        }
+         }
      }, [user, projectId, projectData, isSaving, getProjectPath, db]);
 
     const updateProject = useCallback((updaterFn) => {
-        setProjectData(prevData => {
-            if (!prevData) return null;
-            const newEstimateData = updaterFn(prevData.estimateData || blankEstimateData());
-            return {
-                ...prevData,
+         setProjectData(prevData => {
+             if (!prevData) return null;
+             const newEstimateData = updaterFn(prevData.estimateData || blankEstimateData());
+             return {
+                 ...prevData,
                 estimateData: newEstimateData
             };
         });
@@ -316,7 +320,6 @@ export function ProjectProvider({ children, initialProjectId = null }) {
           else return selItem;
         };
 
-        // 1. Refresh Levels (Exterior/Interior/Loose/Nails)
         for (const level of newEstimateData.levels) {
           const allSections = [...(level.exteriorSections || []), ...(level.interiorSections || [])];
           for (const section of allSections) {
@@ -334,11 +337,16 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         if (newEstimateData.nailsAndBracing?.sel) {
            for (const key in newEstimateData.nailsAndBracing.sel) newEstimateData.nailsAndBracing.sel[key] = await refreshItem(newEstimateData.nailsAndBracing.sel[key]);
         }
-
+        
         if (newEstimateData.looseList) {
            for (const section of newEstimateData.looseList) {
                for (let i = 0; i < section.rows.length; i++) {
                    section.rows[i].item = await refreshItem(section.rows[i].item);
+               }
+               if (section.sel) {
+                 for (const key in section.sel) {
+                   section.sel[key] = await refreshItem(section.sel[key]);
+                 }
                }
            }
         }
@@ -351,7 +359,6 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         setIsSaving(false); 
       }
     }, [projectData, updateProject]);
-
 
     useEffect(() => {
         if (appId) {
@@ -383,9 +390,9 @@ export function ProjectProvider({ children, initialProjectId = null }) {
          refreshProjectPrices, 
          blankLevel,
          blankSection,
-         blankLooseRow,
-         blankLooseSection,
-         blankLevelLooseSection,
+         blankLooseRow, 
+         blankLooseSection, 
+         blankLevelLooseSection, 
          isLoaded,
          isLoading,
          isSaving,

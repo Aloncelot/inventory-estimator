@@ -16,9 +16,34 @@ import {
   calcSheathing, 
   calcTape, 
   calcConcreteNails, 
-  calcLallyColumn 
+  calcLallyColumn,
+  calcRimboard,
+  calcJoist,
+  calcIJoist,
+  calcBeam,
+  calcSubfloor,
+  calcGlue,
+  calcStrapping
 } from '@/domain/calculators';
 import { getSizesForFamily } from '@/lib/catalog';
+
+// --- DnD Kit Imports ---
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const moneyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const fmt = (n) => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : '—');
@@ -34,14 +59,10 @@ const wordsPreview = (s = '', maxWords = 8) => {
   return parts.length > maxWords ? `${preview}…` : preview || '';
 };
 
-// --- Debounced Inputs (Performance Optimization) ---
+// --- Debounced Inputs ---
 function DebouncedInput({ value: propValue, onChange, className, ...props }) {
-  // Inicializar con un valor seguro (si propValue es null/undefined, usar '')
   const [localValue, setLocalValue] = useState(propValue ?? '');
-  
-  useEffect(() => { 
-      setLocalValue(propValue ?? ''); 
-  }, [propValue]);
+  useEffect(() => { setLocalValue(propValue ?? ''); }, [propValue]);
 
   const commit = () => {
     if (localValue !== propValue) onChange(localValue);
@@ -71,7 +92,7 @@ function DebouncedTextarea({ value: propValue, onChange, className, ...props }) 
     if (localValue !== propValue) onChange(localValue);
   };
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { commit(); e.target.blur(); }
+    if (e.key === 'Enter') { commit(); e.target.blur(); }
     else if (e.key === 'Escape') { setLocalValue(propValue ?? ''); e.target.blur(); }
   };
   
@@ -109,20 +130,22 @@ const LOOSE_ITEMS_OPTIONS = [
   "Panel band sheathing", "PT Plates - Loose"
 ].map(label => ({ value: label, label }));
 
-
 export default function LooseMaterialSection({
     section,
     onUpdate,
     onRemove,
     onToggleHidden,
-    dragHandleProps,
+    dragHandleProps, // Handle for the section itself
     foundationData,
 }) {
     const { id, name, rows = [], collapsed = false, inputs = {}, sel={}, waste={}, notes={} } = section;
 
+    // --- Section Identification ---
     const isFoundation = name === 'Foundation';
     const isBasement = name === 'Basement';
+    const isLevel = name.includes('Level'); 
 
+    // --- Local State for Inputs ---
     const [localFoundationLF, setLocalFoundationLF] = useState(String(inputs.foundationLF || 0));
     const [localSillPlateLF, setLocalSillPlateLF] = useState(String(inputs.sillPlateLF || 0));
     const [sillPlateModified, setSillPlateModified] = useState(false);
@@ -130,6 +153,7 @@ export default function LooseMaterialSection({
     const [localBlockingLF, setLocalBlockingLF] = useState(String(inputs.blockingLF || 0));
     const [localColQty, setLocalColQty] = useState(String(inputs.colQty || 0));
 
+    // Expanded state for Plan/Notes
     const [expandedRows, setExpandedRows] = useState(new Set());
     const toggleRow = (rowId) => {
         const newSet = new Set(expandedRows);
@@ -138,11 +162,18 @@ export default function LooseMaterialSection({
         setExpandedRows(newSet);
     };
 
+    // --- Sensors for Row Sorting ---
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
+
+    // Sync Effects
     useEffect(() => { setLocalFoundationLF(String(inputs.foundationLF || 0)) }, [inputs.foundationLF]);
     useEffect(() => { setLocalSillPlateLF(String(inputs.sillPlateLF || 0)) }, [inputs.sillPlateLF]);
     useEffect(() => { setLocalBlockingLF(String(inputs.blockingLF || 0)) }, [inputs.blockingLF]);
     useEffect(() => { setLocalColQty(String(inputs.colQty || 0)) }, [inputs.colQty]);
-
+    
     const updateInput = useCallback((key, value) => {
         onUpdate(prev => ({ ...prev, inputs: { ...prev.inputs, [key]: value } }));
     }, [onUpdate]);
@@ -169,6 +200,21 @@ export default function LooseMaterialSection({
         }));
     }, [onUpdate]);
 
+    // DnD Reorder Handler
+    const handleDragEnd = (event) => {
+        const { active, over } = event;
+        if (active.id !== over?.id) {
+            onUpdate((prev) => {
+                const oldIndex = prev.rows.findIndex((r) => r.id === active.id);
+                const newIndex = prev.rows.findIndex((r) => r.id === over.id);
+                return {
+                    ...prev,
+                    rows: arrayMove(prev.rows, oldIndex, newIndex)
+                };
+            });
+        }
+    };
+
     const updateCalcNote = useCallback((rowKey, field, value) => {
          onUpdate(prev => ({
             ...prev,
@@ -181,6 +227,7 @@ export default function LooseMaterialSection({
     
     const getCalcNote = (rowKey) => (notes[rowKey] || { plan: '', comment: '' });
 
+    // --- Input Handlers ---
     const handleFoundationLFBlur = () => {
         const val = Number(localFoundationLF);
         updateInput('foundationLF', val);
@@ -196,8 +243,7 @@ export default function LooseMaterialSection({
     const handleBlockingBlur = () => updateInput('blockingLF', Number(localBlockingLF));
     const handleColBlur = () => updateInput('colQty', Number(localColQty));
 
-
-    // --- 1. Foundation Rows ---
+    // --- 1. Foundation Rows Calculation ---
     const foundationRows = useMemo(()=> {
         if(!isFoundation) return [];
         const fLf = Number(inputs.foundationLF) || 0;
@@ -205,7 +251,6 @@ export default function LooseMaterialSection({
         const wFoam = Number(waste.foamSeal ?? 5);
         const wSill = Number(waste.sillPlate ?? 5);
         
-        // Dynamically calculate board length from selection
         const sillBoardLen = parseBoardLengthFt(getSize(sel.sillPlate)) || 16;
 
         const row1 = calcFoamSeal({ lengthLF:fLf, wastePct:wFoam, item:getItem(sel.foamSeal) });
@@ -225,7 +270,7 @@ export default function LooseMaterialSection({
          ];
     }, [isFoundation, inputs, sel, waste]);
 
-    // --- 2. Basement Rows ---
+    // --- 2. Basement Rows Calculation ---
     const basementRows = useMemo(() => {
         if (!isBasement) return [];
 
@@ -273,20 +318,82 @@ export default function LooseMaterialSection({
         ];
     }, [isBasement, inputs, sel, waste, foundationData]);
 
-    // --- 3. Manual Rows ---
+    // --- 3. Manual / Mixed Rows ---
     const calculatedManualRows = useMemo(() => {
+        let subfloorSheetsForGlue = 0; 
+
+        const subfloorRow = rows.find(r => (r.type||'').toLowerCase().includes('subfloor'));
+        if (subfloorRow) {
+             const sfArea = Number(subfloorRow.inputs?.area || 0);
+             const sfWaste = Number(subfloorRow.wastePct) || 0;
+             const sfRaw = sfArea / 32;
+             subfloorSheetsForGlue = Math.ceil(sfRaw * (1 + sfWaste/100));
+        }
+
         return rows.map(row => {
             const item = getItem(row.item);
             let result = { qtyRaw: Number(row.qty) || 0, qtyFinal: 0, unit: 'pcs', unitPrice: 0, subtotal: 0 };
             const typeLower = (row.type || '').toLowerCase();
             const wastePct = Number(row.wastePct) || 0;
 
-            if (typeLower.includes('studs')) {
+            // --- Rimboard ---
+            if (typeLower.includes('rimboard')) {
+                const inputLF = row.inputs?.lengthLF;
+                const defaultLF = foundationData?.inputs?.foundationLF || 0;
+                let lenToUse = 0;
+                if (isLevel && typeLower === 'rimboard') {
+                    lenToUse = Number(inputs.rimboardLF !== undefined ? inputs.rimboardLF : defaultLF);
+                } else {
+                    lenToUse = Number(inputLF || 0);
+                }
+                const boardLen = parseBoardLengthFt(getSize(item)) || 16;
+                result = calcRimboard({ lengthLF: lenToUse, boardLenFt: boardLen, wastePct, item });
+            
+            // --- Joist ---
+            } else if (typeLower === 'joist' || typeLower === 'joists') { 
+                const lenToUse = Number(row.inputs?.lengthLF || 0);
+                const boardLen = parseBoardLengthFt(getSize(item)) || 16;
+                result = calcJoist({ lengthLF: lenToUse, boardLenFt: boardLen, wastePct, item });
+            
+            // --- I-Joist ---
+            } else if (typeLower.includes('i-joist')) {
+                const lenToUse = Number(row.inputs?.lengthLF || 0);
+                result = calcIJoist({ lengthLF: lenToUse, wastePct, item });
+                
+            // --- Beam ---
+            } else if (typeLower.includes('beam') || typeLower.includes('beams')) {
+                const lenToUse = Number(row.inputs?.lengthLF || 0);
+                const boardLen = parseBoardLengthFt(getSize(item)) || 16;
+                result = calcBeam({ lengthLF: lenToUse, boardLenFt: boardLen, wastePct, item });
+
+            // --- Blocking ---
+            } else if (typeLower.includes('blocking') && isLevel) {
+                 const lenToUse = Number(row.inputs?.lengthLF || 0);
+                 const boardLen = parseBoardLengthFt(getSize(item)) || 16;
+                 result = calcPlates({ lengthLF: lenToUse, boardLenFt: boardLen, wastePct, item });
+
+            // --- Subfloor ---
+            } else if (typeLower.includes('subfloor')) {
+                 const areaToUse = Number(row.inputs?.area || 0);
+                 result = calcSubfloor({ areaSqFt: areaToUse, wastePct, item });
+
+            // --- Glue ---
+            } else if (typeLower.includes('glue')) {
+                 result = calcGlue({ subfloorSheets: subfloorSheetsForGlue, wastePct, item });
+
+            // --- Strapping ---
+            } else if (typeLower.includes('strapping')) {
+                 const lenToUse = Number(row.inputs?.lengthLF || 0);
+                 const boardLen = parseBoardLengthFt(getSize(item)) || 16;
+                 result = calcStrapping({ lengthLF: lenToUse, boardLenFt: boardLen, wastePct, item });
+
+            // --- Standard Items ---
+            } else if (typeLower.includes('studs')) {
                 const lf = Number(row.inputs?.lengthLF || 0);
                 const sp = Number(row.inputs?.spacing || 16);
                 const mu = Number(row.inputs?.multiplier || 1);
                 result = calcStuds({ lengthLF: lf, spacingIn: sp, multiplier: mu, wastePct, item });
-            } else if (typeLower.includes('plate') || typeLower.includes('blocking')) {
+            } else if (typeLower.includes('plate')) {
                 const lf = Number(row.inputs?.lengthLF || 0);
                 const boardLen = parseBoardLengthFt(getSize(item)) || 16;
                 result = calcPlates({ lengthLF: lf, boardLenFt: boardLen, wastePct, item });
@@ -299,6 +406,7 @@ export default function LooseMaterialSection({
                 const rollLen = 75; 
                 result = calcTape({ seamLF: lf, rollLenFt: rollLen, wastePct, item });
             } else {
+               // Default Manual
                const qRaw = Number(row.qty) || 0;
                const qFinal = Math.ceil(qRaw * (1 + wastePct / 100));
                const uPrice = unitPriceFrom(item);
@@ -312,7 +420,7 @@ export default function LooseMaterialSection({
             }
             return { ...row, ...result, isCalc: false };
         });
-    }, [rows]);
+    }, [rows, isLevel, foundationData]); 
 
     // --- Handlers ---
     const setCollapsed = useCallback((isCollapsed) => {
@@ -343,6 +451,7 @@ export default function LooseMaterialSection({
         onUpdate(prev => ({ ...prev, rows: [...(prev.rows || []), newRow] }));
     }, [onUpdate]);
 
+
     const sectionSubtotal = useMemo(() => {
         const fTotal = foundationRows.reduce((s, r) => s + (r.subtotal || 0), 0);
         const bTotal = basementRows.reduce((s, r) => s + (r.subtotal || 0), 0);
@@ -360,11 +469,6 @@ export default function LooseMaterialSection({
                 onOpenChange={(isOpen) => setCollapsed(!isOpen)}
                 bar={({ open, toggle }) => (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                        <button
-                            type="button" className="acc__button" style={{ cursor: 'grab', border: 'none', padding: '0 4px' }} title="Drag to reorder" {...dragHandleProps}
-                        >
-                            <img src="/icons/drag-handle.png" width={12} height={12} alt="Drag" style={{ opacity: 0.5 }} />
-                        </button>
                         <button type="button" className="acc__button" onClick={toggle} aria-expanded={open} title={open ? "Collapse" : "Expand"}>
                             <img src={open ? '/icons/down.png' : '/icons/minimize.png'} alt={open ? 'Collapse' : 'Expand'} width={16} height={16} className="acc__chev" style={{ display: 'inline-block', verticalAlign: 'middle' }} />
                         </button>
@@ -375,13 +479,16 @@ export default function LooseMaterialSection({
                                 <button className="ew-btn ew-icon-btn" onClick={onToggleHidden} title="Hide section">
                                      <img src="/icons/eye-off.png" width={20} height={20} alt="Hide" />
                                 </button>
+                                <button type="button" className="acc__button" style={{ cursor: 'grab', border: 'none', padding: '0 4px' }} title="Drag to reorder" {...dragHandleProps}>
+                                    <img src="/icons/drag-handle.png" width={12} height={12} alt="Drag" style={{ opacity: 0.5 }} />
+                                </button>
                             </div>
                         )}
                         {onRemove && (<div style={{ marginLeft: '4px' }}> <RemoveButton onClick={onRemove} title="Remove section" label="Remove section" /></div>)}
                     </div>
                 )}
             >
-                {/* --- FOUNDATION INPUTS --- */}
+                {/* ... (Inputs unchanged) ... */}
                 {isFoundation && (
                     <div className="controls4" style={{ marginBottom: 12 }}>
                         <label>
@@ -425,8 +532,6 @@ export default function LooseMaterialSection({
                         </label>
                     </div>
                 )}
-
-                {/* --- BASEMENT INPUTS --- */}
                 {isBasement && (
                      <div className="controls4" style={{ marginBottom: 12 }}>
                         <label>
@@ -456,7 +561,7 @@ export default function LooseMaterialSection({
 
                 <div className="ew-grid ew-head" style={{ '--cols': gridCols }}>
                     <div>Item Name</div>
-                    <div>Selection</div>
+                    <div>Family · Size · Vendor</div>
                     <div className="ew-right">Qty / LF</div>
                     <div className="ew-right">Waste %</div>
                     <div className="ew-right">Final</div>
@@ -494,23 +599,47 @@ export default function LooseMaterialSection({
                         />
                     ))}
 
-                    {calculatedManualRows.map(r => (
-                         <RowItem 
-                            key={r.id} 
-                            row={r} 
-                            gridCols={gridCols}
-                            pickerValue={r.item}
-                            onUpdateItem={(i) => updateRow(r.id, { item: i })}
-                            onUpdateWaste={(v) => updateRow(r.id, { wastePct: Number(v) })}
-                            onUpdateNote={(field, val) => updateRow(r.id, { [field === 'comment' ? 'notes' : field]: val })}
-                            onUpdateInput={(field, val) => {
-                                if (field === 'qty') updateRow(r.id, { qty: Number(val) });
-                                else updateRow(r.id, { inputs: { ...r.inputs, [field]: Number(val) } });
-                            }}
-                            onRemove={() => removeRow(r.id)}
-                            isManual={true}
-                        />
-                    ))}
+                    {/* --- MANUAL / SORTABLE ROWS --- */}
+                    <DndContext
+                        sensors={useSensors(
+                            useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+                            useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+                        )}
+                        collisionDetection={closestCenter}
+                        onDragEnd={(event) => {
+                             const { active, over } = event;
+                             if (active.id !== over?.id) {
+                                 onUpdate(prev => {
+                                     const oldIndex = prev.rows.findIndex(r => r.id === active.id);
+                                     const newIndex = prev.rows.findIndex(r => r.id === over.id);
+                                     return { ...prev, rows: arrayMove(prev.rows, oldIndex, newIndex) };
+                                 });
+                             }
+                        }}
+                    >
+                        <SortableContext 
+                            items={calculatedManualRows.map(r => r.id)}
+                            strategy={verticalListSortingStrategy}
+                        >
+                            {calculatedManualRows.map(r => (
+                                 <SortableRowItem 
+                                    key={r.id} 
+                                    row={r} 
+                                    gridCols={gridCols}
+                                    pickerValue={r.item}
+                                    onUpdateItem={(i) => updateRow(r.id, { item: i })}
+                                    onUpdateWaste={(v) => updateRow(r.id, { wastePct: Number(v) })}
+                                    onUpdateNote={(field, val) => updateRow(r.id, { [field === 'comment' ? 'notes' : field]: val })}
+                                    onUpdateInput={(field, val) => {
+                                        if (field === 'qty') updateRow(r.id, { qty: Number(val) });
+                                        else updateRow(r.id, { inputs: { ...r.inputs, [field]: Number(val) } });
+                                    }}
+                                    onRemove={() => removeRow(r.id)}
+                                    isManual={true}
+                                />
+                            ))}
+                        </SortableContext>
+                    </DndContext>
 
                     {rows.length === 0 && !isFoundation && !isBasement && (
                         <div style={{ padding: 12, color: 'var(--text-300)', fontStyle: 'italic' }}>
@@ -537,12 +666,44 @@ export default function LooseMaterialSection({
     );
 }
 
-// --- Unified Row Component ---
-function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUpdateNote, onUpdateInput, onRemove, isManual }) {
+// --- Sortable Wrapper ---
+function SortableRowItem(props) {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: props.row.id });
+  
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+      position: 'relative',
+      zIndex: isDragging ? 10 : 'auto',
+    };
+  
+    return (
+      <div ref={setNodeRef} style={style}>
+        <RowItem
+          {...props}
+          // Pass the drag handlers to the drag handle
+          dragHandleProps={{ ...attributes, ...listeners }}
+        />
+      </div>
+    );
+}
+
+// --- Unified Row Component (With Handle) ---
+function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUpdateNote, onUpdateInput, onRemove, isManual, dragHandleProps }) {
     const [isOpen, setIsOpen] = useState(false);
     
     const typeLower = (row.type || '').toLowerCase();
-    const hasCalc = typeLower.includes('stud') || typeLower.includes('plate') || typeLower.includes('blocking') || typeLower.includes('sheath') || typeLower.includes('tape');
+    const hasCalc = typeLower.includes('stud') || typeLower.includes('plate') || typeLower.includes('blocking') || typeLower.includes('sheath') || typeLower.includes('tape') || typeLower.includes('rimboard') || typeLower === 'joist' || typeLower.includes('i-joist') || typeLower.includes('beam') || typeLower.includes('subfloor') || typeLower.includes('glue') || typeLower.includes('strapping');
+    
+    const showRowInputs = isManual && hasCalc;
     
     const noteData = isManual 
         ? { plan: row.plan, comment: row.notes } 
@@ -552,36 +713,55 @@ function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUp
         <div>
             <div className="ew-grid ew-row" style={{ '--cols': gridCols }}>
                 
-                {/* 1. Item Name */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>{row.label || row.type || 'Custom Item'}</span>
+                {/* 1. Item Name (Remove Button + Drag Handle + Name) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     {isManual && (
-                        <RemoveButton 
-                            onClick={onRemove} 
-                            title="Remove row" 
-                            label="" 
-                        />
+                         <>
+                            <RemoveButton 
+                                onClick={onRemove} 
+                                title="Remove row" 
+                                label="" 
+                                style={{marginRight: 4}}
+                            />
+                            
+                        </>
                     )}
+                    <span>{row.label || row.type || 'Custom Item'}</span>
                 </div>
 
                 {/* 2. Selection */}
                 <div>
-                    <ItemPicker
-                        compact
-                        onSelect={onUpdateItem}
-                        value={pickerValue}
-                        defaultVendor={row.defaultVendor}
-                        defaultFamilyLabel={row.defaultFamily}
-                        defaultSizeLabel={row.defaultSize}
-                    />
-                    {isManual && hasCalc && (
-                        <div className="ew-inline" style={{ marginTop: 6, alignItems: 'end', gap: 8 }}>
-                             <label className="label-w-100">
-                                <span className="ew-subtle">Length (LF)</span>
-                                <DebouncedInput className="ew-input" type="number" value={row.inputs?.lengthLF||0} onChange={v => onUpdateInput('lengthLF', v)}/>
-                             </label>
+                    {/* Inputs for Manual Rows */}
+                    {showRowInputs && (
+                        <div className="ew-inline" style={{ marginTop: 0, alignItems: 'end', gap: 8, marginBottom: 2 }}>
+                             
+                             {/* Length Input */}
+                             {(typeLower.includes('rimboard') || typeLower.includes('joist') || typeLower.includes('beam') || typeLower.includes('blocking') || typeLower.includes('strapping') || typeLower.includes('plate') || typeLower.includes('tape')) && (
+                                 <label className="label-w-100">
+                                    <span className="ew-subtle">Length (LF)</span>
+                                    <DebouncedInput 
+                                        className="ew-input" 
+                                        type="number" 
+                                        value={row.inputs?.lengthLF || 0} 
+                                        onChange={v => onUpdateInput('lengthLF', v)}
+                                        // Placeholder for Rimboard auto-value
+                                        placeholder={typeLower.includes('rimboard') && !row.inputs?.lengthLF ? 'Found. LF' : ''}
+                                    />
+                                 </label>
+                             )}
+                             
+                             {/* Area Input */}
+                             {(typeLower.includes('subfloor')) && (
+                                 <label className="label-w-100">
+                                    <span className="ew-subtle">Area (SqFt)</span>
+                                    <DebouncedInput className="ew-input" type="number" value={row.inputs?.area||0} onChange={v => onUpdateInput('area', v)}/>
+                                 </label>
+                             )}
+
+                             {/* Stud Specifics */}
                              {typeLower.includes('stud') && (
                                  <>
+                                 <label className="label-w-100"><span className="ew-subtle">Length</span><DebouncedInput className="ew-input" type="number" value={row.inputs?.lengthLF||0} onChange={v => onUpdateInput('lengthLF', v)}/></label>
                                  <label className="label-w-100"><span className="ew-subtle">Spacing</span><DebouncedInput className="ew-input" type="number" value={row.inputs?.spacing||16} onChange={v => onUpdateInput('spacing', v)}/></label>
                                  <label className="label-w-120"><span className="ew-subtle">Mult</span>
                                      <select className="ew-select focus-anim" value={row.inputs?.multiplier||1} onChange={e=>onUpdateInput('multiplier', e.target.value)}>
@@ -590,19 +770,34 @@ function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUp
                                  </label>
                                  </>
                              )}
+                             
+                             {/* Sheathing Specifics */}
                              {typeLower.includes('sheathing') && (
+                                 <>
+                                 <label className="label-w-100"><span className="ew-subtle">Length</span><DebouncedInput className="ew-input" type="number" value={row.inputs?.lengthLF||0} onChange={v=>onUpdateInput('lengthLF', v)}/></label>
                                  <label className="label-w-100"><span className="ew-subtle">Height</span><DebouncedInput className="ew-input" type="number" value={row.inputs?.height||4} onChange={v => onUpdateInput('height', v)}/></label>
+                                 </>
                              )}
                         </div>
                     )}
+                    <ItemPicker
+                        compact
+                        onSelect={onUpdateItem}
+                        value={pickerValue}
+                        defaultVendor={row.defaultVendor}
+                        defaultFamilyLabel={row.defaultFamily}
+                        defaultSizeLabel={row.defaultSize}
+
+                    />
                 </div>
 
                 {/* 3. Qty */}
                 <div className="ew-right">
-                    {(isManual && !hasCalc) ? (
-                        <DebouncedInput className="ew-input" style={{ width: 60, textAlign: 'right' }} type="number" value={row.qty} onChange={v => onUpdateInput('qty', v)} />
-                    ) : (
+                    {/* FIX: Show text (Math.ceil) if !isManual OR if it has calculation logic. Only pure manual items show input. */}
+                    {(!isManual || (isManual && (hasCalc || typeLower.includes('glue')))) ? (
                         Math.ceil(row.qtyRaw || 0)
+                    ) : (
+                        <DebouncedInput className="ew-input" style={{ width: 60, textAlign: 'right' }} type="number" value={row.qty} onChange={v => onUpdateInput('qty', v)} />
                     )}
                 </div>
                 
@@ -611,7 +806,6 @@ function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUp
                     <DebouncedInput 
                         className="ew-input ew-input-waste" 
                         type="number" 
-                        // FIX: Safe access to wastePct
                         value={row.wastePct ?? 5} 
                         onChange={onUpdateWaste} 
                     />
@@ -643,8 +837,16 @@ function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUp
                     )}
                 </div>
 
-                 {/* 10. Empty */}
-                 <div></div> 
+                 {/* 10. Drag Handle */}
+                 <div>
+                        <div
+                            {...dragHandleProps}
+                            style={{ cursor: 'grab', display: 'flex', alignItems: 'center', opacity: 0.5, marginRight: 6 }}
+                            title="Drag to reorder"
+                        >
+                            <img src="/icons/drag-handle.png" width={12} height={12} alt="Drag" />
+                        </div>
+                    </div> 
             </div>
 
             {/* Expansion */}

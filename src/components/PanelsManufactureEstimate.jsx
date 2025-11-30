@@ -10,7 +10,6 @@ import {
 } from "react";
 import AccordionSection from "./ui/AccordionSection";
 
-// ... (Constants unchanged) ...
 const DEFAULT_RATES = {
   exteriorWalls: { ratePerLF: 10.5, ratePerPanel: 84.0 },
   interiorShear: { ratePerLF: 10.25, ratePerPanel: 82.0 },
@@ -43,7 +42,6 @@ export default function PanelsManufactureEstimate({
   interiorNonLoadLF,
   kneeWallLF,
 }) {
-  // 1. Destructure data (unchanged)
   const {
     collapsed = true,
     rateByKey = {
@@ -73,14 +71,14 @@ export default function PanelsManufactureEstimate({
     manualInputTouched = {},
   } = data || {};
 
-  // 2. Stable handler (unchanged)
   const onDataChange = useEffectEvent(onChange);
 
-  // --- Input Optimization (unchanged) ---
+  // --- Input Optimization (Local State) ---
   const [localRateByKey, setLocalRateByKey] = useState(rateByKey);
   const [localPanelLenByKey, setLocalPanelLenByKey] = useState(panelLenByKey);
   const [localManualInputByKey, setLocalManualInputByKey] = useState(manualInputByKey);
 
+  // Sync from props
   const rateSig = JSON.stringify(rateByKey);
   useEffect(() => { setLocalRateByKey(rateByKey); }, [rateSig]);
 
@@ -90,6 +88,7 @@ export default function PanelsManufactureEstimate({
   const manualInputSig = JSON.stringify(manualInputByKey);
   useEffect(() => { setLocalManualInputByKey(manualInputByKey); }, [manualInputSig]);
 
+  // Handlers
   const handleRateChange = useCallback((e) => {
     const key = e.target.dataset.key;
     setLocalRateByKey(prev => ({ ...prev, [key]: e.target.value }));
@@ -136,12 +135,12 @@ export default function PanelsManufactureEstimate({
 
   const handlePanelLenKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
-      setLocalPanelLenByKey(panelLenByKey); 
+      setLocalPanelLenByKey(panelLenByKey);
       e.target.blur();
       return;
     }
     if (e.key === 'Enter') {
-      handlePanelLenBlur(e); 
+      handlePanelLenBlur(e);
       e.target.blur();
     }
   }, [handlePanelLenBlur, panelLenByKey]);
@@ -164,12 +163,12 @@ export default function PanelsManufactureEstimate({
 
   const handleManualInputKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
-      setLocalManualInputByKey(manualInputByKey); 
+      setLocalManualInputByKey(manualInputByKey);
       e.target.blur();
       return;
     }
     if (e.key === 'Enter') {
-      handleManualInputBlur(e); 
+      handleManualInputBlur(e);
       e.target.blur();
     }
   }, [handleManualInputBlur, manualInputByKey]);
@@ -182,6 +181,7 @@ export default function PanelsManufactureEstimate({
     [onDataChange]
   );
   
+  // Sync default props
   useEffect(() => {
     let needsUpdate = false;
     const newRates = { ...rateByKey };
@@ -189,7 +189,6 @@ export default function PanelsManufactureEstimate({
         newRates.exteriorWalls = rates.exteriorWalls?.ratePerLF ?? 0;
         needsUpdate = true;
     }
-    // ... (other rate sync logic implied) ...
     if (needsUpdate) {
         onDataChange(prevData => ({ ...prevData, rateByKey: newRates }));
     }
@@ -203,13 +202,12 @@ export default function PanelsManufactureEstimate({
         newPanelLens.exteriorWalls = extLen;
         needsUpdate = true;
     }
-    // ... (other len sync logic implied) ...
     if (needsUpdate) {
         onDataChange(prevData => ({ ...prevData, panelLenByKey: newPanelLens }));
     }
   }, [panelLenFtExterior, panelLenFt, panelLenTouched, panelLenByKey, onDataChange]);
 
-  // --- Calculations (useMemo) ---
+  // Calculations
   const lines = useMemo(() => {
     const L = [];
     const pushLF = (label, key, rateConfigDefault) => {
@@ -291,7 +289,7 @@ export default function PanelsManufactureEstimate({
         open={!collapsed}
         onOpenChange={setCollapsed}
         bar={({ open, toggle }) => (
-          <div className="flex-between-center" style={{ width: "100%", gap: 8 }}>
+          <div className="flex-between-center w-full gap-2">
             <button
               type="button"
               className="acc__button"
@@ -317,16 +315,15 @@ export default function PanelsManufactureEstimate({
         )}
       >
         <div className="table-wrap">
-          {/* Removed inline table style */}
-          <table className="tbl">
+          <table className="tbl panels-table">
             <colgroup>
-              <col style={{ width: "26%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "11%" }} />
+              <col className="col-type" />
+              <col className="col-qty" />
+              <col className="col-len" />
+              <col className="col-count" />
+              <col className="col-rate-lf" />
+              <col className="col-rate-p" />
+              <col className="col-sub" />
             </colgroup>
             <thead>
               <tr>
@@ -354,7 +351,7 @@ export default function PanelsManufactureEstimate({
                     <td className="num">
                       {r.isQtyBased ? (
                         <input
-                          className="ew-input focus-anim ew-input-table" // Used global class
+                          className="ew-input focus-anim ew-input-rate"
                           type="number"
                           min="0"
                           step="1"
@@ -373,7 +370,7 @@ export default function PanelsManufactureEstimate({
                         "—"
                       ) : isEditablePanel ? (
                         <input
-                          className="ew-input focus-anim ew-input-table" // Used global class
+                          className="ew-input focus-anim ew-input-rate"
                           type="number"
                           min="1"
                           step="0.01"
@@ -390,7 +387,7 @@ export default function PanelsManufactureEstimate({
                     <td className="num">{r.isQtyBased ? "—" : fmt(r.panels)}</td>
                     <td className="num">
                       <input
-                        className="ew-input focus-anim ew-input-table" // Used global class
+                        className="ew-input focus-anim ew-input-rate"
                         type="number"
                         step="0.01"
                         min="0"
