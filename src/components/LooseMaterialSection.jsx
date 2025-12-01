@@ -7,6 +7,7 @@ import ItemPicker from '@/components/ItemPicker';
 import RemoveButton from '@/components/ui/RemoveButton';
 import EditableTitle from '@/components/ui/EditableTitle';
 import SearchableSelect from './SearchableSelect';
+import RoofInputs from './loose/RoofInputs';
 import { parseBoardLengthFt, unitPriceFrom } from '@/domain/lib/parsing';
 import { 
   calcFoamSeal, 
@@ -23,7 +24,14 @@ import {
   calcBeam,
   calcSubfloor,
   calcGlue,
-  calcStrapping
+  calcStrapping,
+  calcLinearLumber,
+  calcRidge,
+  calcRake,
+  calcHurricaneTies,
+  calcRoofSheathing,
+  calcClips,
+  calcTrimScrews
 } from '@/domain/calculators';
 import { getSizesForFamily } from '@/lib/catalog';
 
@@ -130,12 +138,13 @@ const LOOSE_ITEMS_OPTIONS = [
   "Panel band sheathing", "PT Plates - Loose"
 ].map(label => ({ value: label, label }));
 
+
 export default function LooseMaterialSection({
     section,
     onUpdate,
     onRemove,
     onToggleHidden,
-    dragHandleProps, // Handle for the section itself
+    dragHandleProps,
     foundationData,
 }) {
     const { id, name, rows = [], collapsed = false, inputs = {}, sel={}, waste={}, notes={} } = section;
@@ -144,6 +153,7 @@ export default function LooseMaterialSection({
     const isFoundation = name === 'Foundation';
     const isBasement = name === 'Basement';
     const isLevel = name.includes('Level'); 
+    const isRoof = name === 'Roof'; // <-- Check Roof
 
     // --- Local State for Inputs ---
     const [localFoundationLF, setLocalFoundationLF] = useState(String(inputs.foundationLF || 0));
@@ -200,17 +210,13 @@ export default function LooseMaterialSection({
         }));
     }, [onUpdate]);
 
-    // DnD Reorder Handler
     const handleDragEnd = (event) => {
         const { active, over } = event;
         if (active.id !== over?.id) {
-            onUpdate((prev) => {
-                const oldIndex = prev.rows.findIndex((r) => r.id === active.id);
-                const newIndex = prev.rows.findIndex((r) => r.id === over.id);
-                return {
-                    ...prev,
-                    rows: arrayMove(prev.rows, oldIndex, newIndex)
-                };
+            onUpdate(prev => {
+                const oldIndex = prev.rows.findIndex(r => r.id === active.id);
+                const newIndex = prev.rows.findIndex(r => r.id === over.id);
+                return { ...prev, rows: arrayMove(prev.rows, oldIndex, newIndex) };
             });
         }
     };
@@ -242,6 +248,7 @@ export default function LooseMaterialSection({
     };
     const handleBlockingBlur = () => updateInput('blockingLF', Number(localBlockingLF));
     const handleColBlur = () => updateInput('colQty', Number(localColQty));
+
 
     // --- 1. Foundation Rows Calculation ---
     const foundationRows = useMemo(()=> {
@@ -318,7 +325,75 @@ export default function LooseMaterialSection({
         ];
     }, [isBasement, inputs, sel, waste, foundationData]);
 
-    // --- 3. Manual / Mixed Rows ---
+   // --- 3. ROOF ROWS ---
+    const roofRows = useMemo(() => {
+        if (!isRoof) return [];
+
+        const rafterLF = Number(inputs.rafterLF || 0);
+        const ridgeLF = Number(inputs.ridgeLF || 0);
+        const gableLF = Number(inputs.gableLF || 0);
+        const eaveLF = Number(inputs.eaveLF || 0);
+        const rakeLF = Number(inputs.rakeLF || 0);
+        const trimLF = Number(inputs.trimLF || 0);
+        const roofArea = Number(inputs.roofArea || 0);
+
+        const wDefault = 5;
+
+        // Helper for linear lumber
+        const calcLumber = (key, lf, defVendor, defFam, defSize, wasteDefault = 5, extraCalcFn = calcLinearLumber) => {
+             const item = getItem(sel[key]);
+             const boardLen = parseBoardLengthFt(getSize(item)) || 16;
+             const w = Number(waste[key] ?? wasteDefault);
+             const res = extraCalcFn({ lengthLF: lf, boardLenFt: boardLen, wastePct: w, item });
+             return { id: key, key, ...res, item, isCalc: true, wastePct: w, defaultVendor: defVendor, defaultFamily: defFam, defaultSize: defSize };
+        };
+
+        const rRafter = calcLumber('rafter', rafterLF, "Fairway Lumber", "SPF#2", `2x12"-16'`);
+        const rRidge  = calcLumber('ridge', ridgeLF, "BlueLinx", "LVL", `1-3/4x18"`, 4, calcRidge);
+        const rTies   = { ...calcHurricaneTies({ rafterQty: rRafter.qtyFinal, wastePct: Number(waste.hurricaneTies ?? 5), item: getItem(sel.hurricaneTies) }), id: 'hurricaneTies', key: 'hurricaneTies', label: 'Hurricane tie', item: getItem(sel.hurricaneTies), isCalc: true, wastePct: Number(waste.hurricaneTies ?? 5), defaultVendor: "Fastener Plus", defaultFamily: "Galvanized", defaultSize: `H2.5A` };
+
+        const rGable  = { ...calcLumber('gable', gableLF, "Gillies & Prittie Warehouse", "SPF#2", `2x6"-16'`), label: 'Gable bottom plates' };
+
+        const gableStudSpacing = Number(inputs.gableStudSpacing || 16);
+        const gableStudMult = Number(inputs.gableStudMultiplier || 1);
+        const wGableStuds = Number(waste.gableStuds ?? 10);
+        const rGableStudsRes = calcStuds({ lengthLF: gableLF, spacingIn: gableStudSpacing, multiplier: gableStudMult, wastePct: wGableStuds, item: getItem(sel.gableStuds) });
+        const rGableStuds = { id: 'gableStuds', label: 'Gable studs', key: 'gableStuds', ...rGableStudsRes, item: getItem(sel.gableStuds), isCalc: true, wastePct: wGableStuds, defaultVendor: "Gillies & Prittie Warehouse", defaultFamily: "SPF#2", defaultSize: `2x6"-10'`, 
+            inputs: { lengthLF: gableLF, spacing: gableStudSpacing, multiplier: gableStudMult } 
+        };
+
+        const wSheath = Number(waste.sheathing ?? 20);
+        const rSheathingCalc = calcRoofSheathing({ areaSqFt: roofArea, wastePct: wSheath, item: getItem(sel.sheathing) });
+        const rSheathing = { id: 'sheathing', label: 'Sheathing', key: 'sheathing', ...rSheathingCalc, item: getItem(sel.sheathing), isCalc: true, wastePct: wSheath, defaultVendor: "Gillies & Prittie Warehouse", defaultFamily: "CDX SE", defaultSize: `4x8'-5/8"` };
+
+        const wClips = Number(waste.clips ?? 5);
+        const rClipsCalc = calcClips({ sheetCount: rSheathingCalc.qtyFinal, wastePct: wClips, item: getItem(sel.clips) });
+        const rClips = { id: 'clips', label: 'Clips', key: 'clips', ...rClipsCalc, item: getItem(sel.clips), isCalc: true, wastePct: wClips, defaultVendor: "Fastener Plus", defaultFamily: "PSCL Clip", defaultSize: `5/8"-250s` };
+
+        const rEave = calcLumber('eave', eaveLF, "Gillies & Prittie Warehouse", "SPF#2", `2x6"-16'`);
+        const rRake = calcLumber('rake', rakeLF, "Gillies & Prittie Warehouse", "SPF#2", `2x6"-16'`, 5, calcRake);
+        const rTrim = calcLumber('trim', trimLF, "The Home Depot", "PVC Trim (V)", `1x8"-8'`);
+        
+        const wScrews = Number(waste.trimScrews ?? 5);
+        const rScrewsCalc = calcTrimScrews({ trimLF: trimLF, wastePct: wScrews, item: getItem(sel.trimScrews) });
+        const rScrews = { id: 'trimScrews', label: 'Trim Screws', key: 'trimScrews', ...rScrewsCalc, item: getItem(sel.trimScrews), isCalc: true, wastePct: wScrews, defaultVendor: "The Home Depot", defaultFamily: "50lf Cortex Screws and plugs", defaultSize: `2"` };
+
+        return [ 
+            {...rRafter, label: 'Rafter'}, 
+            {...rRidge, label: 'Ridge'}, 
+            {...rTies},
+            rGable,     
+            rGableStuds,
+            {...rSheathing, label: 'Sheathing'},
+            {...rClips, label: 'Clips'},
+            {...rEave, label: 'Eave'},
+            {...rRake, label: 'Rake'},
+            {...rTrim, label: 'Trim'},
+            {...rScrews, label: 'Trim Screws'}
+        ];
+    }, [isRoof, inputs, sel, waste]);
+
+    // --- 4. Level ---
     const calculatedManualRows = useMemo(() => {
         let subfloorSheetsForGlue = 0; 
 
@@ -340,12 +415,8 @@ export default function LooseMaterialSection({
             if (typeLower.includes('rimboard')) {
                 const inputLF = row.inputs?.lengthLF;
                 const defaultLF = foundationData?.inputs?.foundationLF || 0;
-                let lenToUse = 0;
-                if (isLevel && typeLower === 'rimboard') {
-                    lenToUse = Number(inputs.rimboardLF !== undefined ? inputs.rimboardLF : defaultLF);
-                } else {
-                    lenToUse = Number(inputLF || 0);
-                }
+                // Use input if set, otherwise foundation default (only if new), otherwise 0
+                const lenToUse = (inputLF !== undefined && inputLF !== null) ? Number(inputLF) : defaultLF;
                 const boardLen = parseBoardLengthFt(getSize(item)) || 16;
                 result = calcRimboard({ lengthLF: lenToUse, boardLenFt: boardLen, wastePct, item });
             
@@ -367,7 +438,7 @@ export default function LooseMaterialSection({
                 result = calcBeam({ lengthLF: lenToUse, boardLenFt: boardLen, wastePct, item });
 
             // --- Blocking ---
-            } else if (typeLower.includes('blocking') && isLevel) {
+            } else if (typeLower.includes('blocking')) {
                  const lenToUse = Number(row.inputs?.lengthLF || 0);
                  const boardLen = parseBoardLengthFt(getSize(item)) || 16;
                  result = calcPlates({ lengthLF: lenToUse, boardLenFt: boardLen, wastePct, item });
@@ -455,9 +526,10 @@ export default function LooseMaterialSection({
     const sectionSubtotal = useMemo(() => {
         const fTotal = foundationRows.reduce((s, r) => s + (r.subtotal || 0), 0);
         const bTotal = basementRows.reduce((s, r) => s + (r.subtotal || 0), 0);
+        const rTotal = roofRows.reduce((s, r) => s + (r.subtotal || 0), 0);
         const mTotal = calculatedManualRows.reduce((s, r) => s + (r.subtotal || 0), 0);
-        return fTotal + bTotal + mTotal;
-    }, [calculatedManualRows, foundationRows, basementRows]);
+        return fTotal + bTotal + rTotal + mTotal;
+    }, [calculatedManualRows, foundationRows, basementRows, roofRows]);
 
     const gridCols = 'minmax(180px,1.1fr) 3.7fr 0.6fr 0.6fr 0.7fr 0.6fr 0.9fr 1fr 2.0fr 0.2fr';
 
@@ -469,6 +541,9 @@ export default function LooseMaterialSection({
                 onOpenChange={(isOpen) => setCollapsed(!isOpen)}
                 bar={({ open, toggle }) => (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                         <button type="button" className="acc__button" style={{ cursor: 'grab', border: 'none', padding: '0 4px' }} title="Drag to reorder" {...dragHandleProps}>
+                            <img src="/icons/drag-handle.png" width={12} height={12} alt="Drag" style={{ opacity: 0.5 }} />
+                        </button>
                         <button type="button" className="acc__button" onClick={toggle} aria-expanded={open} title={open ? "Collapse" : "Expand"}>
                             <img src={open ? '/icons/down.png' : '/icons/minimize.png'} alt={open ? 'Collapse' : 'Expand'} width={16} height={16} className="acc__chev" style={{ display: 'inline-block', verticalAlign: 'middle' }} />
                         </button>
@@ -479,16 +554,13 @@ export default function LooseMaterialSection({
                                 <button className="ew-btn ew-icon-btn" onClick={onToggleHidden} title="Hide section">
                                      <img src="/icons/eye-off.png" width={20} height={20} alt="Hide" />
                                 </button>
-                                <button type="button" className="acc__button" style={{ cursor: 'grab', border: 'none', padding: '0 4px' }} title="Drag to reorder" {...dragHandleProps}>
-                                    <img src="/icons/drag-handle.png" width={12} height={12} alt="Drag" style={{ opacity: 0.5 }} />
-                                </button>
                             </div>
                         )}
                         {onRemove && (<div style={{ marginLeft: '4px' }}> <RemoveButton onClick={onRemove} title="Remove section" label="Remove section" /></div>)}
                     </div>
                 )}
             >
-                {/* ... (Inputs unchanged) ... */}
+                {/* --- FOUNDATION INPUTS --- */}
                 {isFoundation && (
                     <div className="controls4" style={{ marginBottom: 12 }}>
                         <label>
@@ -559,6 +631,11 @@ export default function LooseMaterialSection({
                      </div>
                 )}
 
+                {/* --- ROOF INPUTS --- */}
+                {isRoof && (
+                    <RoofInputs inputs={inputs} onUpdate={updateInput} />
+                )}
+
                 <div className="ew-grid ew-head" style={{ '--cols': gridCols }}>
                     <div>Item Name</div>
                     <div>Family · Size · Vendor</div>
@@ -599,49 +676,47 @@ export default function LooseMaterialSection({
                         />
                     ))}
 
-                    {/* --- MANUAL / SORTABLE ROWS --- */}
-                    <DndContext
-                        sensors={useSensors(
-                            useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-                            useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-                        )}
-                        collisionDetection={closestCenter}
-                        onDragEnd={(event) => {
-                             const { active, over } = event;
-                             if (active.id !== over?.id) {
-                                 onUpdate(prev => {
-                                     const oldIndex = prev.rows.findIndex(r => r.id === active.id);
-                                     const newIndex = prev.rows.findIndex(r => r.id === over.id);
-                                     return { ...prev, rows: arrayMove(prev.rows, oldIndex, newIndex) };
-                                 });
-                             }
-                        }}
-                    >
-                        <SortableContext 
-                            items={calculatedManualRows.map(r => r.id)}
-                            strategy={verticalListSortingStrategy}
-                        >
-                            {calculatedManualRows.map(r => (
-                                 <SortableRowItem 
-                                    key={r.id} 
-                                    row={r} 
-                                    gridCols={gridCols}
-                                    pickerValue={r.item}
-                                    onUpdateItem={(i) => updateRow(r.id, { item: i })}
-                                    onUpdateWaste={(v) => updateRow(r.id, { wastePct: Number(v) })}
-                                    onUpdateNote={(field, val) => updateRow(r.id, { [field === 'comment' ? 'notes' : field]: val })}
-                                    onUpdateInput={(field, val) => {
-                                        if (field === 'qty') updateRow(r.id, { qty: Number(val) });
-                                        else updateRow(r.id, { inputs: { ...r.inputs, [field]: Number(val) } });
-                                    }}
-                                    onRemove={() => removeRow(r.id)}
-                                    isManual={true}
-                                />
-                            ))}
-                        </SortableContext>
-                    </DndContext>
+                    {/* --- ROOF ROWS (Renderizado) --- */}
+                    {isRoof && roofRows.map(r => (
+                         <RowItem 
+                            key={r.id} 
+                            row={r} 
+                            gridCols={gridCols}
+                            pickerValue={sel[r.key]} 
+                            // Pass input updater for Gable Studs specifics
+                            onUpdateInput={(field, val) => {
+                                if (r.key === 'gableStuds') {
+                                    if (field === 'spacing') updateInput('gableStudSpacing', Number(val));
+                                    if (field === 'multiplier') updateInput('gableStudMultiplier', Number(val));
+                                }
+                            }}
+                            onUpdateItem={(i) => updateSel(r.key, i)} 
+                            onUpdateWaste={(v) => updateWaste(r.key, v)} 
+                            onUpdateNote={(field, val) => updateCalcNote(r.key, field, val)} 
+                            isManual={false} 
+                        />
+                    ))}
 
-                    {rows.length === 0 && !isFoundation && !isBasement && (
+                    {/* --- LEVEL ROWS --- */}
+                    {calculatedManualRows.map(r => (
+                         <RowItem 
+                            key={r.id} 
+                            row={r} 
+                            gridCols={gridCols}
+                            pickerValue={r.item}
+                            onUpdateItem={(i) => updateRow(r.id, { item: i })}
+                            onUpdateWaste={(v) => updateRow(r.id, { wastePct: Number(v) })}
+                            onUpdateNote={(field, val) => updateRow(r.id, { [field === 'comment' ? 'notes' : field]: val })}
+                            onUpdateInput={(field, val) => {
+                                if (field === 'qty') updateRow(r.id, { qty: Number(val) });
+                                else updateRow(r.id, { inputs: { ...r.inputs, [field]: Number(val) } });
+                            }}
+                            onRemove={() => removeRow(r.id)}
+                            isManual={true}
+                        />
+                    ))}
+
+                    {rows.length === 0 && !isFoundation && !isBasement && !isRoof && (
                         <div style={{ padding: 12, color: 'var(--text-300)', fontStyle: 'italic' }}>
                             No items in this section yet. Use the menu below to add items.
                         </div>
@@ -689,12 +764,11 @@ function SortableRowItem(props) {
       <div ref={setNodeRef} style={style}>
         <RowItem
           {...props}
-          // Pass the drag handlers to the drag handle
           dragHandleProps={{ ...attributes, ...listeners }}
         />
       </div>
     );
-}
+  }
 
 // --- Unified Row Component (With Handle) ---
 function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUpdateNote, onUpdateInput, onRemove, isManual, dragHandleProps }) {
@@ -723,7 +797,14 @@ function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUp
                                 label="" 
                                 style={{marginRight: 4}}
                             />
-                            
+                            {/* Drag Handle */}
+                            <div
+                                {...dragHandleProps}
+                                style={{ cursor: 'grab', display: 'flex', alignItems: 'center', opacity: 0.5, marginRight: 6 }}
+                                title="Drag to reorder"
+                            >
+                                <img src="/icons/drag-handle.png" width={12} height={12} alt="Drag" />
+                            </div>
                         </>
                     )}
                     <span>{row.label || row.type || 'Custom Item'}</span>
@@ -778,6 +859,18 @@ function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUp
                                  <label className="label-w-100"><span className="ew-subtle">Height</span><DebouncedInput className="ew-input" type="number" value={row.inputs?.height||4} onChange={v => onUpdateInput('height', v)}/></label>
                                  </>
                              )}
+
+                             {/* Gable Studs Specific Inputs */}
+                             {row.key === 'gableStuds' && (
+                                 <>
+                                 <label className="label-w-100"><span className="ew-subtle">Spacing</span><DebouncedInput className="ew-input" type="number" value={row.inputs?.spacing||16} onChange={v => onUpdateInput('spacing', v)}/></label>
+                                 <label className="label-w-120"><span className="ew-subtle">Mult</span>
+                                     <select className="ew-select focus-anim" value={row.inputs?.multiplier||1} onChange={e=>onUpdateInput('multiplier', e.target.value)}>
+                                        <option value={1}>Single</option><option value={2}>Double</option><option value={3}>Triple</option><option value={4}>Quad</option>
+                                     </select>
+                                 </label>
+                                 </>
+                             )}
                         </div>
                     )}
                     <ItemPicker
@@ -787,13 +880,12 @@ function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUp
                         defaultVendor={row.defaultVendor}
                         defaultFamilyLabel={row.defaultFamily}
                         defaultSizeLabel={row.defaultSize}
-
                     />
                 </div>
 
                 {/* 3. Qty */}
                 <div className="ew-right">
-                    {/* FIX: Show text (Math.ceil) if !isManual OR if it has calculation logic. Only pure manual items show input. */}
+                    {/* Show calculated quantity if it's a calculated row or a special manual type */}
                     {(!isManual || (isManual && (hasCalc || typeLower.includes('glue')))) ? (
                         Math.ceil(row.qtyRaw || 0)
                     ) : (
@@ -837,16 +929,8 @@ function RowItem({ row, gridCols, pickerValue, onUpdateItem, onUpdateWaste, onUp
                     )}
                 </div>
 
-                 {/* 10. Drag Handle */}
-                 <div>
-                        <div
-                            {...dragHandleProps}
-                            style={{ cursor: 'grab', display: 'flex', alignItems: 'center', opacity: 0.5, marginRight: 6 }}
-                            title="Drag to reorder"
-                        >
-                            <img src="/icons/drag-handle.png" width={12} height={12} alt="Drag" />
-                        </div>
-                    </div> 
+                 {/* 10. Empty */}
+                 <div></div> 
             </div>
 
             {/* Expansion */}

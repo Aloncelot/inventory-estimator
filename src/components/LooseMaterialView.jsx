@@ -238,9 +238,33 @@ export default function LooseMaterialView({ onTotalChange }) {
             <div className="ew-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem' }}>
                 <div className="ew-subtle">Add another section</div>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    {/* --- NEW BUTTON: Add Level --- */}
-                    <AddButton onClick={addLevelSection} title="Add Level" label="Add Level" />
-                    <AddButton onClick={addSection} title="Add Custom Section" label="Add Custom" />
+                    <button 
+                        className="ew-btn" 
+                        onClick={addLevelSection}
+                        title="Add a new Level section (e.g. 2nd Level)"
+                    >
+                        <img 
+                            src="/icons/plus.png" 
+                            width={16} height={16} 
+                            alt="" 
+                            style={{display:'inline-block', verticalAlign:'middle', marginRight: 6}} 
+                        />
+                        Add Level
+                    </button>
+
+                    <button 
+                        className="ew-btn" 
+                        onClick={addSection}
+                        title="Add a blank section"
+                    >
+                        <img 
+                            src="/icons/plus.png" 
+                            width={16} height={16} 
+                            alt="" 
+                            style={{display:'inline-block', verticalAlign:'middle', marginRight: 6}} 
+                        />
+                        Add New Section
+                    </button>
                 </div>
             </div>
 
