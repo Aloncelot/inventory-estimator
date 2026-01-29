@@ -629,3 +629,54 @@ input[type=number] {
 .drag-handle:active .gradient-icon {
   stroke: var(--turq-200) !important;
 }
+
+.panels-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* Column Widths */
+.col-type {
+  width: 26%;
+}
+
+.col-qty {
+  width: 13%;
+}
+
+.col-len {
+  width: 13%;
+}
+
+.col-count {
+  width: 13%;
+}
+
+.col-rate-lf {
+  width: 12%;
+}
+
+.col-rate-p {
+  width: 12%;
+}
+
+.col-sub {
+  width: 11%;
+}
+
+/* Table Input Style (replaces inline styles) */
+.ew-input-rate {
+  width: 100%;
+  max-width: 110px;
+  text-align: right;
+  padding: 4px 8px;
+}
+
+/* Utility Utilities */
+.text-right {
+  text-align: right;
+}
+
+.w-full {
+  width: 100%;
+}
