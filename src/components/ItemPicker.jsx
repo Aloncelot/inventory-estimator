@@ -1,350 +1,160 @@
 // src/components/ItemPicker.jsx
 'use client';
 
-// 1. Importamos useEffectEvent
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useCallback,
-  useEffectEvent, // ¡Añadido!
-} from 'react';
-import {
-  getFamilies,
-  getSizesForFamily,
-  getVendorsForIds,
-  getFinalItem,
-} from '@/lib/catalog';
-import SearchableSelect from '@/components/SearchableSelect';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { getFamilies, getSizesForFamily, getVendorsForIds, getFinalItem } from '@/lib/catalog';
+import { ChevronDown, Search, Check, Loader2 } from 'lucide-react';
 
-const norm = (s = '') =>
-  String(s)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+const menuVariants = {
+  hidden: { opacity: 0, y: -8, scale: 0.98 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.2, ease: "easeOut" } },
+  exit: { opacity: 0, y: -4, scale: 0.98, transition: { duration: 0.15, ease: "easeIn" } }
+};
 
-export default function ItemPicker({
-  onSelect,
-  value, // This prop holds the currently selected item object
-  compact = false,
-  defaultVendor,
-  defaultFamilyLabel,
-  defaultSizeLabel,
-  preferredSeries,
-}) {
-  // Data
+function PortalSelect({ value, options, onChange, disabled, loading, placeholder }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const handleOpen = () => {
+    if (disabled || loading) return;
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setCoords({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: rect.width });
+    }
+    setIsOpen(!isOpen);
+    setSearchTerm('');
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const close = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target) && !triggerRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [isOpen]);
+
+  const filteredOptions = useMemo(() => (options || []).filter(o => o.label.toLowerCase().includes(searchTerm.toLowerCase())), [options, searchTerm]);
+  const selectedOption = options?.find(o => o.value === value);
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <button ref={triggerRef} type="button" onClick={handleOpen} disabled={disabled}
+        className={`ew-input flex items-center justify-between w-full gap-2 transition-all ${isOpen ? 'ring-2 ring-turq-400' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        style={{ height: '32px', textAlign: 'left', fontSize: '0.8rem' }}>
+        <span className="truncate">{loading ? 'Loading...' : (selectedOption?.label || placeholder)}</span>
+        {loading ? <Loader2 size={12} className="animate-spin opacity-50" /> : <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
+      </button>
+
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'absolute', top: coords.top + 4, left: coords.left, width: Math.max(coords.width, 220), zIndex: 9999 }}>
+          <motion.div ref={menuRef} variants={menuVariants} initial="hidden" animate="visible" exit="exit" className="ew-card shadow-2xl border border-white/10 overflow-hidden" style={{ background: 'var(--bg-800)', backdropFilter: 'blur(10px)' }}>
+            <div className="p-2 border-b border-white/5 bg-white/5 flex items-center gap-2">
+              <Search size={14} className="text-turq-400 opacity-70" />
+              <input autoFocus className="bg-transparent border-none outline-none text-sm w-full" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+            <div className="max-h-[250px] overflow-y-auto p-1 custom-scrollbar">
+              {filteredOptions.length === 0 ? <div className="p-3 text-center text-xs opacity-50">No results</div> :
+                filteredOptions.map(opt => (
+                  <div key={opt.value} onClick={() => { onChange(opt.value); setIsOpen(false); }}
+                    className={`flex items-center justify-between p-2 text-xs rounded cursor-pointer hover:bg-white/5 ${value === opt.value ? 'text-turq-400 bg-turq-500/10' : ''}`}>
+                    <span>{opt.label}</span>
+                    {value === opt.value && <Check size={12} />}
+                  </div>
+                ))
+              }
+            </div>
+          </motion.div>
+        </div>, document.body
+      )}
+    </div>
+  );
+}
+
+export default function ItemPicker({ value, onSelect, compact = false }) {
   const [families, setFamilies] = useState([]);
   const [sizes, setSizes] = useState([]);
   const [vendors, setVendors] = useState([]);
 
-  // Selection
-  // Initialize state from the 'value' prop ONCE
-  const [familySlug, setFamilySlug] = useState(() => value?.family || '');
-  const [sizeLookupId, setSizeLookupId] = useState(
-    () => value?.sizeLookupId || ''
-  );
-  const [vendorId, setVendorId] = useState(() => value?.vendorId || '');
+  const [familySlug, setFamilySlug] = useState('');
+  const [sizeLookupId, setSizeLookupId] = useState('');
+  const [vendorId, setVendorId] = useState('');
 
-  // Loading states
-  const [loadingFamilies, setLoadingFamilies] = useState(true);
-  const [loadingSizes, setLoadingSizes] = useState(false);
-  const [loadingVendors, setLoadingVendors] = useState(false);
+  const [loadingF, setLoadingF] = useState(true);
+  const [loadingS, setLoadingS] = useState(false);
+  const [loadingV, setLoadingV] = useState(false);
 
-  // Refs
-  const didAutoFamily = useRef(false);
-  const didAutoSize = useRef(false);
-  const didAutoVendor = useRef(false);
-
-  // 2. Eliminamos el código anterior
-  // const onSelectRef = useRef(onSelect);
-  // useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
-
-  // 3. Creamos la función de evento estable
-  // Esta función siempre tendrá el 'onSelect' más reciente sin
-  // necesidad de estar en un array de dependencias.
-  const onSelectItem = useEffectEvent(onSelect);
-
-  // **THIS IS THE FIX (PART 1)** (Lógica original, se mantiene)
-  // Sincroniza el estado interno SOLO cuando el 'value' externo cambia.
-  useEffect(() => {
-    if (value && value.family) {
-      // If the prop changes, force the state to match the prop
-      if (familySlug !== value.family) setFamilySlug(value.family);
-      if (sizeLookupId !== value.sizeLookupId)
-        setSizeLookupId(value.sizeLookupId);
-      if (vendorId !== value.vendorId) setVendorId(value.vendorId);
-    }
-    // Maneja el caso de limpiar el picker si el padre pasa null
-    else if (!value) {
-      setFamilySlug('');
-      setSizeLookupId('');
-      setVendorId('');
-    }
-  }, [value]); // <-- Correcto, solo depende del prop
-
-  // **THIS IS THE FIX (PART 2)** (Lógica original, se mantiene)
-  // Previene que la lógica de "autofill" se ejecute si
-  // el componente ya se cargó con un valor guardado.
+  // Sincronizar estados internos con el valor guardado
   useEffect(() => {
     if (value) {
-      didAutoFamily.current = true;
-      didAutoSize.current = true;
-      didAutoVendor.current = true;
+      setFamilySlug(value.family || '');
+      setSizeLookupId(value.sizeLookupId || '');
+      setVendorId(value.vendorId || '');
     }
-  }, []); // <-- Correcto, se ejecuta solo una vez
+  }, [value]);
 
-  // Carga familias y aplica el valor por defecto
+  // Carga inicial de familias
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      setLoadingFamilies(true);
-      const fams = await getFamilies();
-      if (!alive) return;
-      setFamilies(fams);
-      setLoadingFamilies(false);
-
-      if (
-        !value &&
-        !didAutoFamily.current &&
-        fams.length > 0 &&
-        defaultFamilyLabel
-      ) {
-        const want = norm(defaultFamilyLabel);
-        const pick = fams.find((f) => norm(f.label) === want);
-        if (pick) {
-          didAutoFamily.current = true;
-          setFamilySlug(pick.value); // <-- Aplica el default
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [value, defaultFamilyLabel]);
-
-  // Handlers para actualizar el estado interno
-  const handleFamilyChange = useCallback((slug) => {
-    setFamilySlug(slug);
-    setSizeLookupId('');
-    setVendorId('');
-    setSizes([]);
-    setVendors([]);
+    getFamilies().then(f => { setFamilies(f); setLoadingF(false); });
   }, []);
 
-  const handleSizeChange = useCallback((lookupId) => {
-    setSizeLookupId(lookupId);
-    setVendorId('');
-    setVendors([]);
-  }, []);
-
-  const handleVendorChange = useCallback((vId) => {
-    setVendorId(vId);
-  }, []);
-
-  // Hook para cargar los tamaños (sin cambios)
+  // Carga de tamaños cuando cambia la familia
   useEffect(() => {
-    if (!familySlug) {
-      setSizes([]);
-      return;
-    }
+    if (familySlug) {
+      setLoadingS(true);
+      getSizesForFamily(familySlug).then(s => { setSizes(s); setLoadingS(false); });
+    } else { setSizes([]); }
+  }, [familySlug]);
 
-    if (value && value.family === familySlug && sizes.length > 0) return;
-
-    let alive = true;
-    (async () => {
-      setLoadingSizes(true);
-      const newSizes = await getSizesForFamily(familySlug);
-      if (!alive) return;
-      setSizes(newSizes);
-      setLoadingSizes(false);
-
-      if (!value && !didAutoSize.current && newSizes.length > 0) {
-        let pick = null;
-        if (defaultSizeLabel) {
-          const want = norm(defaultSizeLabel);
-          pick = newSizes.find((s) => norm(s.label) === want);
-        }
-        if (!pick && preferredSeries) {
-          const wantSeries = norm(preferredSeries).replace(/[^0-9x]/g, '');
-          const labelNorm = (s) =>
-            norm(String(s || '')).replace(/[^0-9x]/g, '');
-          pick = newSizes.find((s) =>
-            labelNorm(s.label).startsWith(wantSeries)
-          );
-        }
-        if (pick) {
-          didAutoSize.current = true;
-          setSizeLookupId(pick.value);
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [familySlug, value, defaultFamilyLabel, preferredSeries, sizes.length]);
-
-  // Hook para cargar los vendedores (sin cambios)
+  // Carga de vendedores cuando cambia el tamaño
   useEffect(() => {
-    if (!sizeLookupId) {
-      setVendors([]);
-      return;
+    const selectedSize = sizes.find(s => s.value === sizeLookupId);
+    if (selectedSize?.vendorIds) {
+      setLoadingV(true);
+      getVendorsForIds(selectedSize.vendorIds).then(v => { setVendors(v); setLoadingV(false); });
+    } else { setVendors([]); }
+  }, [sizeLookupId, sizes]);
+
+  const handleFamilyChange = (slug) => {
+    if (slug === familySlug) return;
+    setFamilySlug(slug); setSizeLookupId(''); setVendorId('');
+  };
+
+  const handleSizeChange = (sid) => {
+    if (sid === sizeLookupId) return;
+    setSizeLookupId(sid); setVendorId('');
+  };
+
+  // Notificar al padre solo cuando los 3 estén seleccionados
+  const handleVendorChange = async (vid) => {
+    setVendorId(vid);
+    const f = families.find(f => f.value === familySlug);
+    const s = sizes.find(s => s.value === sizeLookupId);
+    const v = (vendors.length > 0 ? vendors : await getVendorsForIds(s.vendorIds)).find(v => v.value === vid);
+
+    if (f && s && v) {
+      const item = await getFinalItem({ familyLabel: f.label, sizeLabel: s.label, vendorId: v.value });
+      onSelect({
+        vendorId: v.value,
+        vendorName: v.label,
+        family: familySlug,
+        familyLabel: f.label,
+        sizeLookupId: sizeLookupId,
+        item
+      });
     }
-    if (value && value.sizeLookupId === sizeLookupId && vendors.length > 0)
-      return;
-
-    const selectedSize = sizes.find((s) => s.value === sizeLookupId);
-    if (!selectedSize?.vendorIds) return;
-
-    let alive = true;
-    (async () => {
-      setLoadingVendors(true);
-      const newVendors = await getVendorsForIds(selectedSize.vendorIds);
-      if (!alive) return;
-      setVendors(newVendors);
-      setLoadingVendors(false);
-
-      if (
-        !value &&
-        !didAutoVendor.current &&
-        newVendors.length > 0 &&
-        defaultVendor
-      ) {
-        const want = norm(defaultVendor);
-        const pick = newVendors.find((v) => norm(v.label).includes(want));
-        if (pick) {
-          didAutoVendor.current = true;
-          setVendorId(pick.value);
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [sizeLookupId, sizes, value, defaultVendor, vendors.length]);
-
-  // **THIS IS THE FIX (PART 3)** (Lógica original, se mantiene)
-  // Este hook envía la selección final al padre.
-  useEffect(() => {
-    // Si los 3 están presentes, tenemos una selección completa.
-    if (vendorId && familySlug && sizeLookupId) {
-      const family = families.find((f) => f.value === familySlug);
-      const size = sizes.find((s) => s.value === sizeLookupId);
-      const vendor = vendors.find((v) => v.value === vendorId);
-
-      if (!family || !size || !vendor) {
-        // Data no cargada aún, esperar.
-        return;
-      }
-
-      // **LA GUARDIA**: Revisa si la selección interna ya
-      // coincide con el prop 'value' externo.
-      if (
-        value &&
-        value.family === familySlug &&
-        value.sizeLookupId === sizeLookupId &&
-        value.vendorId === vendorId
-      ) {
-        return; // La selección ya está sincronizada.
-      }
-
-      (async () => {
-        const item = await getFinalItem({
-          familyLabel: family.label,
-          sizeLabel: size.label,
-          vendorId: vendor.value,
-        });
-
-        // 4. Llamamos a la función de evento
-        onSelectItem?.(
-          item
-            ? {
-                vendorId: vendor.value,
-                vendorName: vendor.label,
-                family: family.value,
-                familyLabel: family.label,
-                sizeLookupId: size.value,
-                item: item,
-              }
-            : null
-        );
-      })();
-      return; // Listo
-    }
-
-    // Si los 3 están ausentes (ej. se limpió la familia)
-    // La selección es 'null'.
-    if (!vendorId && !familySlug && !sizeLookupId) {
-      if (value !== null) { // Solo notificar si no éramos ya null
-        // 4. Llamamos a la función de evento
-        onSelectItem?.(null);
-      }
-      return;
-    }
-
-    // Si estamos en un estado intermedio (ej. familia seleccionada, pero no tamaño/vendedor),
-    // estamos a mitad de una selección.
-    // **NO ENVIAR NULL.** Simplemente esperar.
-  }, [vendorId, familySlug, sizeLookupId, families, sizes, vendors, value]);
-
-  // --- UI (Sin cambios) ---
-  const FamilySelect = (
-    <SearchableSelect
-      ariaLabel="Family"
-      value={familySlug}
-      onChange={handleFamilyChange}
-      options={families}
-      placeholder="Select Family…"
-      disabled={loadingFamilies}
-      loading={loadingFamilies}
-    />
-  );
-
-  const SizeSelect = (
-    <SearchableSelect
-      ariaLabel="Size"
-      value={sizeLookupId}
-      onChange={handleSizeChange}
-      options={sizes}
-      placeholder="Select Size…"
-      disabled={!familySlug || loadingSizes}
-      loading={loadingSizes}
-    />
-  );
-
-  const VendorSelect = (
-    <SearchableSelect
-      ariaLabel="Vendor"
-      value={vendorId}
-      onChange={handleVendorChange}
-      options={vendors}
-      placeholder="Select Vendor…"
-      disabled={!sizeLookupId || loadingVendors}
-      loading={loadingVendors}
-    />
-  );
-
-  if (compact) {
-    return (
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1.2fr 1.2fr 1fr',
-          gap: 6,
-        }}
-      >
-        {FamilySelect}
-        {SizeSelect}
-        {VendorSelect}
-      </div>
-    );
-  }
+  };
 
   return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      {FamilySelect}
-      {SizeSelect}
-      {VendorSelect}
+    <div style={{ display: 'grid', gridTemplateColumns: compact ? '1.2fr 1.2fr 1fr' : 'repeat(3, 1fr)', gap: 6, width: '100%' }}>
+      <PortalSelect placeholder="Family..." value={familySlug} options={families} onChange={handleFamilyChange} loading={loadingF} />
+      <PortalSelect placeholder="Size..." value={sizeLookupId} options={sizes} onChange={handleSizeChange} disabled={!familySlug} loading={loadingS} />
+      <PortalSelect placeholder="Vendor..." value={vendorId} options={vendors} onChange={handleVendorChange} disabled={!sizeLookupId} loading={loadingV} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import "./globals.css";
 import AuthGate from "@/components/AuthGate";
 import { AuthProvider } from "@/AuthContext";
 import { ProjectProvider } from "@/context/ProjectContext";
+import { LazyMotion, domAnimation } from "framer-motion";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -15,6 +16,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
+    <LazyMotion features={domAnimation}>
     <html lang="en" className="dark">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -31,5 +33,6 @@ export default function RootLayout({ children }) {
         </AuthProvider>
       </body>
     </html>
+    </LazyMotion>
   );
 }

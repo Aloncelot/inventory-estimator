@@ -1,6 +1,8 @@
 // src/components/ui/AccordionSection.jsx
 "use client";
-import { Children, useCallback, useEffect, useId, useRef, useState } from "react";
+
+import { useCallback, useState, useId } from "react";
+import { motion } from "framer-motion";
 
 export default function AccordionSection({
   title,
@@ -18,6 +20,7 @@ export default function AccordionSection({
   const isControlled = typeof openProp === "boolean";
   const [uncontrolled, setUncontrolled] = useState(!!defaultOpen);
   const open = isControlled ? openProp : uncontrolled;
+  const id = useId();
 
   const setOpen = useCallback(
     (next) => {
@@ -30,49 +33,6 @@ export default function AccordionSection({
 
   const toggle = useCallback(() => setOpen(!open), [setOpen, open]);
 
-  // 2. Re-added bodyRef
-  const bodyRef = useRef(null);
-  const innerRef = useRef(null);
-  const id = useId();
-
-  // 3. Re-added the useEffect to manage max-height
-  useEffect(() => {
-    const el = bodyRef.current;
-    const innerEl = innerRef.current;
-    if (!el || !innerEl) return;
-
-    let resizeObserver;
-
-    if (open) {
-      // --- Al abrir ---
-      el.style.maxHeight = `${innerEl.scrollHeight}px`; // Ajustar altura inicial
-      el.style.opacity = "1";
-      el.setAttribute("aria-hidden", "false");
-
-      // 1. Definimos el callback del observador
-      // Esto se disparará CADA VEZ que el tamaño del contenido interno cambie
-      const onResize = () => {
-        el.style.maxHeight = `${innerEl.scrollHeight}px`;
-      };
-
-      // 2. Creamos y activamos el observador
-      resizeObserver = new ResizeObserver(onResize);
-      resizeObserver.observe(innerEl); // Empezamos a observar el div interior
-
-    } else {
-      // --- Al cerrar ---
-      el.style.maxHeight = "0px";
-      el.style.opacity = "0";
-      el.setAttribute("aria-hidden", "true");
-    }
-    
-    return () => {
-      if (resizeObserver) {
-        resizeObserver.disconnect(); // Dejamos de observar
-      }
-    };
-  }, [open]);
-
   const resolve = (nodeOrFn) =>
     typeof nodeOrFn === "function" ? nodeOrFn({ open, toggle, id }) : nodeOrFn;
 
@@ -80,8 +40,30 @@ export default function AccordionSection({
   const summaryNode = resolve(summary);
   const headerNode = resolve(header);
 
+  const bodyVariants = {
+    open: {
+      height: "auto",
+      opacity: 1,
+      transition: {
+        height: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
+        opacity: { duration: 0.2, delay: 0.1 },
+      },
+    },
+    collapsed: {
+      height: 0,
+      opacity: 0,
+      transition: {
+        height: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
+        opacity: { duration: 0.2 },
+      },
+    },
+  };
+
   return (
-    <section className={`acc ${open ? "acc--open" : ""} ${className}`}>
+    <section
+      className={`acc ${open ? "acc--open" : ""} ${className}`}
+      style={{ overflow: "hidden" }}
+    >
       {barNode ? (
         <div className="acc__summary">{barNode}</div>
       ) : (
@@ -91,14 +73,7 @@ export default function AccordionSection({
               className="acc__header"
               style={{ display: "flex", alignItems: "center", gap: 8 }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  flex: 1,
-                }}
-              >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
                 {open && headerNode ? (
                   headerNode
                 ) : (
@@ -106,9 +81,15 @@ export default function AccordionSection({
                     type="button"
                     className="acc__button"
                     style={{
-                      fontFamily: "Nova Flat",
-                      color: "#59d2c8",
+                      fontFamily: "var(--font-titles)",
+                      color: "var(--turq-200)",
                       fontSize: "18px",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px"
                     }}
                     aria-expanded={open}
                     aria-controls={id}
@@ -117,13 +98,12 @@ export default function AccordionSection({
                   >
                     <img
                       src={open ? "/icons/down.png" : "/icons/minimize.png"}
-                      alt={open ? "Collapse section" : "Expand section"}
+                      alt=""
                       width={16}
                       height={16}
-                      className="acc__chev"
                       style={{
-                        display: "inline-block",
-                        verticalAlign: "middle",
+                        transition: "transform 0.3s ease",
+                        transform: open ? "rotate(0deg)" : "rotate(-90deg)"
                       }}
                     />
                     <span className="acc__title">{title}</span>
@@ -140,10 +120,23 @@ export default function AccordionSection({
         </>
       )}
 
-      {/* 4. Re-added the ref to the body div */}
-      <div id={id} ref={bodyRef} className="acc__body">
-        <div ref={innerRef} className="acc__bodyInner">{children}</div>
-      </div>
+      <motion.div
+        id={id}
+        initial={defaultOpen ? "open" : "collapsed"}
+        animate={open ? "open" : "collapsed"}
+        variants={bodyVariants}
+        className="acc__body"
+        style={{ overflow: "hidden" }}
+        /* FIX: Usamos el booleano directamente. 
+           Si open es true, inert es false (interactivo).
+           Si open es false, inert es true (bloqueado).
+        */
+        inert={!open ? true : undefined}
+      >
+        <div className="acc__bodyInner" style={{ padding: "1px 0" }}>
+          {children}
+        </div>
+      </motion.div>
     </section>
   );
 }
