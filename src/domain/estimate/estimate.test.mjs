@@ -2,13 +2,14 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  computeWallSection, computeLevel, computePanelNails, computeLoosePanel, computeNailsAndBracing,
+  computeWallSection, computeLevel, computePanelNails, computeLoosePanel, computeBracing,
   computeManufacture, computeWallPanels, computeLooseSection, computeLoose, computeProject,
   sectionAddonPerLF, pieceLength, wallPanelsOf,
 } from './index.js';
 import { migrateEstimate } from './migrate.js';
 import { slimItem, slimEstimate, priceDateOf } from '../lib/selection.js';
 import { isGroundLevelName, wallRowDefaults } from '../lib/defaults.js';
+import { nailsPerSheet, perBoxFromSize, rollLengthFromSize } from '../lib/fastening.js';
 
 // a selection as ItemPicker stores it; $10 per unit
 const pick = (familyLabel, sizeLabel, price = 10, extra = {}) => ({
@@ -42,6 +43,13 @@ describe('wall section', () => {
     const blocking = r.baseRows.find((x) => x.key === 'blocking');
     assert.equal(blocking.qtyRaw, 20);           // 80 / 8 × 2 rows
     assert.equal(blocking.piece.lf, 160);
+  });
+
+  test('a new section with no length has 0 studs until a length is typed', () => {
+    const empty = computeWallSection({ lengthLF: 0, heightFt: 12, studSpacingIn: 16, studMultiplier: 1 });
+    assert.equal(empty.baseRows.find((x) => x.key === 'studs').qtyFinal, 0);
+    const typed = computeWallSection({ lengthLF: 16, heightFt: 12, studSpacingIn: 16, studMultiplier: 1, waste: { studs: 0 } });
+    assert.equal(typed.baseRows.find((x) => x.key === 'studs').qtyFinal, 13); // 16×12/16 + 1
   });
 
   test('interior partitions have no blocking or sheathing; shear walls have sheathing', () => {
@@ -129,16 +137,114 @@ describe('manufacture', () => {
   });
 });
 
-describe('nails', () => {
-  test('panel nails from level sheets / boards / bottom plates', () => {
-    const n = computePanelNails({ waste: { sheath: 0, frame8d: 0, frame12d: 0 } }, { panelSheets: 270, bottomPlatePieces: 250, ptBoards: 108 });
-    const q = Object.fromEntries(n.baseRows.map((r) => [r.key, r.qtyFinal]));
-    assert.deepEqual(q, { sheath: 8, frame8d: 1, frame12d: 8 });
+describe('nailing schedule (IRC R602.3(1))', () => {
+  test('nails per 4×8 sheet over studs @ 16": 6/12 = 70, 4/12 = 94, 3/12 = 118', () => {
+    assert.equal(nailsPerSheet({ edgeIn: 6, fieldIn: 12 }), 70);
+    assert.equal(nailsPerSheet({ edgeIn: 4, fieldIn: 12 }), 94);
+    assert.equal(nailsPerSheet({ edgeIn: 3, fieldIn: 12 }), 118);
+    assert.equal(nailsPerSheet({ edgeIn: 6, fieldIn: 12, studSpacingIn: 24 }), 61); // 1 stud under the middle
   });
 
-  test('nails & bracing: temporary bracing = panels × 3', () => {
-    const n = computeNailsAndBracing({}, { panelsAll: 10 });
-    assert.equal(n.baseRows.find((r) => r.key === 'tempBracing').qtyFinal, 30);
+  test('count per box and roll length come from the size label', () => {
+    assert.equal(perBoxFromSize('8D-2-3/8x.113-2.7M', 1), 2700);
+    assert.equal(perBoxFromSize('12D-3-1/4x.120-2.5M', 1), 2500);
+    assert.equal(perBoxFromSize('3"-100s', 1), 100);
+    assert.equal(perBoxFromSize('weird', 77), 77);
+    assert.equal(rollLengthFromSize(`5-1/2"x50'`), 50);
+  });
+
+  test('a section reports sheathing nails from its own schedule', () => {
+    const base = { lengthLF: 32, heightFt: 8, studSpacingIn: 16, waste: { sheathing: 0 } };
+    const std = computeWallSection(base);            // 8 sheets × 70
+    assert.equal(std.nailing.sheathNails, 8 * 70);
+    const shear = computeWallSection({ ...base, edgeNailIn: 4 });
+    assert.equal(shear.nailing.sheathNails, 8 * 94);
+    assert.equal(shear.baseRows.find((r) => r.key === 'sheathing').tag.text, '4/12');
+  });
+
+  test('framing nails: 2 per stud end, doubled studs @ 24", braced bottom plates 3 per 16"', () => {
+    const r = computeWallSection({ lengthLF: 16, heightFt: 8, studSpacingIn: 16, studMultiplier: 2 });
+    // 13 stud locations × 2 studs = 26 studs → 26 × 2 ends × 2 nails
+    assert.equal(r.nailing.plateStudNails, 104);
+    // 13 extra studs × (8 ft @ 24" + 1 = 5)
+    assert.equal(r.nailing.doubleStudNails, 65);
+    // exterior = braced wall: (16 ft @ 16" + 1 = 13) × 3
+    assert.equal(r.nailing.bottomPlateNails, 39);
+    const part = computeWallSection({ lengthLF: 16, heightFt: 8, kind: 'partition' }, 'interior');
+    assert.equal(part.nailing.bottomPlateNails, 13);
+  });
+});
+
+describe('panel nails (per level)', () => {
+  const plates = { pt: { lf: 96, pieces: 6 }, topPlates: { lf: 96, pieces: 6 }, extraPlates: { lf: 0, pieces: 0 }, looseSheets: 10 };
+
+  test('concrete rows only on a level that is on concrete', () => {
+    const upper = computePanelNails({}, { plates, isGround: false });
+    assert.ok(!upper.baseRows.some((r) => r.group === 'concrete'));
+    const ground = computePanelNails({}, { plates, isGround: true });
+    assert.deepEqual(ground.baseRows.filter((r) => r.group === 'concrete').map((r) => r.key), ['drivePins', 'epoxy', 'foamSill']);
+    const forced = computePanelNails({ onConcrete: true }, { plates });
+    assert.ok(forced.onConcrete);
+  });
+
+  test('drive pins by spacing (+1 per piece), epoxy per anchor bolt, foam per roll', () => {
+    const r = computePanelNails({ waste: { drivePins: 0, epoxy: 0, foamSill: 0 } }, { plates, isGround: true });
+    const row = Object.fromEntries(r.baseRows.map((x) => [x.key, x]));
+    assert.equal(row.drivePins.count, 96 * 12 / 16 + 6);   // 72 + 6 = 78 pins
+    assert.equal(row.drivePins.qtyFinal, 1);               // 1 box of 100
+    // 24 anchors (96 LF @ 48") × π/4 × (0.625² − 0.5²) × 7" = 18.55 in³ ÷ 10 fl oz (18.05 in³)
+    assert.equal(r.anchors, 24);
+    assert.ok(Math.abs(row.epoxy.count - 18.555) < 0.01);
+    assert.equal(row.epoxy.qtyFinal, 2);
+    assert.equal(row.foamSill.qtyFinal, 2);                // 96 ÷ 50'
+  });
+
+  test('PT bottom plates built into the panels count for the concrete items too', () => {
+    const panelPT = computeWallSection({ lengthLF: 48, heightFt: 8, sel: { bottomPlate: pick('PT', `2x6"-16'`) } }).nailing;
+    assert.equal(panelPT.ptLF, 48);
+    assert.equal(panelPT.ptPieces, 3);
+    const r = computePanelNails({}, { sections: [panelPT], plates, isGround: true });
+    assert.equal(r.ptLF, 96 + 48);
+    assert.equal(r.baseRows.find((x) => x.key === 'drivePins').count, Math.ceil(144 * 12 / 16) + 6 + 3);
+    const spf = computeWallSection({ lengthLF: 48, heightFt: 8, sel: { bottomPlate: pick('SPF#2', `2x6"-16'`) } }).nailing;
+    assert.equal(spf.ptLF, 0);
+  });
+
+  test('loose top plate: 10d @ 24" + 16 nails per splice; sheathing from sections', () => {
+    const sections = [computeWallSection({ lengthLF: 32, heightFt: 8, waste: { sheathing: 0 } }).nailing];
+    const r = computePanelNails({ waste: { topPlate: 0, sheath: 0 } }, { sections, plates });
+    const row = Object.fromEntries(r.baseRows.map((x) => [x.key, x]));
+    assert.equal(row.topPlate.count, (96 * 12 / 24 + 1) + 6 * 16);
+    assert.equal(row.sheath.count, 560);
+    assert.equal(row.sheath.qtyFinal, 1);                  // 560 ÷ 2,700
+    assert.equal(row.sheathLoose.count, 10 * 70);
+  });
+});
+
+describe('bracing', () => {
+  test('wall panels: panels × braces per panel', () => {
+    const b = computeBracing({}, { panels: 10 });
+    assert.equal(b.baseRows.find((x) => x.key === 'panels').qtyFinal, 20);
+  });
+
+  test('trusses: 2 bundles per 5,000 sq ft, braced one section at a time', () => {
+    const t = (inputs, ctx = {}) => computeBracing({ inputs }, ctx).baseRows.find((x) => x.key === 'trusses').qtyFinal;
+    assert.equal(t({ buildingAreaSqFt: 5000 }), 2 * 294);
+    assert.equal(t({ buildingAreaSqFt: 2000 }), 1 * 294);            // 0.8 bundle → 1
+    assert.equal(t({ buildingAreaSqFt: 20000 }), 2 * 294);           // reused: 5,000 sq ft at a time
+    assert.equal(t({ buildingAreaSqFt: 20000, reuseAreaSqFt: 0 }), 8 * 294); // no reuse
+    assert.equal(t({}, { roofAreaSqFt: 4000 }), 2 * 294);            // falls back to Roof sq ft
+    assert.equal(t({}), 0);
+  });
+});
+
+describe('loose top plates', () => {
+  test('warn when the loose top plate is not longer than the panels', () => {
+    const short = computeLoosePanel({ sel: { extTopPlate: pick('SPF#2', `2x6"-8'`) } }, { extLengthLF: 40, panelLenFt: 8 });
+    assert.ok(short.exteriorRows.find((r) => r.key === 'extTopPlate').warn);
+    const ok = computeLoosePanel({ sel: { extTopPlate: pick('SPF#2', `2x6"-16'`) } }, { extLengthLF: 40, panelLenFt: 8 });
+    assert.equal(ok.exteriorRows.find((r) => r.key === 'extTopPlate').warn, undefined);
+    assert.deepEqual(ok.plates.topPlates, { lf: 40, pieces: 3 });
   });
 });
 
@@ -190,14 +296,14 @@ describe('project', () => {
   };
 
   test('level total = sections + panel nails + loose; page adds nails & manufacture', () => {
-    const lvl = computeLevel(est.levels[0]);
+    const lvl = computeLevel(est.levels[0], { isGround: true });
     assert.equal(lvl.derived.extLengthSum, 80);
     assert.equal(lvl.derived.int2x4LF, 40);
     assert.equal(lvl.total, Math.round((lvl.exteriorTotal + lvl.interiorTotal + lvl.panelNails.total + lvl.loose.subtotal) * 100) / 100);
     const wp = computeWallPanels(est);
     assert.equal(wp.lf.exteriorWalls, 80);
     assert.equal(wp.lf.interiorNonLoad, 40);
-    assert.equal(wp.total, Math.round((lvl.total + wp.nails.total + wp.manufacture.total) * 100) / 100);
+    assert.equal(wp.total, Math.round((lvl.total + wp.bracing.total + wp.manufacture.total) * 100) / 100);
   });
 
   test('project totals do not depend on stored totals', () => {
@@ -248,6 +354,30 @@ describe('document size', () => {
     assert.equal(m.levels[0].exteriorSections[0].sel.headersInfill.familyLabel, 'CDX SE');
     assert.equal(m.looseList[0].subtotal, undefined);
     assert.deepEqual(m.manufactureEstimate, { rateByKey: { windows: 3 } });
+  });
+});
+
+describe('migration of nails & bracing', () => {
+  test('old Nails & bracing splits into panel nails rows and the Bracing section', () => {
+    const est = {
+      levels: [{ id: 'a', panelNails: { sel: { nailsFrame12d: pick('Bright Common Coil', '12D') }, waste: { frame12d: 30, frame8d: 20 }, rowOrder: ['frame8d', 'sheath'] } }, { id: 'b' }],
+      nailsAndBracing: {
+        sel: { nailsConcrete: pick('Drive Pins', '3"-100s'), tempBracing: pick('SPF#2', `2x4"-16'`) },
+        waste: { nailsConcrete: 25, tempBracing: 5 },
+        extras: [{ id: 'gn1', label: 'Nails', inputs: { qty: 1, density: 1, perBox: 1 } }],
+      },
+    };
+    const m = migrateEstimate(est);
+    assert.equal(m.nailsAndBracing, undefined);
+    assert.equal(m.levels[0].panelNails.waste.framing, 30);
+    assert.equal(m.levels[0].panelNails.waste.bottomPlate, 20);
+    assert.deepEqual(m.levels[0].panelNails.rowOrder, ['bottomPlate', 'sheath']);
+    assert.equal(m.levels[0].panelNails.sel.drivePins.familyLabel, 'Drive Pins');
+    assert.equal(m.levels[0].panelNails.waste.drivePins, 25);
+    assert.equal(m.levels[0].panelNails.extras.length, 1);
+    assert.equal(m.levels[1].panelNails.extras, undefined);
+    assert.equal(m.bracing.sel.panels.familyLabel, 'SPF#2');
+    assert.equal(m.bracing.waste.panels, 5);
   });
 });
 

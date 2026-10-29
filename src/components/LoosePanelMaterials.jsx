@@ -38,6 +38,7 @@ export default function LoosePanelMaterials({ title = 'Loose materials (wall pan
       id={row.key}
       label={row.label}
       piece={row.piece}
+      warn={row.warn}
       inputs={row.optional ? (
         <label className="fld">
           <input type="checkbox" checked={!!include[row.key]} onChange={(e) => update((p) => ({ ...p, include: { ...(p.include || {}), [row.key]: e.target.checked } }))} />

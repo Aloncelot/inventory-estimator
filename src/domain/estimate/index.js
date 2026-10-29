@@ -16,6 +16,7 @@ import {
 import { parseBoardLengthFt, unitPriceFrom } from '../lib/parsing';
 import { isLVL, isVersaColumn, isInfillFamily } from '../lib/families';
 import { getItem, getUnit, getSize, getFamily, isPTFamily, priceDateOf } from '../lib/selection';
+import { IRC, BLOCK_NAILS, nailsPerSheet, alongRun, nailsPerDoubledStud, perBoxFromSize, rollLengthFromSize } from '../lib/fastening';
 
 const n = (v) => Number(v) || 0;
 const round2 = (v) => Number((Number(v) || 0).toFixed(2));
@@ -37,6 +38,10 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     waste = {}, sel = {}, extras = [],
   } = section;
   const kind = wallKindOf(variant, section.kind);
+  // nailing schedule from the plans (edge / field o.c.), IRC 6/12 by default
+  const edgeIn = n(section.edgeNailIn) || IRC.sheathEdgeIn;
+  const fieldIn = n(section.fieldNailIn) || IRC.sheathFieldIn;
+  const perSheet = nailsPerSheet({ edgeIn, fieldIn, studSpacingIn });
   const showBlocking = variant === 'exterior' || kind === 'bearing';
   const showSheathing = variant === 'exterior' || kind === 'shear';
   const blockingRows = Math.max(0, Math.ceil(n(heightFt) / 4) - 1);
@@ -56,6 +61,7 @@ export function computeWallSection(section = {}, variant = 'exterior') {
   if (showBlocking) base.push({ key: 'blocking', label: 'Blocking', wastePct: waste.blocking ?? 10, piece: piece(sel.blocking, n(lengthLF) * blockingRows),
     ...calcBlocking({ lengthLF, heightFt, boardLenFt: blockFt, wastePct: waste.blocking ?? 10, item: getItem(sel.blocking), unit: getUnit(sel.blocking) }) });
   if (showSheathing) base.push({ key: 'sheathing', label: variant === 'exterior' ? 'Sheathing' : 'Sheathing (4×8)', wastePct: waste.sheathing ?? 20,
+    tag: { text: `${edgeIn}/${fieldIn}`, title: `Nailing: edges ${edgeIn}" o.c., field ${fieldIn}" o.c. → ${perSheet} nails per sheet` },
     ...calcSheathing({ lengthLF, heightFt, wastePct: waste.sheathing ?? 20, item: getItem(sel.sheathing), unit: getUnit(sel.sheathing, 'sheet') }) });
   const baseRows = base.map((r) => withPrice(r, sel[r.key]));
 
@@ -105,7 +111,42 @@ export function computeWallSection(section = {}, variant = 'exterior') {
 
   // numbers the level, nails & manufacture need
   const row = Object.fromEntries(baseRows.map((r) => [r.key, r]));
+
   const panelSheets = showSheathing ? Math.ceil(n(row.sheathing?.qtyFinal)) : 0;
+
+  // nails to build this panel (IRC R602.3(1); counts use quantities before waste)
+  const mult = Math.max(1, n(studMultiplier) || 1);
+  const studRaw = n(row.studs?.qtyRaw);
+  const studLocations = studRaw / mult;
+  const blocksPerRow = n(lengthLF) > 0 ? Math.ceil((n(lengthLF) * 12) / Math.max(1, n(studSpacingIn) || 16)) : 0;
+  let plateStud = studRaw * 2 * IRC.plateToStud;
+  let doubled = studLocations * (mult - 1) * nailsPerDoubledStud(heightFt);
+  let blocks = showBlocking ? blockingRows * blocksPerRow : 0;
+  let headerLF = 0;
+  for (const r of extraRows) {
+    if (r.type === 'Studs') {
+      const m = Math.max(1, n(r.inputs?.studMultiplier) || 1);
+      plateStud += n(r.qtyRaw) * 2 * IRC.plateToStud;
+      doubled += (n(r.qtyRaw) / m) * (m - 1) * nailsPerDoubledStud(heightFt);
+    } else if (r.type === 'Extra blocking') {
+      blocks += Math.max(1, n(r.inputs?.rows) || 1) * blocksPerRow;
+    } else if (r.type === 'Header') {
+      headerLF += n(r.inputs?.headerLF) || n(r.inputs?.lvlPieces) * n(r.inputs?.lvlLength);
+    }
+  }
+  const braced = variant === 'exterior' || kind === 'shear';
+  const nailing = {
+    edgeIn, fieldIn, perSheet, braced,
+    sheathNails: (showSheathing ? Math.ceil(n(row.sheathing?.qtyRaw)) : 0) * perSheet,
+    plateStudNails: plateStud,
+    doubleStudNails: doubled,
+    headerNails: Math.ceil(headerLF * (12 / IRC.headerOcIn) * IRC.headerEdges),
+    blockingNails: blocks * BLOCK_NAILS,
+    bottomPlateNails: alongRun(lengthLF, IRC.bottomPlateOcIn) * (braced ? IRC.bottomPlateBraced : 1),
+    // a PT bottom plate built into the panel also sits on the concrete
+    ptLF: isPTFamily(getFamily(sel.bottomPlate)) ? n(lengthLF) : 0,
+    ptPieces: isPTFamily(getFamily(sel.bottomPlate)) ? Math.ceil(n(row.bottomPlate?.qtyRaw)) : 0,
+  };
   const bottomQty = Math.ceil(n(row.bottomPlate?.qtyFinal));
   const sizeLabel = getSize(sel.studs) || getSize(sel.bottomPlate) || '';
   const stats = {
@@ -122,12 +163,45 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     ptLF: n(lengthLF),
   };
 
-  return { variant, kind, baseRows, extraRows, infill, headerLFPool, subtotal, stats };
+  return { variant, kind, baseRows, extraRows, infill, headerLFPool, subtotal, stats, nailing };
 }
 
-/* ───────────────────────── Panel nails (per level) ───────────────────────── */
+/* ───────────────────────── Panel nails (per level) ─────────────────────────
+   Every fastener of the level's wall panels in one place:
+   - on concrete (toggle): drive pins, epoxy for anchor bolts, foam sill sealer
+   - sheathing nails from each section's nailing schedule (edge / field o.c.)
+   - framing nails per IRC R602.3(1): plates to studs, headers, blocking, doubled studs
+   - plate nails: panel bottom plate to floor, loose top plate (with splices), additional plates
+   Quantities are counted before waste; boxes use the count per box from the item's size. */
 
-export const PANEL_NAIL_SEL_KEY = { sheath: 'nailsSheath', frame8d: 'nailsFrame8d', frame12d: 'nailsFrame12d' };
+export const PANEL_NAIL_ROWS = [
+  { key: 'drivePins', selKey: 'drivePins', group: 'concrete', label: 'Drive pins (PT plates to concrete)', unit: 'box', perBox: 100, waste: 40 },
+  { key: 'epoxy', selKey: 'epoxy', group: 'concrete', label: 'Epoxy (anchor bolts)', unit: 'tube', waste: 10 },
+  { key: 'foamSill', selKey: 'foamSill', group: 'concrete', label: 'Foam sill sealer', unit: 'roll', waste: 5 },
+  { key: 'sheath', selKey: 'nailsSheath', group: 'sheathing', label: 'Sheathing nails — panels', unit: 'box', perBox: 2700, waste: 40 },
+  { key: 'sheathLoose', selKey: 'nailsSheathLoose', group: 'sheathing', label: 'Sheathing nails — loose sheets', unit: 'box', perBox: 2700, waste: 40 },
+  { key: 'framing', selKey: 'nailsFrame12d', group: 'framing', label: 'Framing nails — plates, headers, blocking', unit: 'box', perBox: 2500, waste: 40 },
+  { key: 'doubleStuds', selKey: 'nailsDoubleStud', group: 'framing', label: 'Framing nails — doubled studs', unit: 'box', perBox: 2500, waste: 40 },
+  { key: 'bottomPlate', selKey: 'nailsFrame8d', group: 'plates', label: 'Plate nails — bottom plate to floor', unit: 'box', perBox: 2700, waste: 40 },
+  { key: 'topPlate', selKey: 'nailsTopPlate', group: 'plates', label: 'Plate nails — loose top plate', unit: 'box', perBox: 2500, waste: 40 },
+  { key: 'extraPlates', selKey: 'nailsExtraPlate', group: 'plates', label: 'Plate nails — additional plates', unit: 'box', perBox: 2500, waste: 40 },
+];
+export const PANEL_NAIL_GROUPS = { concrete: 'On concrete', sheathing: 'Sheathing', framing: 'Framing', plates: 'Plates' };
+export const PANEL_NAIL_INPUTS = {
+  pinSpacingIn: 16,
+  anchorSpacingIn: 48,
+  // epoxy: adhesive fills the ring between the hole and the anchor rod
+  anchorDiaIn: 0.5,      // 1/2" anchor bolt / threaded rod
+  holeDiaIn: 0.625,      // 5/8" drill bit
+  embedIn: 7,            // embedment into the concrete
+  cartridgeOz: 10,       // cartridge volume, fl oz
+};
+const IN3_PER_FL_OZ = 1.8046875;
+
+/** Adhesive volume (in³) for one anchor: annulus × embedment. */
+export const epoxyPerAnchorIn3 = ({ anchorDiaIn, holeDiaIn, embedIn }) =>
+  Math.max(0, (Math.PI / 4) * (n(holeDiaIn) ** 2 - n(anchorDiaIn) ** 2) * n(embedIn));
+export const PANEL_NAIL_SEL_KEY = Object.fromEntries(PANEL_NAIL_ROWS.map((r) => [r.key, r.selKey]));
 
 export function computeNailExtras(extras = []) {
   return (extras || []).map((ex) => {
@@ -140,23 +214,131 @@ export function computeNailExtras(extras = []) {
   });
 }
 
-export function computePanelNails(data = {}, { panelSheets = 0, bottomPlatePieces = 0, ptBoards = 0 } = {}) {
+const fmtN = (v) => Math.round(n(v)).toLocaleString('en-US');
+
+/**
+ * data: level.panelNails (sel, waste, inputs, onConcrete, extras…)
+ * ctx:  sections (each section's nailing), plates (loose.plates), isGround
+ */
+export function computePanelNails(data = {}, { sections = [], plates = {}, isGround = false } = {}) {
   const sel = data.sel || {};
-  const waste = { sheath: 40, frame8d: 40, frame12d: 40, ...(data.waste || {}) };
-  const raw = {
-    sheath: n(panelSheets) * 80 / 2700,
-    frame8d: n(ptBoards) * 25 / 2700,
-    frame12d: n(bottomPlatePieces) * 80 / 2500,
+  const waste = data.waste || {};
+  const inputs = { ...PANEL_NAIL_INPUTS, ...(data.inputs || {}) };
+  const onConcrete = data.onConcrete ?? isGround;
+  // PT plates on the concrete: loose PT plates + PT bottom plates built into the panels
+  const loosePT = plates.pt || { lf: 0, pieces: 0 };
+  const pt = {
+    lf: n(loosePT.lf) + sections.reduce((acc, x) => acc + n(x?.ptLF), 0),
+    pieces: n(loosePT.pieces) + sections.reduce((acc, x) => acc + n(x?.ptPieces), 0),
   };
-  const labels = { sheath: 'Sheathing nails', frame8d: 'Framing nails 8D', frame12d: 'Framing nails 12D' };
-  const baseRows = Object.keys(raw).map((key) => {
-    const s = sel[PANEL_NAIL_SEL_KEY[key]];
-    const qtyFinal = Math.ceil(raw[key] * (1 + n(waste[key]) / 100));
-    const unitPrice = unitPriceFrom(getItem(s));
-    return { key, label: labels[key], qtyRaw: raw[key], wastePct: waste[key], qtyFinal, unit: getUnit(s, 'box'), unitPrice, subtotal: qtyFinal * (unitPrice || 0), priceDate: priceDateOf(s) };
-  });
+  const top = plates.topPlates || { lf: 0, pieces: 0 };
+  const extra = plates.extraPlates || { lf: 0, pieces: 0 };
+  const tot = (k) => sections.reduce((acc, x) => acc + n(x?.[k]), 0);
+
+  const pinSpacing = Math.max(1, n(inputs.pinSpacingIn) || PANEL_NAIL_INPUTS.pinSpacingIn);
+  const anchorSpacing = Math.max(1, n(inputs.anchorSpacingIn) || PANEL_NAIL_INPUTS.anchorSpacingIn);
+  const perAnchorIn3 = epoxyPerAnchorIn3(inputs);
+  const cartridgeIn3 = Math.max(0.01, n(inputs.cartridgeOz) || PANEL_NAIL_INPUTS.cartridgeOz) * IN3_PER_FL_OZ;
+  const anchorsPerTube = perAnchorIn3 > 0 ? cartridgeIn3 / perAnchorIn3 : 0;
+  const pins = pt.lf > 0 ? Math.ceil((pt.lf * 12) / pinSpacing) + pt.pieces : 0;   // one more per piece so both ends are pinned
+  const anchors = pt.lf > 0 ? Math.ceil((pt.lf * 12) / anchorSpacing) : 0;
+  const looseSheetNails = n(plates.looseSheets) * nailsPerSheet({});
+  const sheets = sections.reduce((acc, x) => acc + (x?.perSheet ? n(x.sheathNails) / x.perSheet : 0), 0);
+  const topNails = alongRun(top.lf, IRC.topPlateOcIn) + top.pieces * IRC.topPlateSplice;
+  const extraNails = alongRun(extra.lf, IRC.bottomPlateOcIn);
+
+  // count = nails / pins / anchors / LF;  per = how many of them one unit holds
+  const counts = {
+    drivePins: { count: pins, hint: `${fmtN(pt.lf)} LF of PT plate, 1 pin every ${pinSpacing}" + 1 per piece = ${fmtN(pins)} pins` },
+    epoxy: {
+      count: anchors * perAnchorIn3,
+      per: cartridgeIn3,
+      hint: `${fmtN(anchors)} anchors (1 every ${anchorSpacing}") × ${perAnchorIn3.toFixed(2)} in³ (Ø${inputs.holeDiaIn}" hole, Ø${inputs.anchorDiaIn}" rod, ${inputs.embedIn}" deep) ÷ ${n(inputs.cartridgeOz)} fl oz cartridge ≈ ${anchorsPerTube.toFixed(0)} anchors per cartridge`,
+    },
+    foamSill: { count: pt.lf, per: rollLengthFromSize(getSize(sel.foamSill), 50), hint: `${fmtN(pt.lf)} LF of PT plate ÷ ${rollLengthFromSize(getSize(sel.foamSill), 50)}' per roll` },
+    sheath: { count: tot('sheathNails'), hint: `${fmtN(sheets)} sheets × nails per sheet from each section's schedule = ${fmtN(tot('sheathNails'))} nails` },
+    sheathLoose: { count: looseSheetNails, hint: `${fmtN(plates.looseSheets)} loose sheets (panel band + extra) × ${nailsPerSheet({})} nails (6/12) = ${fmtN(looseSheetNails)} nails` },
+    framing: {
+      count: tot('plateStudNails') + tot('headerNails') + tot('blockingNails'),
+      hint: `Plates to studs ${fmtN(tot('plateStudNails'))} (2 per stud end) + headers ${fmtN(tot('headerNails'))} (16" o.c. each edge) + blocking ${fmtN(tot('blockingNails'))} (2 each end)`,
+    },
+    doubleStuds: { count: tot('doubleStudNails'), hint: `Doubled studs face-nailed @ ${IRC.doubleStudOcIn}" o.c. = ${fmtN(tot('doubleStudNails'))} nails` },
+    bottomPlate: { count: tot('bottomPlateNails'), hint: `Bottom plates @ ${IRC.bottomPlateOcIn}" o.c. (3 per 16" at exterior / shear walls) = ${fmtN(tot('bottomPlateNails'))} nails` },
+    topPlate: { count: topNails, hint: `${fmtN(top.lf)} LF @ ${IRC.topPlateOcIn}" o.c. + ${IRC.topPlateSplice} per splice × ${fmtN(top.pieces)} pieces = ${fmtN(topNails)} nails` },
+    extraPlates: { count: extraNails, hint: extra.lf > 0 ? `${fmtN(extra.lf)} LF of additional plate @ ${IRC.bottomPlateOcIn}" o.c. = ${fmtN(extraNails)} nails` : 'No additional plates (include "Second bottom plate" in loose materials)' },
+  };
+
+  const baseRows = PANEL_NAIL_ROWS
+    .filter((d) => d.group !== 'concrete' || onConcrete)
+    .map((d) => {
+      const s = sel[d.selKey];
+      const c = counts[d.key];
+      const per = c.per ?? perBoxFromSize(getSize(s), d.perBox);
+      const qtyRaw = n(c.count) / Math.max(1, n(per) || 1);
+      const wastePct = n(waste[d.key] ?? d.waste);
+      const qtyFinal = Math.ceil(qtyRaw * (1 + wastePct / 100));
+      const unitPrice = unitPriceFrom(getItem(s));
+      return {
+        key: d.key, selKey: d.selKey, group: d.group, label: d.label, hint: c.hint, count: c.count, per,
+        qtyRaw, wastePct, qtyFinal, unit: getUnit(s, d.unit), unitPrice, subtotal: qtyFinal * (unitPrice || 0), priceDate: priceDateOf(s),
+      };
+    });
   const extraRows = computeNailExtras(data.extras);
-  return { baseRows, extraRows, total: round2(sum(baseRows) + sum(extraRows)) };
+  return { onConcrete, inputs, anchors, anchorsPerTube, ptLF: pt.lf, baseRows, extraRows, total: round2(sum(baseRows) + sum(extraRows)) };
+}
+
+/* ───────────────────────── Bracing (all levels) ─────────────────────────
+   Temporary bracing is estimated apart for wall panels and trusses, even if
+   the same pieces get reused on site. */
+
+export const BRACING_ROWS = [
+  { key: 'panels', label: 'Temporary bracing — wall panels', unit: 'pcs', waste: 0 },
+  { key: 'trusses', label: 'Temporary bracing — trusses', unit: 'pcs', waste: 0 },
+];
+// Trusses: about 2 bundles of 2×4-16' (≈ 600 pcs) brace ~5,000 sq ft. On large
+// buildings bracing is bought for one section at a time and reused.
+export const BRACING_INPUTS = {
+  bracesPerPanel: 2,
+  buildingAreaSqFt: 0,      // 0 → Roof sq ft from Loose material
+  reuseAreaSqFt: 5000,      // area braced at once; 0 → no reuse (whole building)
+  bundlesPerArea: 2,
+  areaPerBundlesSqFt: 5000,
+  piecesPerBundle: 294,     // standard 2×4 unit
+};
+
+export function computeBracing(data = {}, { panels = 0, roofAreaSqFt = 0 } = {}) {
+  const sel = data.sel || {};
+  const waste = data.waste || {};
+  const inputs = { ...BRACING_INPUTS, ...(data.inputs || {}) };
+  const per = Math.max(0, n(inputs.bracesPerPanel));
+  const counts = {
+    panels: { qty: n(panels) * per, hint: `${fmtN(panels)} panels (from Panels manufacture) × ${per} braces` },
+    trusses: trussBracing(inputs, roofAreaSqFt),
+  };
+  const baseRows = BRACING_ROWS.map((d) => {
+    const s = sel[d.key];
+    const qtyRaw = counts[d.key].qty;
+    const wastePct = n(waste[d.key] ?? d.waste);
+    const qtyFinal = Math.ceil(qtyRaw * (1 + wastePct / 100));
+    const unitPrice = unitPriceFrom(getItem(s));
+    return { key: d.key, label: d.label, hint: counts[d.key].hint, qtyRaw, wastePct, qtyFinal, unit: getUnit(s, d.unit), unitPrice, subtotal: qtyFinal * (unitPrice || 0), priceDate: priceDateOf(s) };
+  });
+  return { inputs, baseRows, panels: n(panels), roofAreaSqFt: n(roofAreaSqFt), total: sum(baseRows) };
+}
+
+function trussBracing(inputs, roofAreaSqFt) {
+  const area = n(inputs.buildingAreaSqFt) || n(roofAreaSqFt);
+  if (!area) return { qty: 0, hint: 'Type the building area (or the Roof sq ft in Loose material)' };
+  const reuse = n(inputs.reuseAreaSqFt);
+  const bracedAtOnce = reuse > 0 ? Math.min(area, reuse) : area;
+  const bundles = Math.ceil((bracedAtOnce / Math.max(1, n(inputs.areaPerBundlesSqFt))) * n(inputs.bundlesPerArea));
+  const qty = bundles * n(inputs.piecesPerBundle);
+  const src = n(inputs.buildingAreaSqFt) ? '' : ' (Roof sq ft)';
+  return {
+    qty,
+    hint: `${fmtN(area)} sq ft${src}, braced ${fmtN(bracedAtOnce)} sq ft at a time → ${bundles} bundles × ${n(inputs.piecesPerBundle)} pcs`
+      + ` (${n(inputs.bundlesPerArea)} bundles per ${fmtN(inputs.areaPerBundlesSqFt)} sq ft)`,
+  };
 }
 
 /* ───────────────────────── Loose materials (per level) ───────────────────────── */
@@ -166,7 +348,11 @@ export const LOOSE_PANEL_WASTE = {
   openingsBlocking: 10, secondBottom: 10, int2x6PT: 5, int2x6Plate: 5, int2x4PT: 5, int2x4Plate: 5, intCabinetBlocking: 10,
 };
 
-export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, int2x4LF = 0, extZipSheets = 0 } = {}) {
+// loose top plates lap over panel joints, so they must be longer than a panel
+export const LOOSE_TOP_PLATE_KEYS = ['extTopPlate', 'int2x6Plate', 'int2x4Plate'];
+const LOOSE_PT_KEYS = ['extBottomPT', 'int2x6PT', 'int2x4PT'];
+
+export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, int2x4LF = 0, extZipSheets = 0, panelLenFt = 8 } = {}) {
   const sel = data.sel || {};
   const include = data.include || {};
   const extInputs = data.extInputs || {};
@@ -208,6 +394,9 @@ export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, in
   // optional rows count only when included
   const finish = (r0) => {
     const r = { ...r0, wastePct: r0.noWaste ? null : waste[r0.key] };
+    if (LOOSE_TOP_PLATE_KEYS.includes(r.key) && n(r.piece?.lf) > 0 && pieceLength(sel[r.key]) <= n(panelLenFt)) {
+      r.warn = `Loose top plates lap over the panel joints: use pieces longer than the ${n(panelLenFt)}' panels (10', 12' or 16').`;
+    }
     return withPrice(r.optional && !include[r.key] ? { ...r, excluded: true, qtyFinal: 0, subtotal: 0 } : r, sel[r.key]);
   };
   const exteriorRows = ext.map(finish);
@@ -224,12 +413,29 @@ export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, in
     blockingLF: cabLF,
   };
 
-  return { exteriorRows, interiorRows, bandLF, extLF, int2x6LF: i6, int2x4LF: i4, subtotal: round2(sum(exteriorRows) + sum(interiorRows)), stats };
+  // what the panel-nails section needs from the loose plates (before waste)
+  const rowsByKey = Object.fromEntries([...exteriorRows, ...interiorRows].map((r) => [r.key, r]));
+  const runOf = (keys) => keys.reduce((acc, k) => {
+    const r = rowsByKey[k];
+    if (!r || r.excluded) return acc;
+    acc.lf += n(r.piece?.lf);
+    acc.pieces += Math.ceil(n(r.qtyRaw));
+    return acc;
+  }, { lf: 0, pieces: 0 });
+  const plates = {
+    pt: runOf(LOOSE_PT_KEYS),             // PT plates on the slab / foundation
+    topPlates: runOf(LOOSE_TOP_PLATE_KEYS), // second top plate, laid loose over the panels
+    extraPlates: runOf(['secondBottom']),  // additional plates (second bottom plate, when included)
+    looseSheets: Math.ceil(n(rowsByKey.panelBandSheathing?.qtyRaw)) + (include.extraSheathing ? Math.ceil(n(rowsByKey.extraSheathing?.qtyRaw)) : 0),
+  };
+
+  return { exteriorRows, interiorRows, bandLF, extLF, int2x6LF: i6, int2x4LF: i4, subtotal: round2(sum(exteriorRows) + sum(interiorRows)), stats, plates };
 }
 
 /* ───────────────────────── Level ───────────────────────── */
 
-export function computeLevel(level = {}) {
+/** ctx: isGround (lowest level), panelLenFt (manufacture panel length) */
+export function computeLevel(level = {}, { isGround = false, panelLenFt = 8 } = {}) {
   const exterior = (level.exteriorSections || []).filter(Boolean).map((s) => ({ id: s.id, ...computeWallSection(s, 'exterior') }));
   const interior = (level.interiorSections || []).filter(Boolean).map((s) => ({ id: s.id, ...computeWallSection(s, 'interior') }));
 
@@ -252,38 +458,19 @@ export function computeLevel(level = {}) {
     d.ptLFTotalAll += s.stats.ptLF;
   }
 
-  const panelNails = computePanelNails(level.panelNails, {
-    panelSheets: d.panelSheetsAll, bottomPlatePieces: d.totalBottomPlatePiecesPanelAll, ptBoards: d.panelPtBoardsAll,
-  });
   const loose = computeLoosePanel(level.looseMaterials, {
-    extLengthLF: d.extLengthSum, int2x6LF: d.int2x6LF, int2x4LF: d.int2x4LF, extZipSheets: d.extZipSheetsFinal,
+    extLengthLF: d.extLengthSum, int2x6LF: d.int2x6LF, int2x4LF: d.int2x4LF, extZipSheets: d.extZipSheetsFinal, panelLenFt,
+  });
+  const panelNails = computePanelNails(level.panelNails, {
+    sections: [...exterior, ...interior].map((x) => x.nailing),
+    plates: loose.plates,
+    isGround,
   });
 
   const exteriorTotal = sum(exterior);
   const interiorTotal = sum(interior);
   const total = round2(exteriorTotal + interiorTotal + panelNails.total + loose.subtotal);
   return { id: level.id, exterior, interior, exteriorTotal, interiorTotal, derived: d, panelNails, loose, total };
-}
-
-/* ───────────────────────── Nails & bracing (all levels) ───────────────────────── */
-
-export function computeNailsAndBracing(data = {}, t = {}) {
-  const sel = data.sel || {};
-  const waste = { nailsConcrete: 40, nailsSheathing: 40, nailsFraming: 40, tempBracing: 0, ...(data.waste || {}) };
-  const looseSheets = n(t.sheetsBandAll) + n(t.sheetsExtraAll);
-  const defs = [
-    { key: 'nailsConcrete', label: 'Concrete nails', raw: n(t.ptPiecesAll) * 25 / 100, hint: `${n(t.ptPiecesAll)} PT pieces` },
-    { key: 'nailsSheathing', label: 'Sheathing nails', raw: looseSheets * 80 / 2700, hint: `${looseSheets} loose sheets` },
-    { key: 'nailsFraming', label: 'Framing nails', raw: n(t.platePiecesAll) * 25 / 2500, hint: `${n(t.platePiecesAll)} plate pieces` },
-    { key: 'tempBracing', label: 'Temporary bracing', raw: Math.max(0, n(t.panelsAll)) * 3, hint: `${n(t.panelsAll)} panels × 3`, unit: 'pcs' },
-  ];
-  const baseRows = defs.map((x) => {
-    const qtyFinal = Math.ceil(x.raw * (1 + n(waste[x.key]) / 100));
-    const unitPrice = unitPriceFrom(getItem(sel[x.key]));
-    return { ...x, qtyRaw: x.raw, wastePct: waste[x.key], qtyFinal, unit: getUnit(sel[x.key], x.unit || 'box'), unitPrice, subtotal: qtyFinal * (unitPrice || 0), priceDate: priceDateOf(sel[x.key]) };
-  });
-  const extraRows = computeNailExtras(data.extras);
-  return { baseRows, extraRows, total: round2(sum(baseRows) + sum(extraRows)) };
 }
 
 /* ───────────────────────── Panels manufacture ───────────────────────── */
@@ -341,8 +528,12 @@ export function computeManufacture(data = {}, lf = {}, addons = {}, rates = MANU
 
 /* ───────────────────────── Wall panels page ───────────────────────── */
 
+/** Wall types whose LF becomes panels (2×10 blocking rows are not panels). */
+const PANEL_KEYS = ['exteriorWalls', 'interiorShear', 'interiorBlockingOnly', 'interiorNonLoad', 'kneeWall'];
+
 export function computeWallPanels(est = {}) {
-  const levels = (est.levels || []).filter(Boolean).map(computeLevel);
+  const panelLenFt = n(est.manufactureEstimate?.panelLenByKey?.exteriorWalls) || 8;
+  const levels = (est.levels || []).filter(Boolean).map((l, i) => computeLevel(l, { isGround: i === 0, panelLenFt }));
   const t = {
     panelsAll: 0, platePiecesAll: 0, ptPiecesAll: 0, sheetsExtAll: 0, sheetsBandAll: 0, sheetsExtraAll: 0, levelsCount: levels.length,
   };
@@ -375,10 +566,12 @@ export function computeWallPanels(est = {}) {
     t.sheetsBandAll += L.loose.stats.sheetsBand;
     t.sheetsExtraAll += L.loose.stats.sheetsExtra;
   }
-  const nails = computeNailsAndBracing(est.nailsAndBracing, t);
   const manufacture = computeManufacture(est.manufactureEstimate, lf, addons);
-  const total = round2(sum(levels, 'total') + nails.total + manufacture.total);
-  return { levels, totals: t, lf, addons, nails, manufacture, total };
+  const panelCount = manufacture.lines.filter((x) => PANEL_KEYS.includes(x.key)).reduce((acc, x) => acc + n(x.panels), 0);
+  const roof = (est.looseList || []).find((x) => x && sectionKind(x) === 'roof');
+  const bracing = computeBracing(est.bracing, { panels: panelCount, roofAreaSqFt: n(roof?.inputs?.roofArea) });
+  const total = round2(sum(levels, 'total') + bracing.total + manufacture.total);
+  return { levels, totals: t, lf, addons, bracing, manufacture, total };
 }
 
 /* ───────────────────────── Loose material page ───────────────────────── */

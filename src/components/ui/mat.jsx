@@ -3,9 +3,12 @@
 // page header, collapsible group, compact inputs, the material row grid and notes.
 'use client';
 
-import { useEffect, useRef, useState, memo } from 'react';
+import { useEffect, useRef, useState, useCallback, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, StickyNote, GripVertical, Trash2, Plus, X } from 'lucide-react';
+import { ChevronDown, StickyNote, GripVertical, Trash2, Plus, X, ImagePlus, ClipboardPaste, Image as ImageIcon, ChevronLeft, ChevronRight, LoaderCircle, AlertTriangle } from 'lucide-react';
+import { useProject } from '@/context/ProjectContext';
+import { saveNoteImage, loadNoteImage, imageFromDataTransfer, imageFromClipboard } from '@/lib/noteImages';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
@@ -178,12 +181,12 @@ export function GroupBlock({
 }
 
 /* ── material table ─────────────────────────────────────────────────────── */
-const HEAD = ['Item', 'Family · Size · Vendor', 'Qty', 'Waste %', 'Final', 'Unit', 'Unit $', 'Subtotal', 'Plan · Notes', ''];
+const HEAD = ['Item', 'Family · Size · Vendor', 'Qty', 'Waste %', 'Final', 'Unit', 'Unit $', 'Age', 'Subtotal', 'Plan · Notes', ''];
 export function MatHead({ labels = HEAD }) {
   return (
     <div className="mat-head" role="row">
       {labels.map((h, i) => (
-        <div key={i} role="columnheader" className={i >= 2 && i <= 7 ? 'r' : i === 8 ? 'r' : ''}>{h}</div>
+        <div key={i} role="columnheader" className={i >= 2 && i <= 9 && i !== 7 ? 'r' : ''} title={i === 7 ? 'How old the price is (from the material list)' : undefined}>{h}</div>
       ))}
     </div>
   );
@@ -209,7 +212,7 @@ export function RemoveIconButton({ onClick, title = 'Remove' }) {
   );
 }
 
-const emptyNote = { plan: '', comment: '' };
+const emptyNote = { plan: '', comment: '', images: [] };
 
 /* ── price date ──────────────────────────────────────────────────────────
    Every chosen price carries the date it was last updated in the material
@@ -224,14 +227,97 @@ export function priceAge(ms, now = Date.now()) {
   const long = days < 1 ? 'today' : days === 1 ? '1 day ago' : days < 60 ? `${days} days ago` : days < 730 ? `${Math.round(days / 30)} months ago` : `${Math.round(days / 365)} years ago`;
   return { days, short, long, date: DATE_FMT.format(new Date(ms)), stale: days > STALE_DAYS };
 }
-export function PriceCell({ price, date }) {
-  if (!price) return <span className="muted">—</span>;
+export function PriceCell({ price }) {
+  return price ? fmtMoney(price) : <span className="muted">—</span>;
+}
+/** Age of the price, in its own aligned column right of Unit $. */
+export function PriceAge({ price, date }) {
+  if (!price) return null;
   const age = priceAge(date);
+  if (!age) return <span className="price-age is-unknown" title="Price date unknown — refresh prices to record it">?</span>;
   return (
-    <span className="price-cell" title={age ? `Price from ${age.date} (${age.long})${age.stale ? ' — consider refreshing prices' : ''}` : 'Price date unknown'}>
-      {age?.stale ? <span className="price-age">{age.short}</span> : null}
-      {fmtMoney(price)}
+    <span
+      className={`price-age${age.stale ? ' is-stale' : ''}`}
+      title={`Price from ${age.date} (${age.long})${age.stale ? ' — consider refreshing prices' : ''}`}
+    >
+      {age.short}
     </span>
+  );
+}
+
+/* ── images attached to notes ───────────────────────────────────────────
+   Shown only as a "View image" link; the image opens in a floating viewer.
+   Click outside the image (or Esc) closes it. */
+export function ImageLightbox({ images = [], start = 0, onClose }) {
+  const { appId } = useProject() || {};
+  const [i, setI] = useState(start);
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState('');
+  const img = images[i];
+
+  useEffect(() => {
+    let alive = true;
+    setSrc(null); setError('');
+    loadNoteImage(appId, img?.id)
+      .then((url) => { if (alive) { if (url) setSrc(url); else setError('This image is no longer available.'); } })
+      .catch(() => { if (alive) setError('Could not load the image.'); });
+    return () => { alive = false; };
+  }, [appId, img?.id]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+      if (e.key === 'ArrowRight' && images.length > 1) setI((x) => (x + 1) % images.length);
+      if (e.key === 'ArrowLeft' && images.length > 1) setI((x) => (x - 1 + images.length) % images.length);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [images.length, onClose]);
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <motion.div
+      className="lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={img?.name || 'Image'}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    >
+      <motion.figure
+        className="lightbox-fig"
+        initial={{ scale: 0.94, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+      >
+        {src ? <img src={src} alt={img?.name || 'Attached image'} /> : (
+          <div className="lightbox-msg">{error || <><LoaderCircle size={16} className="animate-spin" /> Loading image…</>}</div>
+        )}
+        <figcaption>
+          {images.length > 1 ? (
+            <button type="button" className="ew-icon-btn" onClick={() => setI((x) => (x - 1 + images.length) % images.length)} aria-label="Previous image"><ChevronLeft size={16} /></button>
+          ) : null}
+          <span>{img?.name}{images.length > 1 ? ` · ${i + 1} / ${images.length}` : ''}</span>
+          {images.length > 1 ? (
+            <button type="button" className="ew-icon-btn" onClick={() => setI((x) => (x + 1) % images.length)} aria-label="Next image"><ChevronRight size={16} /></button>
+          ) : null}
+        </figcaption>
+      </motion.figure>
+    </motion.div>,
+    document.body
+  );
+}
+
+export function ViewImageLink({ images = [], className = '' }) {
+  const [open, setOpen] = useState(false);
+  if (!images?.length) return null;
+  return (
+    <>
+      <button type="button" className={`view-image ${className}`} onClick={() => setOpen(true)} title="Open the attached image">
+        <ImageIcon size={12} /> View image{images.length > 1 ? `s (${images.length})` : ''}
+      </button>
+      <AnimatePresence>{open ? <ImageLightbox images={images} onClose={() => setOpen(false)} /> : null}</AnimatePresence>
+    </>
   );
 }
 
@@ -246,17 +332,18 @@ export function PriceCell({ price, date }) {
  * qty:           number or a node (e.g. an input for manual rows)
  */
 export const MatRow = memo(function MatRow({
-  label, labelTitle, material, inputs, piece,
+  label, labelTitle, material, inputs, piece, tag, warn,
   qty, waste, onWasteCommit, final, unit, unitPrice, subtotal, priceDate,
   note = emptyNote, onNoteChange,
   onRemove, extraActions, handleProps, rowRef, rowStyle, isDragging,
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const n = { ...emptyNote, ...(note || {}) };
-  const hasNote = Boolean(n.plan || n.comment);
+  const images = Array.isArray(n.images) ? n.images : [];
+  const hasNote = Boolean(n.plan || n.comment || images.length);
 
   return (
-    <div ref={rowRef} style={rowStyle}>
+    <div ref={rowRef} style={rowStyle} className="mat-item">
       <div className={`mat-row${isDragging ? ' is-dragging' : ''}`} role="row">
         <div className="mat-label" title={labelTitle || (typeof label === 'string' ? label : undefined)}>
           {handleProps ? <span className="drag-handle" title="Drag to reorder" {...handleProps}><GripVertical size={14} /></span> : null}
@@ -269,6 +356,8 @@ export const MatRow = memo(function MatRow({
               ÷{piece.ft}&apos;
             </span>
           ) : null}
+          {tag ? <span className="row-tag" title={tag.title}>{tag.text}</span> : null}
+          {warn ? <span className="row-warn" title={warn} role="img" aria-label={warn}><AlertTriangle size={12} /></span> : null}
         </div>
         <div className="mat-material">
           {inputs ? <div className="mat-inputs">{inputs}</div> : null}
@@ -282,10 +371,12 @@ export const MatRow = memo(function MatRow({
         </div>
         <div className="r strong">{fmtQty(final ?? 0)}</div>
         <div className="r muted">{unit || '—'}</div>
-        <div className="r money-row"><PriceCell price={unitPrice} date={priceDate} /></div>
+        <div className="r money-row"><PriceCell price={unitPrice} /></div>
+        <div className="age-cell"><PriceAge price={unitPrice} date={priceDate} /></div>
         <div className="r money-row strong">{subtotal ? fmtMoney(subtotal) : <span className="muted">—</span>}</div>
         <div className="note-cell">
           {n.plan ? <span className="note-plan" title={n.plan}>{n.plan}</span> : null}
+          {images.length ? <ViewImageLink images={images} /> : null}
           {onNoteChange ? (
             <button
               type="button"
@@ -327,21 +418,91 @@ export function SortableMatRow({ id, ...props }) {
 /* notes are edited locally and saved on blur (no re-render of the whole
    project on every keystroke) */
 export function NoteEditor({ note, onChange, onClose }) {
+  const { appId } = useProject() || {};
   const planRef = useRef(null);
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+  const images = Array.isArray(note.images) ? note.images : [];
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
   useEffect(() => { planRef.current?.focus(); }, []);
+
+  const attach = useCallback(async (file) => {
+    if (!file) return;
+    setBusy(true); setError('');
+    try {
+      const saved = await saveNoteImage(appId, file);
+      onChange({ images: [...imagesRef.current, saved] });
+    } catch (e) {
+      setError(e?.message || 'Could not attach the image.');
+    } finally {
+      setBusy(false);
+    }
+  }, [appId, onChange]);
+
+  const onPaste = (e) => {
+    const file = imageFromDataTransfer(e.clipboardData);
+    if (file) { e.preventDefault(); attach(file); }
+  };
+  const pasteFromClipboard = async () => {
+    try { attach(await imageFromClipboard()); } catch (e) { setError(e?.message || 'Could not read the clipboard.'); }
+  };
+
   return (
-    <div className="note-editor">
+    <div
+      className={`note-editor${dragOver ? ' is-drop' : ''}`}
+      onPaste={onPaste}
+      onDragOver={(e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); setDragOver(true); } }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => { const f = imageFromDataTransfer(e.dataTransfer); setDragOver(false); if (f) { e.preventDefault(); attach(f); } }}
+    >
       <label>
         Plan label
         <TextInput ref={planRef} value={note.plan} placeholder="e.g. S5 / Detail 3" onCommit={(v) => onChange({ plan: v })} />
       </label>
       <label>
         Comment
-        <TextInput multiline value={note.comment} placeholder="Notes for this line…" onCommit={(v) => onChange({ comment: v })} />
+        <TextInput multiline value={note.comment} placeholder="Notes for this line… (paste a screenshot with Ctrl+V)" onCommit={(v) => onChange({ comment: v })} />
       </label>
-      <button type="button" className="row-action-btn" onClick={onClose} title="Close notes" aria-label="Close notes">
-        <X size={14} />
-      </button>
+      <div className="note-tools">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; attach(f); }}
+        />
+        <button type="button" className="row-action-btn" onClick={() => fileRef.current?.click()} disabled={busy} title="Attach an image (or drop / paste it here)" aria-label="Attach image">
+          {busy ? <LoaderCircle size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+        </button>
+        <button type="button" className="row-action-btn" onClick={pasteFromClipboard} disabled={busy} title="Paste image from clipboard" aria-label="Paste image from clipboard">
+          <ClipboardPaste size={14} />
+        </button>
+        <button type="button" className="row-action-btn" onClick={onClose} title="Close notes" aria-label="Close notes">
+          <X size={14} />
+        </button>
+      </div>
+      {images.length || error ? (
+        <div className="note-images">
+          {images.map((img, idx) => (
+            <span key={img.id} className="note-image">
+              <ViewImageLink images={[img]} />
+              <button
+                type="button"
+                className="row-action-btn delete"
+                title={`Remove ${img.name}`}
+                aria-label={`Remove image ${idx + 1}`}
+                onClick={() => onChange({ images: imagesRef.current.filter((x) => x.id !== img.id) })}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+          {error ? <span className="note-error" role="alert">{error}</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

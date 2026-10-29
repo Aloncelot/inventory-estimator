@@ -96,7 +96,7 @@ const blankLevelLooseSection = (index) => {
 const blankEstimateData = () => ({
   levels: [blankLevel({ index: 0 })],
   manufactureEstimate: {},
-  nailsAndBracing: {},
+  bracing: {},
   trusses: [
     blankTrussRow("Roof Trusses & Hangers"),
     blankTrussRow("1st Floor Trusses & Hangers")
@@ -424,8 +424,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                 for (const key in level.panelNails?.sel || {}) level.panelNails.sel[key] = await refreshItem(level.panelNails.sel[key]);
                 for (const ex of level.panelNails?.extras || []) ex.sel = await refreshItem(ex.sel);
             }
-            for (const key in newEstimateData.nailsAndBracing?.sel || {}) newEstimateData.nailsAndBracing.sel[key] = await refreshItem(newEstimateData.nailsAndBracing.sel[key]);
-            for (const ex of newEstimateData.nailsAndBracing?.extras || []) ex.sel = await refreshItem(ex.sel);
+            for (const key in newEstimateData.bracing?.sel || {}) newEstimateData.bracing.sel[key] = await refreshItem(newEstimateData.bracing.sel[key]);
             for (const section of newEstimateData.looseList || []) {
                 for (const row of section.rows || []) row.item = await refreshItem(row.item);
                 for (const key in section.sel || {}) section.sel[key] = await refreshItem(section.sel[key]);

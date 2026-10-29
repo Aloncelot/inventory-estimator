@@ -1,13 +1,15 @@
 // src/components/PanelNails.jsx
-// Nails for the wall panels of one level (driven by the level's sheets and plates).
+// Every fastener of one level's wall panels: on-concrete items (drive pins,
+// epoxy, foam sill sealer), sheathing, framing and plate nails. Quantities
+// come from computePanelNails (IRC R602.3(1) + each section's nailing schedule).
 'use client';
 
-import { memo, useCallback, useEffect, useRef } from 'react';
+import { Fragment, memo, useCallback, useEffect, useRef } from 'react';
 import ItemPicker from '@/components/ItemPicker';
 import {
   GroupBlock, MatHead, MatSub, SortableMatRow, AddRowButton, SortableList, applyOrder, NumInput, Fld, noteOf, patchNote,
 } from '@/components/ui/mat';
-import { computePanelNails, PANEL_NAIL_SEL_KEY as SEL_KEY } from '@/domain/estimate';
+import { computePanelNails, PANEL_NAIL_GROUPS } from '@/domain/estimate';
 import { PANEL_NAIL_DEFAULTS } from '@/domain/lib/defaults';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -49,26 +51,52 @@ export function useNailExtras(update) {
   return { patchExtra, remove, add, onDragEnd, inputsFor };
 }
 
-function PanelNailsComponent({
-  title = 'Panel nails', data, calc: calcProp, onChange,
-  totalPanelSheets = 0, totalBottomPlatePiecesPanel = 0, ptPlatePiecesPanels = 0,
-}) {
+function PanelNailsComponent({ title = 'Panel nails', data, calc: calcProp, onChange, isGround = false }) {
   const { sel = {}, notes = {}, collapsed = true } = data || {};
-  const calc = calcProp || computePanelNails(data, { panelSheets: totalPanelSheets, bottomPlatePieces: totalBottomPlatePiecesPanel, ptBoards: ptPlatePiecesPanels });
+  const calc = calcProp || computePanelNails(data, { isGround });
+  const { inputs } = calc;
 
   const updRef = useRef(onChange);
   useEffect(() => { updRef.current = onChange; }, [onChange]);
   const update = useCallback((fn) => updRef.current?.(fn), []);
+  const setInput = (key, v) => update((p) => ({ ...p, inputs: { ...(p.inputs || {}), [key]: v } }));
 
-  const ptBoards = Number(ptPlatePiecesPanels || 0);
-  const orderedBase = applyOrder(calc.baseRows, data?.rowOrder);
   const extras = calc.extraRows;
   const x = useNailExtras(update);
-  const total = calc.total;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // inputs shown above the picker of the rows that need them
+  const rowInputs = (r) => {
+    if (r.key === 'drivePins') return [
+      <Fld key="sp" label="Pin spacing (in)" w={44}><NumInput value={inputs.pinSpacingIn} onCommit={(v) => setInput('pinSpacingIn', v)} /></Fld>,
+    ];
+    if (r.key === 'epoxy') return [
+      <Fld key="as" label="Anchor spacing (in)" w={44}><NumInput value={inputs.anchorSpacingIn} onCommit={(v) => setInput('anchorSpacingIn', v)} /></Fld>,
+      <Fld key="ad" label="Rod Ø (in)" w={48}><NumInput step="0.125" value={inputs.anchorDiaIn} onCommit={(v) => setInput('anchorDiaIn', v)} /></Fld>,
+      <Fld key="hd" label="Hole Ø (in)" w={48}><NumInput step="0.125" value={inputs.holeDiaIn} onCommit={(v) => setInput('holeDiaIn', v)} /></Fld>,
+      <Fld key="em" label="Embed (in)" w={40}><NumInput value={inputs.embedIn} onCommit={(v) => setInput('embedIn', v)} /></Fld>,
+      <Fld key="co" label="Cartridge (fl oz)" w={44}><NumInput value={inputs.cartridgeOz} onCommit={(v) => setInput('cartridgeOz', v)} /></Fld>,
+    ];
+    return null;
+  };
+
+  const groups = Object.keys(PANEL_NAIL_GROUPS)
+    .map((g) => ({ key: g, label: PANEL_NAIL_GROUPS[g], rows: applyOrder(calc.baseRows.filter((r) => r.group === g), data?.rowOrder) }))
+    .filter((g) => g.rows.length > 0);
+
+  const toolbar = (
+    <label className="fld" title="Drive pins, epoxy and foam sill sealer are counted only for walls sitting on concrete">
+      <input
+        type="checkbox"
+        checked={calc.onConcrete}
+        onChange={(e) => update((p) => ({ ...p, onConcrete: e.target.checked }))}
+      />
+      <span>On concrete</span>
+    </label>
   );
 
   return (
@@ -76,31 +104,45 @@ function PanelNailsComponent({
       open={!collapsed}
       onToggle={(o) => update((p) => ({ ...p, collapsed: !o }))}
       title={title}
-      toolbar={<span className="ew-subtle">{totalPanelSheets} sheets · {totalBottomPlatePiecesPanel} bottom plates · {ptBoards} PT boards</span>}
-      subtotal={total}
+      toolbar={toolbar}
+      subtotal={calc.total}
     >
       <div className="mat" role="table">
         <MatHead />
-        <SortableList ids={orderedBase.map((r) => r.key)} onMove={(a, o, ids) => update((p) => ({ ...p, rowOrder: ids }))}>
-        {orderedBase.map((r) => (
-          <SortableMatRow
-            key={r.key}
-            id={r.key}
-            label={r.label}
-            material={<ItemPicker value={sel[SEL_KEY[r.key]]} onSelect={(v) => update((p) => ({ ...p, sel: { ...(p.sel || {}), [SEL_KEY[r.key]]: v } }))} defaults={PANEL_NAIL_DEFAULTS[r.key]} />}
-            qty={r.qtyRaw}
-            waste={r.wastePct}
-            onWasteCommit={(v) => update((p) => ({ ...p, waste: { ...(p.waste || {}), [r.key]: v } }))}
-            final={r.qtyFinal}
-            unit={r.unit}
-            unitPrice={r.unitPrice}
-            priceDate={r.priceDate}
-            subtotal={r.subtotal}
-            note={noteOf(notes, r.key)}
-            onNoteChange={(patch) => update(patchNote(r.key, patch))}
-          />
+        {groups.map((g) => (
+          <Fragment key={g.key}>
+            <MatSub>{g.label}</MatSub>
+            <SortableList
+              ids={g.rows.map((r) => r.key)}
+              onMove={(a, o, ids) => update((p) => {
+                // keep the other groups' order, replace this group's
+                const rest = (p.rowOrder || []).filter((k) => !ids.includes(k));
+                return { ...p, rowOrder: [...rest, ...ids] };
+              })}
+            >
+              {g.rows.map((r) => (
+                <SortableMatRow
+                  key={r.key}
+                  id={r.key}
+                  label={r.label}
+                  labelTitle={`${r.label} — ${r.hint}`}
+                  inputs={rowInputs(r)}
+                  material={<ItemPicker value={sel[r.selKey]} onSelect={(v) => update((p) => ({ ...p, sel: { ...(p.sel || {}), [r.selKey]: v } }))} defaults={PANEL_NAIL_DEFAULTS[r.key]} />}
+                  qty={r.qtyRaw}
+                  waste={r.wastePct}
+                  onWasteCommit={(v) => update((p) => ({ ...p, waste: { ...(p.waste || {}), [r.key]: v } }))}
+                  final={r.qtyFinal}
+                  unit={r.unit}
+                  unitPrice={r.unitPrice}
+                  priceDate={r.priceDate}
+                  subtotal={r.subtotal}
+                  note={noteOf(notes, r.key)}
+                  onNoteChange={(patch) => update(patchNote(r.key, patch))}
+                />
+              ))}
+            </SortableList>
+          </Fragment>
         ))}
-        </SortableList>
         {extras.length > 0 ? <MatSub>Extra nails</MatSub> : null}
         <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis]} onDragEnd={x.onDragEnd}>
           <SortableContext items={extras.map((e) => e.id)} strategy={verticalListSortingStrategy}>

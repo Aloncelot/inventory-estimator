@@ -27,30 +27,39 @@ export function wallExtraDefaults(type) {
 
 export const LOOSE_PANEL_DEFAULTS = {
   extBottomPT: d('PT', `2x6"-8'`),
-  extTopPlate: d('SPF#2', `2x6"-8'`),
+  // loose top plates lap over the panel joints, so they are longer than the 8' panels
+  extTopPlate: d('SPF#2', `2x6"-16'`),
   panelBandSheathing: d('Green Zip', `4x8'-1/2"`),
   extraSheathing: d('CDX SE', `4x8'-1/2"`),
   zipTape: d('ZIP Flashing Tape', '3.75in x 75ft'),
   openingsBlocking: d('SPF#2', `2x6"-8'`),
   secondBottom: d('SPF#2', `2x6"-8'`),
   int2x6PT: d('PT', `2x6"-8'`),
-  int2x6Plate: d('SPF#2', `2x6"-8'`),
+  int2x6Plate: d('SPF#2', `2x6"-16'`),
   int2x4PT: d('PT', `2x4"-8'`),
-  int2x4Plate: d('SPF#2', `2x4"-8'`),
+  int2x4Plate: d('SPF#2', `2x4"-16'`),
   intCabinetBlocking: d('SPF#2', `2x10"-8'`),
 };
 
+const SHEATH_NAIL = d('Bright Ring Coil', '8D-2-3/8x.113-2.7M', 'Concord');
+const FRAME_NAIL = d('Bright Common Coil', '12D-3-1/4x.120-2.5M', 'Concord');
+
+/** Keyed by panel-nails row (see PANEL_NAIL_ROWS). Epoxy has no default: pick it once. */
 export const PANEL_NAIL_DEFAULTS = {
-  sheath: d('Bright Ring Coil', '8D-2-3/8x.113-2.7M', 'Concord'),
-  frame8d: d('Galvanized Ring Coil', '8D-2-3/8"', 'Concord'),
-  frame12d: d('Bright Common Coil', '12D-3-1/4x.120-2.5M', 'Concord'),
+  drivePins: d('Drive Pins with Washers (HD)', '3"-100s', 'Home Depot'),
+  foamSill: d('FoamSeal', `5-1/2"x50'`, 'The Home Depot'),
+  sheath: SHEATH_NAIL,
+  sheathLoose: SHEATH_NAIL,
+  framing: FRAME_NAIL,
+  doubleStuds: FRAME_NAIL,
+  bottomPlate: d('Galvanized Ring Coil', '8D-2-3/8"', 'Concord'), // galvanized: it goes into PT plates
+  topPlate: FRAME_NAIL,
+  extraPlates: FRAME_NAIL,
 };
 
-export const NAILS_BRACING_DEFAULTS = {
-  nailsConcrete: d('Drive Pins with Washers (HD)', '3"-100s', 'Home Depot'),
-  nailsSheathing: d('Bright Ring Coil', '8D-2-3/8x.113-2.7M', 'Concord'),
-  nailsFraming: d('Bright Common Coil', '12D-3-1/4x.120-2.5M', 'Concord'),
-  tempBracing: d('SPF#2', `2x4"-16'`),
+export const BRACING_DEFAULTS = {
+  panels: d('SPF#2', `2x4"-16'`),
+  trusses: d('SPF#2', `2x4"-16'`),
 };
 
 export const LOOSE_SECTION_DEFAULTS = {

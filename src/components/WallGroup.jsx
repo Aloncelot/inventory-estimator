@@ -115,6 +115,13 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
       <Fld label="Height (ft)" w={48}><NumInput value={heightFt} onCommit={(v) => setField('heightFt', v)} /></Fld>
       <Fld label="Spacing (in)" w={44}><NumInput value={studSpacingIn} onCommit={(v) => setField('studSpacingIn', v)} /></Fld>
       <Fld label="Studs/loc."><MultiplierSelect value={studMultiplier} onChange={(v) => setField('studMultiplier', v)} /></Fld>
+      {calc.baseRows.some((r) => r.key === 'sheathing') ? (
+        <Fld label="Nailing" title={`Sheathing nailing from the plans: edges / field, inches o.c. (${calc.nailing.perSheet} nails per 4×8 sheet)`}>
+          <NumInput w={36} value={calc.nailing.edgeIn} onCommit={(v) => setField('edgeNailIn', v)} aria-label="Edge nailing, inches o.c." />
+          <span className="ew-subtle">/</span>
+          <NumInput w={36} value={calc.nailing.fieldIn} onCommit={(v) => setField('fieldNailIn', v)} aria-label="Field nailing, inches o.c." />
+        </Fld>
+      ) : null}
       {variant === 'interior' ? (
         <Fld label="Kind">
           <select className="ew-select" style={{ width: 88 }} value={kind} onChange={(e) => setField('kind', e.target.value)}>
@@ -144,6 +151,7 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
             id={row.key}
             label={row.label}
             piece={row.piece}
+            tag={row.tag}
             material={<ItemPicker value={sel[row.key]} onSelect={(i) => setSel(row.key, i)} defaults={wallRowDefaults(variant, row.key, { groundLevel })} />}
             qty={row.qtyRaw}
             waste={row.wastePct}

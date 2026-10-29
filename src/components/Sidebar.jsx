@@ -4,12 +4,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import FloatingCalc from '@/components/FloatingCalc';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { useAuth } from '@/AuthContext';
 import { useProject } from '@/context/ProjectContext';
 import {
   LogOut, FolderOpen, LayoutDashboard, PanelsTopLeft, Layers, HardHat, ClipboardList, Receipt,
-  Package, Download, Save, Sun, Moon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2,
+  Package, Download, Save, Sun, Moon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator,
 } from 'lucide-react';
 
 const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
@@ -124,6 +126,14 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => { setIsDark(document.documentElement.classList.contains('dark')); }, []);
+
+  // floating calculator (remembered per browser)
+  const [calcOpen, setCalcOpen] = useState(false);
+  useEffect(() => { try { setCalcOpen(localStorage.getItem('calc-open') === '1'); } catch { /* storage blocked */ } }, []);
+  const toggleCalc = (open) => {
+    setCalcOpen(open);
+    try { localStorage.setItem('calc-open', open ? '1' : '0'); } catch { /* storage blocked */ }
+  };
   const setTheme = (dark) => { setIsDark(dark); applyTheme(dark); };
 
   // Ctrl/Cmd + S saves the open project
@@ -210,6 +220,34 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
           {collapsed ? (
             <motion.button
               type="button"
+              className={`ew-icon-btn${calcOpen ? ' is-on' : ''}`}
+              onClick={() => toggleCalc(!calcOpen)}
+              title={calcOpen ? 'Hide calculator' : 'Show calculator'}
+              aria-label="Toggle calculator"
+              aria-pressed={calcOpen}
+              style={{ alignSelf: 'center' }}
+              whileTap={{ scale: 0.85 }}
+              transition={SPRING}
+            >
+              <Calculator size={16} />
+            </motion.button>
+          ) : (
+            <button
+              type="button"
+              className={`calc-switch${calcOpen ? ' is-on' : ''}`}
+              role="switch"
+              aria-checked={calcOpen}
+              onClick={() => toggleCalc(!calcOpen)}
+              title={calcOpen ? 'Hide calculator' : 'Show calculator'}
+            >
+              <Calculator size={14} />
+              <span>Calculator</span>
+              <span className="calc-switch__track"><motion.span className="calc-switch__knob" layout transition={SPRING} /></span>
+            </button>
+          )}
+          {collapsed ? (
+            <motion.button
+              type="button"
               className="ew-icon-btn"
               onClick={() => setTheme(!isDark)}
               title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
@@ -247,6 +285,10 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
           ) : null}
         </div>
       </motion.aside>
+      {typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>{calcOpen ? <FloatingCalc key="calc" onClose={() => toggleCalc(false)} /> : null}</AnimatePresence>,
+        document.body
+      ) : null}
     </MotionConfig>
   );
 }

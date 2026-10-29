@@ -6,7 +6,7 @@ import { PanelsTopLeft } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import Level from '@/components/Level';
 import PanelsManufactureEstimate from '@/components/PanelsManufactureEstimate';
-import NailsAndBracing from '@/components/NailsAndBracing';
+import Bracing from '@/components/Bracing';
 import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader, AddRowButton, SortableList, SortableBlock, reorderById } from '@/components/ui/mat';
 import { wallPanelsOf } from '@/domain/estimate';
@@ -17,7 +17,7 @@ export default function WallPanelsView() {
   const estimateData = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const levels = useMemo(() => (estimateData.levels || []).filter(Boolean), [estimateData.levels]);
   const manufactureEstimate = useMemo(() => estimateData.manufactureEstimate || {}, [estimateData.manufactureEstimate]);
-  const nailsAndBracing = useMemo(() => estimateData.nailsAndBracing || {}, [estimateData.nailsAndBracing]);
+  const bracing = useMemo(() => estimateData.bracing || {}, [estimateData.bracing]);
 
   const handleLevelChangeById = useCallback((levelId, fn) => {
     updateProject((prev) => ({
@@ -61,7 +61,7 @@ export default function WallPanelsView() {
     [key]: typeof fn === 'function' ? fn(prev[key] || {}) : fn,
   })), [updateProject]);
   const handleManufactureChange = useMemo(() => patchKey('manufactureEstimate'), [patchKey]);
-  const handleNailsBracingChange = useMemo(() => patchKey('nailsAndBracing'), [patchKey]);
+  const handleBracingChange = useMemo(() => patchKey('bracing'), [patchKey]);
 
   // one pure calculation for the whole page (levels, nails & bracing, manufacture)
   const calc = useMemo(() => wallPanelsOf(estimateData), [estimateData]);
@@ -118,7 +118,7 @@ export default function WallPanelsView() {
         </div>
       </div>
 
-      <NailsAndBracing data={nailsAndBracing} calc={calc.nails} onChange={handleNailsBracingChange} totals={calc.totals} />
+      <Bracing data={bracing} calc={calc.bracing} onChange={handleBracingChange} />
 
       <PanelsManufactureEstimate data={manufactureEstimate} calc={calc.manufacture} onChange={handleManufactureChange} />
     </div>

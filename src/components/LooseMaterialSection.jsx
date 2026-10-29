@@ -213,10 +213,11 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
                 unitPrice={r.unitPrice}
                 priceDate={r.priceDate}
                 subtotal={r.subtotal}
-                note={{ plan: r.plan || '', comment: r.notes || '' }}
+                note={{ plan: r.plan || '', comment: r.notes || '', images: r.noteImages || [] }}
                 onNoteChange={(patch) => updateRow(r.id, {
                   ...('plan' in patch ? { plan: patch.plan } : {}),
                   ...('comment' in patch ? { notes: patch.comment } : {}),
+                  ...('images' in patch ? { noteImages: patch.images } : {}),
                 })}
                 onRemove={() => removeRow(r.id)}
               />

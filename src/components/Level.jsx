@@ -78,10 +78,8 @@ export default function Level({ levelData, calc: calcProp, isGround, onLevelChan
               data={panelNails}
               calc={calc.panelNails}
               onChange={handlePanelNailsChange}
+              isGround={groundLevel}
               title="Panel nails"
-              ptPlatePiecesPanels={d.panelPtBoardsAll}
-              totalPanelSheets={d.panelSheetsAll}
-              totalBottomPlatePiecesPanel={d.totalBottomPlatePiecesPanelAll}
             />
             <LoosePanelMaterials
               data={looseMaterials}
