@@ -37,14 +37,27 @@ export function slug(s) {
 // ... (getFamilies, getAllVendors, getSizesForFamily, getVendorsForIds, getFinalItem, getPricesForItem, updateItemPrice, createItemPrice UNCHANGED) ...
 // Assume previous code is here
 
+// In-flight request cache: dozens of pickers mount at once and ask for the same
+// lists; share one Firestore read per list instead of one per picker.
+const inflight = new Map();
+const once = (key, loader) => {
+  if (inflight.has(key)) return inflight.get(key);
+  const p = loader().catch((e) => { inflight.delete(key); throw e; });
+  inflight.set(key, p);
+  return p;
+};
+export function clearCatalogCache() { cache.clear(); inflight.clear(); }
+
 export async function getFamilies() {
   const cacheKey = 'families';
   if (getFromCache(cacheKey)) return getFromCache(cacheKey);
   try {
-    const q = query(collection(db, 'families'), orderBy('label'));
-    const snapshot = await getDocs(q);
-    const families = snapshot.docs.map(doc => ({ value: doc.id, label: doc.data().label }));
-    return setInCache(cacheKey, families);
+    return await once(cacheKey, async () => {
+      const q = query(collection(db, 'families'), orderBy('label'));
+      const snapshot = await getDocs(q);
+      const families = snapshot.docs.map(doc => ({ value: doc.id, label: doc.data().label }));
+      return setInCache(cacheKey, families);
+    });
   } catch (e) { console.error(e); return []; }
 }
 
@@ -61,6 +74,12 @@ export async function getAllVendors() {
 export async function getSizesForFamily(familySlug) {
   if (!familySlug) return [];
   try {
+    return await once(`sizes:${familySlug}`, () => loadSizesForFamily(familySlug));
+  } catch (e) { console.error(e); return []; }
+}
+
+async function loadSizesForFamily(familySlug) {
+  {
     const q = query(collection(db, 'itemVendorLookup'), where('familySlug', '==', familySlug));
     const snapshot = await getDocs(q);
     const sizes = snapshot.docs.map(doc => {
@@ -68,8 +87,8 @@ export async function getSizesForFamily(familySlug) {
       return { value: doc.id, label: data.sizeDisplay, vendorIds: data.vendorIds || [], fullItemData: data };
     });
     sizes.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
-    return sizes; 
-  } catch (e) { console.error(e); return []; }
+    return sizes;
+  }
 }
 
 export async function getVendorsForIds(vendorIds) {
@@ -92,12 +111,17 @@ export async function getFinalItem({ familyLabel, sizeLabel, vendorId }) {
    if (!familyLabel || !sizeLabel || !vendorId) return null;
    const joinKey = `${familyLabel}|${sizeLabel}`; const docId = slug(joinKey);
    const cacheKey = `item:${vendorId}:${docId}`;
-   try {
-     const docRef = doc(db, 'priceLists', vendorId, 'items', docId);
-     const docSnap = await getDoc(docRef);
-     if (docSnap.exists()) return setInCache(cacheKey, docSnap.data());
-     return null;
-   } catch(e) { return null; }
+   // share one read between pickers asking for the same price at once
+   // (no long-term cache: prices change and "Refresh prices" must see them)
+   if (inflight.has(cacheKey)) return inflight.get(cacheKey);
+   const p = (async () => {
+     try {
+       const docSnap = await getDoc(doc(db, 'priceLists', vendorId, 'items', docId));
+       return docSnap.exists() ? docSnap.data() : null;
+     } catch (e) { return null; } finally { inflight.delete(cacheKey); }
+   })();
+   inflight.set(cacheKey, p);
+   return p;
 }
 
 export async function getPricesForItem(itemData) {
@@ -114,13 +138,14 @@ export async function getPricesForItem(itemData) {
 }
 
 export async function updateItemPrice(updatedItem) {
+  clearCatalogCache(); // lists changed: next picker open reloads them
    if (!updatedItem || !updatedItem.vendorId) throw new Error("Invalid data");
    const { vendorId, joinKey } = updatedItem;
    const docId = slug(joinKey);
    const cacheKey = `item:${vendorId}:${docId}`;
    try {
      const itemRef = doc(db, 'priceLists', vendorId, 'items', docId);
-     const docSnap = await itemRef.get();
+     const docSnap = await getDoc(itemRef);
      if (docSnap.exists()) {
        const oldData = docSnap.data();
        if (oldData.basePrice !== updatedItem.basePrice) {
@@ -136,6 +161,7 @@ export async function updateItemPrice(updatedItem) {
 }
 
 export async function createItemPrice(newItem) {
+  clearCatalogCache(); // lists changed: next picker open reloads them
   if (!newItem || !newItem.familyDisplay || !newItem.sizeDisplay) throw new Error("Missing data");
   let vendorId = newItem.vendorId;
   let supplierName = newItem.supplierName;
@@ -176,6 +202,7 @@ export async function createItemPrice(newItem) {
  * Updated: Create a COMPLETELY NEW Material (Family + Item + First Price)
  */
 export async function createNewMaterial(newItemData) {
+  clearCatalogCache(); // lists changed: next picker open reloads them
   // 1. Validate
   // If creating a new family, 'newFamilyName' will be present, otherwise 'familyDisplay'
   const familyName = newItemData.isNewFamily 

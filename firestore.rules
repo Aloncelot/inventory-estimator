@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+          'aloncelot@gmail.com',
+          'arch.alonso.correa@gmail.com'
+        ];
+    }
+
+    // Personal app: only the allowed accounts can read/write anything.
+    match /{document=**} {
+      allow read, write: if isOwner();
+    }
+  }
+}

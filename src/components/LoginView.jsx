@@ -1,34 +1,23 @@
 // src/components/LoginView.jsx
-
 'use client';
- import { useAuth } from "@/AuthContext"; 
+import { useAuth } from '@/AuthContext';
 
- export default function LoginView() {
-     const { signIn, loading } = useAuth();
+export default function LoginView() {
+  const { signIn, loading, authError } = useAuth();
 
-     return (
-         <div className="app-content">
-             <div className="ew-card" style={{ maxWidth: '400px', margin: 'auto', textAlign: 'center', marginTop: '50px' }}>
-                 <h2 className="ew-h2 nova-flat-turquoise">Welcome to the Inventory Estimator</h2>
-                 <p className="ew-subtle" style={{ margin: '15px 0' }}>
-                     Please sign in with your Google account to create and manage your project estimates.
-                 </p>
-                 <button
-                     onClick={signIn}
-                     className="ew-btn ew-btn--turq"
-                     disabled={loading} // Disable while auth state is loading
-                     style={{
-                         display: 'inline-flex',
-                         alignItems: 'center',
-                         gap: '8px',
-                         padding: '10px 15px',
-                         fontSize: '1em'
-                     }}
-                 >
-                     <img src="/icons/google.png" alt="" width={18} height={18} />
-                     Sign in with Google
-                 </button>
-             </div>
-         </div>
-     );
- }
+  return (
+    <div className="app-content" style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
+      <div className="lvl" style={{ width: 'min(360px, 100%)', padding: '20px 18px', textAlign: 'center' }}>
+        <h1 className="text-section-title" style={{ marginBottom: 6 }}>Inventory Estimator</h1>
+        <p className="ew-subtle" style={{ margin: '0 0 16px' }}>Sign in with your Google account to open your estimates.</p>
+        <button type="button" onClick={signIn} className="ew-btn ew-btn--primary" disabled={loading} style={{ height: 30, padding: '0 14px', fontSize: 'var(--fs)' }}>
+          <img src="/icons/google.png" alt="" width={16} height={16} />
+          Sign in with Google
+        </button>
+        {authError ? (
+          <p role="alert" style={{ marginTop: 12, color: 'var(--danger)' }}>{authError}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}

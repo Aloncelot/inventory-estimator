@@ -1,25 +1,11 @@
 // src/components/ui/RemoveButton.jsx
 'use client';
+import { Trash2 } from 'lucide-react';
 
-export default function RemoveButton({
-  onClick,
-  size = 20,
-  title = 'Remove',
-  label = 'Remove',      
-  src = '/icons/trash.png',
-  className = '',
-  disabled = false,
-}) {
+export default function RemoveButton({ onClick, size = 14, title = 'Remove', label = 'Remove', className = '', disabled = false }) {
   return (
-    <button
-      type="button"
-      className={`ew-btn ew-icon-btn ${className}`}
-      onClick={onClick}
-      aria-label={label}
-      title={title}
-      disabled={disabled}
-    >
-      <img src={src} width={size} height={size} alt="" />
+    <button type="button" className={`row-action-btn delete ${className}`} onClick={onClick} aria-label={label || title} title={title} disabled={disabled}>
+      <Trash2 size={size} aria-hidden="true" />
     </button>
   );
 }

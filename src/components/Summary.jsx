@@ -1,419 +1,188 @@
 // src/components/Summary.jsx
-"use client";
-import { useMemo, useState, useEffect, useCallback, useEffectEvent } from "react";
-import { useProject } from "@/context/ProjectContext";
+'use client';
 
-// --- (Helpers: TAX_RATES, parseStateFromAddress, format/parse number... no change) ---
-const TAX_RATES = {
-  'MA': 6.25,
-  'RI': 7.0,
-  'CT': 6.35,
-  'ME': 5.5,
-  'NH': 0.0,
-  'NO TAX': 0.0,
-};
+import { useCallback, useEffect, useMemo } from 'react';
+import { LayoutDashboard, RefreshCw, Lock, LockOpen } from 'lucide-react';
+import { useProject } from '@/context/ProjectContext';
+import { PageHeader, NumInput, TextInput, fmtMoney } from '@/components/ui/mat';
+import { projectTotals } from '@/domain/aggregate/projectTotals';
+import { useConfirm } from '@/components/ui/confirm';
+
+const TAX_RATES = { MA: 6.25, RI: 7.0, CT: 6.35, ME: 5.5, NH: 0.0, 'NO TAX': 0.0 };
+
 const parseStateFromAddress = (address) => {
   if (!address) return null;
-  const match = address.match(/\b([A-Z]{2})\b(?=.*$|\s+\d{5})?/g);
+  const match = address.match(/\b([A-Z]{2})\b/g);
   if (!match) return null;
-  const potentialState = match[match.length - 1];
-  if (Object.keys(TAX_RATES).includes(potentialState)) {
-    return potentialState;
-  }
-  return null;
+  const st = match[match.length - 1];
+  return TAX_RATES[st] !== undefined ? st : null;
 };
-const parseFormattedNumber = (value) => {
-  return String(value).replace(/,/g, '');
-};
-const formatNumberString = (numStr) => {
-  if (numStr === '' || numStr === '-') return '';
-  if (numStr === '.') return '0.';
-  const [integer, decimal] = String(numStr).split('.');
-  const formattedInteger = new Intl.NumberFormat('en-US').format(
-    Number(integer.replace(/[^0-9-]/g, '') || 0)
-  );
-  if (decimal !== undefined) {
-    return `${formattedInteger}.${decimal}`;
-  }
-  if (String(numStr).endsWith('.')) {
-    return `${formattedInteger}.`;
-  }
-  return formattedInteger;
-};
-// ---
 
-
-export default function Summary({ 
-  wallPanelsTotal = 0, 
-  trussTotal = 0,
-}) {
+export default function Summary() {
   const { projectData, updateProject, refreshProjectPrices, isSaving } = useProject();
-  const onDataChange = useEffectEvent(updateProject);
+  const est = useMemo(() => projectData?.estimateData || {}, [projectData]);
+  const info = useMemo(() => est.summaryInfo || {}, [est.summaryInfo]);
+  const snapshot = est.snapshotTotals || null;
 
-  const summaryInfo = useMemo(() => {
-    return projectData?.estimateData?.summaryInfo || {};
-  }, [projectData]);
-  
-  const snapshotTotals = useMemo(() => {
-    return projectData?.estimateData?.snapshotTotals || null;
-  }, [projectData]);
+  const setInfo = useCallback((key, value) => {
+    updateProject((prev) => ({ ...prev, summaryInfo: { ...(prev.summaryInfo || {}), [key]: value } }));
+  }, [updateProject]);
 
-  const [localShipping, setLocalShipping] = useState(String(summaryInfo.shipping || 0));
-  useEffect(() => {
-    // Ensure state updates if summaryInfo.shipping changes (e.g., on project load)
-    setLocalShipping(String(summaryInfo.shipping || 0));
-  }, [summaryInfo.shipping]);
-
-  
-  const handleShippingChange = (e) => {
-    const parsedValue = parseFormattedNumber(e.target.value);
-    if (/^\d*\.?\d*$/.test(parsedValue)) {
-      setLocalShipping(parsedValue);
-    }
-  };
-  const commitShippingChange = (value) => {
-    const numericValue = Number(value) || 0;
-    handleTaxSettingChange('shipping', numericValue);
-    setLocalShipping(String(numericValue));
-  };
-  const handleShippingBlur = () => {
-    commitShippingChange(localShipping);
-  };
-  const handleShippingKeyDown = (e) => {
-    if (e.key === 'Enter') {
-        commitShippingChange(localShipping);
-        e.target.blur();
-    }
-    if (e.key === 'Escape') {
-        setLocalShipping(String(summaryInfo.shipping || 0));
-        e.target.blur();
-    }
-  };
-
+  // first open: fill estimate date and project name
   useEffect(() => {
     if (!projectData) return;
-    const info = projectData.estimateData?.summaryInfo || {};
-    const rootName = projectData.name || "";
-    const today = new Date();
-    const isoDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0,10);
     const needsDate = !info.estimateDate;
-    const needsName = !info.projectName && rootName;
-
-    if (needsDate || needsName) {
-      onDataChange(prevEstimate => {
-        const currentSummary = prevEstimate.summaryInfo || {};
-        return {
-          ...prevEstimate,
-          summaryInfo: {
-            ...currentSummary,
-            estimateDate: needsDate ? isoDate : currentSummary.estimateDate,
-            projectName: needsName ? rootName : currentSummary.projectName,
-          }
-        };
-      });
-    }
-  }, [projectData, onDataChange]);
-
-  const moneyFmt = useMemo(
-    () => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol" }),
-    []
-  );
-
-  const onChange = useCallback((e) => {
-    const { name, value } = e.target;
-    updateProject(prevEstimate => ({
-        ...prevEstimate,
-        summaryInfo: {
-            ...(prevEstimate.summaryInfo || {}),
-            [name]: value,
-        }
-    }));
-  }, [updateProject]);
-
-  const handleTaxSettingChange = useCallback((key, value) => {
-    updateProject(prevEstimate => ({
-      ...prevEstimate,
+    const needsName = !info.projectName && projectData.name;
+    if (!needsDate && !needsName) return;
+    const d = new Date();
+    const iso = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10);
+    updateProject((prev) => ({
+      ...prev,
       summaryInfo: {
-        ...(prevEstimate.summaryInfo || {}),
-        [key]: value
-      }
+        ...(prev.summaryInfo || {}),
+        ...(needsDate ? { estimateDate: iso } : {}),
+        ...(needsName ? { projectName: projectData.name } : {}),
+      },
     }));
-  }, [updateProject]);
-  
-  const currentSubtotal = useMemo(() => {
-     return wallPanelsTotal + trussTotal;
-  }, [wallPanelsTotal, trussTotal]);
+  }, [projectData, info.estimateDate, info.projectName, updateProject]);
 
-  const effectiveState = useMemo(() => {
-    if (summaryInfo.taxState) {
-      return summaryInfo.taxState;
-    }
-    const parsed = parseStateFromAddress(summaryInfo.address);
-    return parsed || 'NO TAX';
-  }, [summaryInfo.taxState, summaryInfo.address]);
+  const totals = projectTotals(est);
+  const state = info.taxState || parseStateFromAddress(info.address) || 'NO TAX';
+  const taxRate = info.isTaxExempt ? 0 : (TAX_RATES[state] || 0);
+  const tax = totals.subtotal * (taxRate / 100);
+  const shipping = Number(info.shipping) || 0;
+  const grand = totals.subtotal + tax + shipping;
 
-  const taxRate = useMemo(() => {
-    if (summaryInfo.isTaxExempt) {
-      return 0;
-    }
-    return TAX_RATES[effectiveState] || 0;
-  }, [summaryInfo.isTaxExempt, effectiveState]);
-  
-  const currentTaxAmount = useMemo(() => {
-    return currentSubtotal * (taxRate / 100);
-  }, [currentSubtotal, taxRate]);
-  
-  const currentShippingAmount = useMemo(() => {
-    return Number(summaryInfo.shipping) || 0;
-  }, [summaryInfo.shipping]);
-  
-  const currentGrandTotal = useMemo(() => {
-    return currentSubtotal + currentTaxAmount + currentShippingAmount;
-  }, [currentSubtotal, currentTaxAmount, currentShippingAmount]);
-
-  const handleLockTotals = () => {
-    if (window.confirm("Are you sure you want to lock these totals as the 'Original Quote'? This will be used for comparison.")) {
-      const totalsToLock = {
-        wallPanelsTotal: wallPanelsTotal,
-        trussTotal: trussTotal,
-        subtotal: currentSubtotal,
-        taxAmount: currentTaxAmount,
-        shippingAmount: currentShippingAmount,
-        grandTotal: currentGrandTotal,
-        lockedAt: new Date().toISOString()
-      };
-      updateProject(prev => ({
-        ...prev,
-        estimateData: {
-          ...prev.estimateData,
-          snapshotTotals: totalsToLock
-        }
-      }));
-    }
+  const confirm = useConfirm();
+  const lockTotals = async () => {
+    if (!(await confirm({ title: 'Lock as original quote?', message: 'These totals are saved as the original quote, and later changes are compared against them.', confirmLabel: 'Lock quote' }))) return;
+    updateProject((prev) => ({
+      ...prev,
+      snapshotTotals: {
+        wallPanelsTotal: totals.wallPanels, trussTotal: totals.trusses, looseTotal: totals.loose,
+        subtotal: totals.subtotal, taxAmount: tax, shippingAmount: shipping, grandTotal: grand,
+        lockedAt: new Date().toISOString(),
+      },
+    }));
+  };
+  const clearSnapshot = async () => {
+    if (await confirm({ title: 'Clear the original quote?', message: 'The comparison columns disappear. Lock a new quote any time.', confirmLabel: 'Clear quote', tone: 'danger' })) updateProject((prev) => ({ ...prev, snapshotTotals: null }));
+  };
+  const refresh = async () => {
+    if (await confirm({ title: 'Refresh prices?', message: 'Every selected item gets the latest price from the material list. Totals update right away.', confirmLabel: 'Refresh prices' })) refreshProjectPrices();
   };
 
-  const handleClearSnapshot = () => {
-    if (window.confirm("Are you sure you want to clear the 'Original Quote' snapshot?")) {
-      updateProject(prev => ({
-        ...prev,
-        estimateData: {
-          ...prev.estimateData,
-          snapshotTotals: null
-        }
-      }));
-    }
-  };
-
-  const handleRefreshPrices = () => {
-    if (window.confirm("This will fetch the latest prices for all items in this project from the database. Are you sure?")) {
-      refreshProjectPrices();
-    }
-  };
-
-  const renderComparisonRow = (label, originalValue, currentValue) => {
-    const diff = currentValue - originalValue;
-    let diffStyle = { color: 'var(--text-300)' };
-    if (diff > 0) diffStyle = { color: '#f87171' }; // Red
-    if (diff < 0) diffStyle = { color: '#4ade80' }; // Green
-    
+  if (!projectData) {
     return (
-      <tr>
-        <td>{label}</td>
-        <td className="num">{moneyFmt.format(originalValue)}</td>
-        <td className="num">{moneyFmt.format(currentValue)}</td>
-        <td className="num" style={diffStyle}>
-          {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${moneyFmt.format(diff)}`}
-        </td>
-      </tr>
+      <div className="app-content">
+        <PageHeader icon={LayoutDashboard} title="Summary" />
+        <div className="empty-state">Open or create a project in Projects to see its summary.</div>
+      </div>
     );
+  }
+
+  const lines = [
+    ['Wall panels', totals.wallPanels, snapshot?.wallPanelsTotal],
+    ['Loose material', totals.loose, snapshot?.looseTotal],
+    ['Trusses', totals.trusses, snapshot?.trussTotal],
+  ];
+  const diffCell = (orig, cur) => {
+    if (orig === undefined || orig === null) return <td className="num ew-subtle">—</td>;
+    const d = cur - orig;
+    const color = d > 0 ? 'var(--danger)' : d < 0 ? 'var(--ok)' : 'var(--text-300)';
+    return <td className="num" style={{ color }}>{d === 0 ? '—' : `${d > 0 ? '+' : ''}${fmtMoney(d)}`}</td>;
   };
 
   return (
     <div className="app-content">
-      <h2 className="text-section-title" style={{ marginBottom: '16px' }}>Summary</h2>
-      
-      <div className="ew-card">
-        <div className="controls2">
-          <label>
-            <span>Project name</span>
-            {/* --- CORRECTION: Added || '' --- */}
-            <input className="ew-input" name="projectName" value={summaryInfo.projectName || ''} onChange={onChange} />
-          </label>
-          <label>
-            <span>Address</span>
-            {/* --- CORRECTION: Added || '' --- */}
-            <input className="ew-input" name="address" value={summaryInfo.address || ''} onChange={onChange} />
-          </label>
-          <label>
-            <span>Drawings date</span>
-            {/* --- CORRECCIÓN: Added || '' --- */}
-            <input className="ew-input" type="date" name="drawingsDate" value={summaryInfo.drawingsDate || ''} onChange={onChange} />
-          </label>
-          <label>
-            <span>Estimate date</span>
-            {/* --- CORRECCIÓN: Added || '' --- */}
-            <input className="ew-input" type="date" name="estimateDate" value={summaryInfo.estimateDate || ''} onChange={onChange} />
-          </label>
-        </div>
-      </div> 
-
-      <div className="ew-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-        <div>
-          <button 
-            className="ew-btn" 
-            onClick={handleRefreshPrices} 
-            disabled={isSaving}
-            title="Fetch latest prices from database for all items"
-          >
-            {isSaving ? 'Refreshing...' : 'Refresh Latest Prices'}
-          </button>
-        </div>
-        <div>
-          {snapshotTotals ? (
-            <button 
-              className="ew-btn"
-              onClick={handleClearSnapshot}
-              title="Clear the saved 'Original Quote' to set a new one"
-            >
-              Clear Original Quote
-            </button>
-          ) : (
-            <button 
-              className="ew-btn ew-btn--turq" 
-              onClick={handleLockTotals}
-              title="Save the current totals as the 'Original Quote' for comparison"
-            >
-              Lock Original Totals
-            </button>
-          )}
-        </div>
-      </div>
-      
-      <div className="ew-card">
-        
-        {!snapshotTotals && (
+      <PageHeader
+        icon={LayoutDashboard}
+        title="Summary"
+        meta={projectData.name}
+        totalLabel="Grand total"
+        total={grand}
+        actions={(
           <>
-            <div className="sum-row">
-              <div className="sum-label">Wall panels total</div>
-              <div className="text-summary-subcategory">
-                {moneyFmt.format(wallPanelsTotal)}
-              </div>
-            </div>
-            
-            <div className="sum-row">
-              <div className="sum-label">Trusses total</div>
-              <div className="text-summary-subcategory">
-                {moneyFmt.format(trussTotal)}
-              </div>
-            </div>
-            
-            <div className="sum-row" style={{borderTop: '1px solid var(--border)'}}>
-              <div className="sum-label" style={{fontWeight: 700}}>Subtotal</div>
-              <div className="text-summary-subcategory" style={{fontWeight: 700, fontSize: '1.1rem'}}>
-                {moneyFmt.format(currentSubtotal)}
-              </div>
-            </div>
-            
-            <div className="sum-row" style={{alignItems: 'center'}}>
-              <div className="sum-label" style={{ display: 'flex', alignItems: 'center', gap: '50px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none', fontSize:'12px', whiteSpace: 'nowrap' }}>
-                  <input
-                    type="checkbox"
-                    style={{ width: '20px', height: '20px' }}
-                    checked={summaryInfo.isTaxExempt || false}
-                    onChange={(e) => handleTaxSettingChange('isTaxExempt', e.target.checked)}
-                  />
-                  <span>Tax Exempt</span>
-                </label>
-                
-                {!summaryInfo.isTaxExempt && (
-                  <select
-                    className="ew-select focus-anim"
-                    value={effectiveState}
-                    onChange={(e) => handleTaxSettingChange('taxState', e.target.value)}
-                    title="Select tax state (auto-detected from address)"
-                    style={{maxWidth: '120px', padding: '4px 8px'}}
-                  >
-                    {Object.keys(TAX_RATES).map(stateAbbr => (
-                      <option key={stateAbbr} value={stateAbbr}>
-                        {stateAbbr}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                
-                {!summaryInfo.isTaxExempt && (
-                  <span className="text-summary-subcategory" style={{color: '#fc8600ff',}}><i>
-                    ({taxRate.toFixed(2)}%)
-                  </i>
-                  </span>
-                )}
-              </div>
-              <div className="text-summary-subcategory" style={{fontWeight: 700, fontSize: '1.1rem'}}>
-                {moneyFmt.format(currentTaxAmount)}
-              </div>
-            </div>
-            
-            <div className="sum-row" style={{alignItems: 'flex-end'}}>
-              <div className="sum-label">Shipping</div>
-              <div className="ew-inline" style={{justifyContent: 'flex-end'}}>
-                 <span className="ew-subtle" style={{fontSize: '1.1rem', color: 'var(--text-300)'}}>$</span>
-                 <input
-                  type="text"
-                  inputMode="decimal"
-                  className="ew-input focus-anim"
-                  value={formatNumberString(localShipping)}
-                  onChange={handleShippingChange}
-                  onBlur={handleShippingBlur}
-                  onKeyDown={handleShippingKeyDown}
-                  placeholder="0.00"
-                  style={{ width: '150px', textAlign: 'right', fontSize: '1rem', paddingTop: '2px', paddingBottom: '2px' }}
-                 />
-              </div>
-            </div>
-
-            <div className="sum-row" style={{marginTop: '20px', paddingTop: '20px', borderTop: '2px solid var(--border)'}}>
-              <div className="sum-label text-level-total" style={{fontSize: '1.25rem'}}>Grand Total</div>
-              <div className="text-level-total" style={{fontSize: '1.25rem'}}>
-                {moneyFmt.format(currentGrandTotal)}
-              </div>
-            </div>
+            <button type="button" className="ew-btn" onClick={refresh} disabled={isSaving} title="Reload prices for all items">
+              <RefreshCw size={12} className={isSaving ? 'animate-spin' : ''} /> {isSaving ? 'Refreshing…' : 'Refresh prices'}
+            </button>
+            {snapshot ? (
+              <button type="button" className="ew-btn" onClick={clearSnapshot}><LockOpen size={12} /> Clear original quote</button>
+            ) : (
+              <button type="button" className="ew-btn ew-btn--primary" onClick={lockTotals}><Lock size={12} /> Lock as original quote</button>
+            )}
           </>
         )}
-        
-        {snapshotTotals && (
-          <table className="tbl" style={{ width: '100%', marginTop: '12px' }}>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th className="num">Original Quote ({new Date(snapshotTotals.lockedAt).toLocaleDateString()})</th>
-                <th className="num">Current Quote</th>
-                <th className="num">Difference</th>
-              </tr>
-            </thead>
-            <tbody>
-              {renderComparisonRow('Wall Panels', snapshotTotals.wallPanelsTotal, wallPanelsTotal)}
-              {renderComparisonRow('Trusses', snapshotTotals.trussTotal, trussTotal)}
-            </tbody>
-            <tfoot>
-              {renderComparisonRow('Subtotal', snapshotTotals.subtotal, currentSubtotal)}
-              {renderComparisonRow(`Tax (${taxRate.toFixed(2)}%)`, snapshotTotals.taxAmount, currentTaxAmount)}
-              {renderComparisonRow('Shipping', snapshotTotals.shippingAmount, currentShippingAmount)}
-              
-              <tr style={{borderTop: '2px solid var(--border)'}}>
-                <td style={{fontSize: '1.1rem'}}><b>Grand Total</b></td>
-                <td className="num" style={{fontSize: '1.1rem'}}><b>{moneyFmt.format(snapshotTotals.grandTotal)}</b></td>
-                <td className="num" style={{fontSize: '1.1rem'}}><b>{moneyFmt.format(currentGrandTotal)}</b></td>
-                <td className="num" style={{fontSize: '1.1rem'}}>
-                  <b>
-                    {moneyFmt.format(currentGrandTotal - snapshotTotals.grandTotal)}
-                  </b>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        )}
+      />
 
+      <div className="ew-card">
+        <div className="toolbar" style={{ padding: 0 }}>
+          <label className="fld" style={{ '--w': '220px' }}><span>Project name</span><TextInput value={info.projectName || ''} onCommit={(v) => setInfo('projectName', v)} /></label>
+          <label className="fld" style={{ '--w': '300px' }}><span>Address</span><TextInput value={info.address || ''} onCommit={(v) => setInfo('address', v)} placeholder="Street, City, ST 00000" /></label>
+          <label className="fld" style={{ '--w': '130px' }}><span>Drawings date</span><input className="ew-input" type="date" value={info.drawingsDate || ''} onChange={(e) => setInfo('drawingsDate', e.target.value)} /></label>
+          <label className="fld" style={{ '--w': '130px' }}><span>Estimate date</span><input className="ew-input" type="date" value={info.estimateDate || ''} onChange={(e) => setInfo('estimateDate', e.target.value)} /></label>
+        </div>
+      </div>
+
+      <div className="ew-card" style={{ maxWidth: 820 }}>
+        <table className="tbl">
+          <colgroup><col /><col style={{ width: 150 }} />{snapshot ? <><col style={{ width: 150 }} /><col style={{ width: 120 }} /></> : null}</colgroup>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th className="num">Current</th>
+              {snapshot ? <th className="num">Original ({new Date(snapshot.lockedAt).toLocaleDateString()})</th> : null}
+              {snapshot ? <th className="num">Difference</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map(([label, cur, orig]) => (
+              <tr key={label}>
+                <td>{label}</td>
+                <td className="num">{fmtMoney(cur)}</td>
+                {snapshot ? <td className="num ew-subtle">{orig !== undefined ? fmtMoney(orig) : '—'}</td> : null}
+                {snapshot ? diffCell(orig, cur) : null}
+              </tr>
+            ))}
+            <tr>
+              <td style={{ fontWeight: 700 }}>Subtotal</td>
+              <td className="num money-section">{fmtMoney(totals.subtotal)}</td>
+              {snapshot ? <td className="num ew-subtle">{fmtMoney(snapshot.subtotal)}</td> : null}
+              {snapshot ? diffCell(snapshot.subtotal, totals.subtotal) : null}
+            </tr>
+            <tr>
+              <td>
+                <div className="ew-inline">
+                  <span>Tax</span>
+                  <label className="fld"><input type="checkbox" checked={!!info.isTaxExempt} onChange={(e) => setInfo('isTaxExempt', e.target.checked)} /><span>Exempt</span></label>
+                  {!info.isTaxExempt ? (
+                    <select className="ew-select" style={{ width: 90 }} value={state} onChange={(e) => setInfo('taxState', e.target.value)} title="Detected from the address; change if needed">
+                      {Object.keys(TAX_RATES).map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  ) : null}
+                  <span className="ew-subtle">{taxRate.toFixed(2)}%</span>
+                </div>
+              </td>
+              <td className="num">{fmtMoney(tax)}</td>
+              {snapshot ? <td className="num ew-subtle">{fmtMoney(snapshot.taxAmount)}</td> : null}
+              {snapshot ? diffCell(snapshot.taxAmount, tax) : null}
+            </tr>
+            <tr>
+              <td>Shipping</td>
+              <td className="num"><NumInput w={110} value={info.shipping ?? 0} onCommit={(v) => setInfo('shipping', v)} aria-label="Shipping" /></td>
+              {snapshot ? <td className="num ew-subtle">{fmtMoney(snapshot.shippingAmount)}</td> : null}
+              {snapshot ? diffCell(snapshot.shippingAmount, shipping) : null}
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Grand total</td>
+              <td className="num money-grand">{fmtMoney(grand)}</td>
+              {snapshot ? <td className="num">{fmtMoney(snapshot.grandTotal)}</td> : null}
+              {snapshot ? diffCell(snapshot.grandTotal, grand) : null}
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );

@@ -30,7 +30,11 @@ export function unitPriceFrom(item) {
   const markup   = item.markupPct     ?? item.raw?.markupPct     ?? null;
   if (supplier != null && markup != null) return Number(supplier) * (1 + Number(markup)/100);
   const peg = item.priceWithMarkup ?? item.raw?.priceWithMarkup ?? null;
-  return Number(peg || 0);
+  if (peg != null) return Number(peg || 0);
+  // catalog rows without a stored "price with markup": base price (+ markup when known)
+  const base = item.basePrice ?? null;
+  if (base != null) return Number(base) * (1 + (markup != null ? Number(markup) : 0) / 100);
+  return 0;
 }
 
 /** Simple currency formatter (USD) */

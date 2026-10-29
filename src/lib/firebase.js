@@ -36,5 +36,7 @@ const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
+// Always show the account chooser so you can pick between your Google accounts
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export { app, db, auth, googleProvider };

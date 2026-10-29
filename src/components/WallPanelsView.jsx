@@ -1,208 +1,126 @@
 // src/components/WallPanelsView.jsx
 'use client';
 
-import { 
-  useCallback, 
-  useMemo, 
-  useState, 
-  useEffect,
-  useEffectEvent, 
-  useRef,         
-} from 'react';
+import { useCallback, useMemo } from 'react';
+import { PanelsTopLeft } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import Level from '@/components/Level';
-import PanelsManufactureEstimate from "@/components/PanelsManufactureEstimate";
+import PanelsManufactureEstimate from '@/components/PanelsManufactureEstimate';
 import NailsAndBracing from '@/components/NailsAndBracing';
-import AddButton from './ui/AddButton';
+import { useConfirm } from '@/components/ui/confirm';
+import { PageHeader, AddRowButton, SortableList, SortableBlock, reorderById } from '@/components/ui/mat';
+import { wallPanelsOf } from '@/domain/estimate';
 
-export default function WallPanelsView({ onGrandTotal }) {
-  
-  // Get ALL data and helpers from the context
-  const { 
-    projectData, 
-    updateProject, // This is the stable function from context
-    blankLevel,
-    isLoaded 
-  } = useProject();
+export default function WallPanelsView() {
+  const { projectData, updateProject, blankLevel, isLoaded } = useProject();
 
-  // Extract data from context
   const estimateData = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const levels = useMemo(() => (estimateData.levels || []).filter(Boolean), [estimateData.levels]);
-  const manufactureEstimate = useMemo(() => estimateData.manufactureEstimate || {}, [projectData]);
-  const nailsAndBracing = useMemo(() => estimateData.nailsAndBracing || {}, [projectData]);
-  
-  // Stable handlers (this logic is correct)
-  const handleLevelChangeById = useCallback((levelId, levelUpdaterFn) => {
-    updateProject(prevEstimate => {
-      const newLevels = (prevEstimate.levels || []).map(lvl => {
-        if (lvl.id !== levelId) return lvl;
-        return levelUpdaterFn(lvl); 
-      });
-      return { ...prevEstimate, levels: newLevels };
+  const manufactureEstimate = useMemo(() => estimateData.manufactureEstimate || {}, [estimateData.manufactureEstimate]);
+  const nailsAndBracing = useMemo(() => estimateData.nailsAndBracing || {}, [estimateData.nailsAndBracing]);
+
+  const handleLevelChangeById = useCallback((levelId, fn) => {
+    updateProject((prev) => ({
+      ...prev,
+      levels: (prev.levels || []).map((lvl) => (lvl.id === levelId ? fn(lvl) : lvl)),
+    }));
+  }, [updateProject]);
+
+  // "Add level" stacks a floor on top; "Add basement" puts one below the first level
+  const addLevel = useCallback((where = 'top') => {
+    updateProject((prev) => {
+      const list = prev.levels || [];
+      if (where === 'below') {
+        const n = list.filter((l) => /basement|cellar/i.test(l.name || '')).length;
+        return { ...prev, levels: [blankLevel({ index: 0, name: n ? `Basement ${n + 1}` : 'Basement' }), ...list] };
+      }
+      const floors = list.filter((l) => !/basement|cellar/i.test(l.name || '')).length;
+      return { ...prev, levels: [...list, blankLevel({ index: floors, name: `Level ${floors + 1}` })] };
     });
+  }, [updateProject, blankLevel]);
+
+  const moveLevel = useCallback((activeId, overId) => {
+    updateProject((prev) => ({ ...prev, levels: reorderById(prev.levels || [], activeId, overId) }));
   }, [updateProject]);
 
-  const addLevel = useCallback(() => {
-    const newLevel = blankLevel({ index: levels.length });
-    updateProject(prevEstimate => ({
-      ...prevEstimate,
-      levels: [...(prevEstimate.levels || []), newLevel]
-    }));
-  }, [updateProject, blankLevel, levels.length]);
+  const confirm = useConfirm();
+  const removeLevel = useCallback(async (id) => {
+    const lvl = (projectData?.estimateData?.levels || []).find((l) => l.id === id);
+    const ok = await confirm({
+      title: `Delete ${lvl?.name || 'this level'}?`,
+      message: 'Its wall sections, panel nails and loose materials are removed too. Undo with Ctrl+Z.',
+      confirmLabel: 'Delete level',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    updateProject((prev) => ({ ...prev, levels: (prev.levels || []).filter((l) => l.id !== id) }));
+  }, [updateProject, confirm, projectData]);
 
-  const removeLevel = useCallback((idToRemove) => {
-    updateProject(prevEstimate => ({
-      ...prevEstimate,
-      levels: (prevEstimate.levels || []).filter(l => l.id !== idToRemove)
-    }));
-  }, [updateProject]);
+  const patchKey = useCallback((key) => (fn) => updateProject((prev) => ({
+    ...prev,
+    [key]: typeof fn === 'function' ? fn(prev[key] || {}) : fn,
+  })), [updateProject]);
+  const handleManufactureChange = useMemo(() => patchKey('manufactureEstimate'), [patchKey]);
+  const handleNailsBracingChange = useMemo(() => patchKey('nailsAndBracing'), [patchKey]);
 
-  const handleManufactureChange = useCallback((manufactureUpdater) => {
-    updateProject(prevEstimate => ({
-      ...prevEstimate,
-      manufactureEstimate: typeof manufactureUpdater === 'function' 
-        ? manufactureUpdater(prevEstimate.manufactureEstimate || {}) 
-        : manufactureUpdater
-    }));
-  }, [updateProject]);
-
-  const handleNailsBracingChange = useCallback((nailsUpdater) => {
-    updateProject(prevEstimate => ({
-      ...prevEstimate,
-      nailsAndBracing: typeof nailsUpdater === 'function'
-        ? nailsUpdater(prevEstimate.nailsAndBracing || {})
-        : nailsUpdater
-    }));
-  }, [updateProject]);
-
-  // allLevelStats calculation
-  const allLevelStats = useMemo(() => {
-    let totalExteriorLF = 0, totalInteriorShearLF = 0, totalInteriorBlockingLF = 0;
-    let totalInteriorNonLoadLF = 0, totalKneeWallLF = 0, panelsAll = 0;
-    let platePiecesAll = 0, ptPiecesAll = 0, sheetsExtAll = 0;
-    let sheetsBandAll = 0, sheetsExtraAll = 0;
-
-    for (const level of levels) {
-      // Aggregate exterior stats
-      for (const s of (level.exteriorSections || [])) {
-        totalExteriorLF += Number(s.lengthLF || 0);
-        panelsAll += Number(s.panelSheets || 0); 
-        platePiecesAll += Number(s.platePieces || 0);
-        ptPiecesAll += Number(s.panelPtBoards || 0);
-        sheetsExtAll += Number(s.zipSheetsFinal || 0);
-      }
-      // Aggregate interior stats
-      for (const s of (level.interiorSections || [])) {
-        if (s.isShear) totalInteriorShearLF += Number(s.lengthLF || 0);
-        if (s.isBearing) totalInteriorBlockingLF += Number(s.lengthLF || 0);
-        if (s.isPartition) totalInteriorNonLoadLF += Number(s.lengthLF || 0);
-        if (s.isKnee) totalKneeWallLF += Number(s.lengthLF || 0);
-        panelsAll += Number(s.panelSheets || 0);
-        platePiecesAll += Number(s.platePieces || 0);
-        ptPiecesAll += Number(s.panelPtBoards || 0);
-      }
-      // Aggregate loose stats
-      const looseStats = level.looseMaterials?.generalStats || {};
-      platePiecesAll += Number(looseStats.platePiecesTotal || 0); // Add loose plates
-      ptPiecesAll += Number(looseStats.ptPieces || 0); // Add loose PT
-      sheetsBandAll += Number(looseStats.sheetsBand || 0);
-      sheetsExtraAll += Number(looseStats.sheetsExtra || 0);
-    }
-
-    return {
-      totalExteriorLF, totalInteriorShearLF, totalInteriorBlockingLF,
-      totalInteriorNonLoadLF, totalKneeWallLF, panelsAll, platePiecesAll,
-      ptPiecesAll, sheetsExtAll, sheetsBandAll, sheetsExtraAll,
-      levelsCount: levels.length 
-    };
-  }, [levels]);
-
-  // grandTotal calculation
-  const grandTotal = useMemo(() => {
-    const levelsTotal = levels.reduce((sum, lvl) => sum + (Number(lvl.total) || 0), 0);
-    const manufactureTotal = Number(manufactureEstimate.total || 0);
-    const nailsTotal = Number(nailsAndBracing.total || 0);
-    return levelsTotal + manufactureTotal + nailsTotal;
-  }, [levels, manufactureEstimate, nailsAndBracing]);
-  
-  // Create the stable event handler
-  const onGrandTotalChange = useEffectEvent(onGrandTotal);
-  
-  // Create the ref to track the last sent value
-  const lastSentGrandTotalRef = useRef(null);
-
-  useEffect(() => {
-    if (typeof onGrandTotalChange === 'function') {
-      if (grandTotal !== lastSentGrandTotalRef.current) {
-        onGrandTotalChange(grandTotal);
-        lastSentGrandTotalRef.current = grandTotal;
-      }
-    }
-  }, [grandTotal, onGrandTotalChange]); // Dependency is on the calculated value
-
-  const moneyFmt = useMemo(() => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }), []);
-  const fmt = (n) => moneyFmt.format(Number(n) || 0);
+  // one pure calculation for the whole page (levels, nails & bracing, manufacture)
+  const calc = useMemo(() => wallPanelsOf(estimateData), [estimateData]);
+  const grandTotal = calc.total;
+  const levelCalcById = useMemo(() => Object.fromEntries(calc.levels.map((l) => [l.id, l])), [calc]);
 
   if (!isLoaded || !projectData) {
     return (
-       <div className="app-content">
-          <div className="ew-card">
-              <span className="text-h1">Wall Panels</span>
-              <p className="ew-subtle" style={{ marginTop: '10px' }}>
-                Please create or load a project from the "Project" section to begin.
-              </p>
-          </div>
-       </div>
+      <div className="app-content">
+        <PageHeader icon={PanelsTopLeft} title="Wall panels" />
+        <div className="empty-state">Open or create a project in Projects to start estimating wall panels.</div>
+      </div>
     );
   }
 
   return (
     <div className="app-content">
-      <div className="sticky-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <span className="text-section-title">
-          {projectData?.name ? `${projectData.name} - ` : ''}Wall Panels
-          </span>
-        <div
-          className="ew-right text-grand-total" 
-          title="Sum of all levels (panels + loose)"
-        >
-          Grand total: {fmt(grandTotal)}
+      <PageHeader
+        icon={PanelsTopLeft}
+        title="Wall panels"
+        meta={`${projectData.name || 'Untitled'} · ${levels.length} level${levels.length === 1 ? '' : 's'}`}
+        totalLabel="Wall panels total"
+        total={grandTotal}
+        actions={(
+          <>
+            <AddRowButton onClick={() => addLevel('top')} title="Add a floor above the last level">Add level</AddRowButton>
+            <AddRowButton onClick={() => addLevel('below')} title="Add a basement below the first level">Add basement</AddRowButton>
+          </>
+        )}
+      />
+
+      <SortableList ids={levels.map((l) => l.id)} onMove={moveLevel}>
+        {levels.map((lvl, i) => (
+          <SortableBlock key={lvl.id} id={lvl.id}>
+            {(handle) => (
+              <Level
+                levelData={lvl}
+                calc={levelCalcById[lvl.id]}
+                isGround={i === 0}
+                dragHandleProps={levels.length > 1 ? handle : undefined}
+                onLevelChange={(fn) => handleLevelChangeById(lvl.id, fn)}
+                onRemove={levels.length > 1 ? () => removeLevel(lvl.id) : undefined}
+              />
+            )}
+          </SortableBlock>
+        ))}
+      </SortableList>
+
+      <div className="empty-state" style={{ paddingTop: 0 }}>
+        <span>Each level has its own walls, panel nails and loose materials. Drag the grip to reorder levels; use the pencil to rename one.</span>
+        <div className="ew-inline">
+          <AddRowButton onClick={() => addLevel('top')}>Add level</AddRowButton>
+          <AddRowButton onClick={() => addLevel('below')}>Add basement</AddRowButton>
         </div>
       </div>
 
-      {levels.map((lvl, i) => (
-        <Level
-          key={lvl.id}
-          levelData={lvl} 
-          onLevelChange={updaterFn => handleLevelChangeById(lvl.id, updaterFn)} 
-          onRemove={levels.length > 1 ? () => removeLevel(lvl.id) : undefined}
-          levelStats={allLevelStats} 
-        />
-      ))}
+      <NailsAndBracing data={nailsAndBracing} calc={calc.nails} onChange={handleNailsBracingChange} totals={calc.totals} />
 
-      <div className="ew-card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <div className="ew-subtle">Add another floor (mirrors functionality; you can input different quantities)</div>
-        <AddButton onClick={addLevel} title="Add wall" label="Add wall" />
-      </div>
-    
-      <div>
-        <NailsAndBracing 
-          title="General — Nails & Bracing (all levels)" 
-          data={nailsAndBracing}
-          onChange={handleNailsBracingChange}
-          totals={allLevelStats} 
-        />
-      </div>
-
-      <PanelsManufactureEstimate
-        data={manufactureEstimate}
-        onChange={handleManufactureChange}
-        exteriorLF={allLevelStats.totalExteriorLF}
-        interiorShearLF={allLevelStats.totalInteriorShearLF}
-        interiorBlockingLF={allLevelStats.totalInteriorBlockingLF}
-        interiorNonLoadLF={allLevelStats.totalInteriorNonLoadLF}
-        kneeWallLF={allLevelStats.totalKneeWallLF}
-      />
-  </div>
+      <PanelsManufactureEstimate data={manufactureEstimate} calc={calc.manufacture} onChange={handleManufactureChange} />
+    </div>
   );
 }

@@ -1,10 +1,10 @@
 'use client';
-import ExteriorWallGroup from '@/components/ExteriorWallGroup';
+// Legacy route: projects open inside the main app now.
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function ProjectClient() {
-  return (
-    <main style={{ padding: 24 }}>
-      <ExteriorWallGroup />
-    </main>
-  );
+  const router = useRouter();
+  useEffect(() => { router.replace('/'); }, [router]);
+  return <main className="app-content"><div className="empty-state">Opening the estimator…</div></main>;
 }

@@ -1,25 +1,12 @@
-// src/components/ui/AddBotton.jsx
+// src/components/ui/AddButton.jsx
 'use client';
+import { Plus } from 'lucide-react';
 
-export default function AddButton({
-  onClick,
-  size = 20,
-  title = 'Add',
-  label = 'Add',
-  src = '/icons/plus.png',
-  className = '',
-  disabled = false,
-}) {
+export default function AddButton({ onClick, size = 13, title = 'Add', label = 'Add', className = '', disabled = false }) {
   return (
-    <button
-      type="button"
-      className={`ew-btn ew-icon-btn ${className}`}
-      onClick={onClick}
-      aria-label={label}
-      title={title}
-      disabled={disabled}
-    >
-      <img src={src} width={size} height={size} alt="" />
+    <button type="button" className={`ew-btn ${className}`} onClick={onClick} aria-label={label || title} title={title} disabled={disabled}>
+      <Plus size={size} aria-hidden="true" />
+      {label ? <span>{label}</span> : null}
     </button>
   );
 }

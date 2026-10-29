@@ -1,228 +1,252 @@
 // src/components/Sidebar.jsx
-"use client";
+// Navigation with spring motion: the panel width, the active-item pill that
+// slides between entries, labels and the theme switch knob all use springs.
+'use client';
 
-import { useMemo, useEffect, useState } from "react";
-import { useProject } from "@/context/ProjectContext";
-import { useAuth } from "@/AuthContext";
+import { useEffect, useState } from 'react';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
+import { useAuth } from '@/AuthContext';
+import { useProject } from '@/context/ProjectContext';
+import {
+  LogOut, FolderOpen, LayoutDashboard, PanelsTopLeft, Layers, HardHat, ClipboardList, Receipt,
+  Package, Download, Save, Sun, Moon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2,
+} from 'lucide-react';
 
-// *** MODIFICADO: Revertido al array de MENÚ original ***
-const MENU = [
-  { key: "auth",        label: "Login / Logout",      icon: "/icons/login.png" },
-  { key: "project",     label: "Project",             icon: "/icons/files.png" },
-  { key: "summary",     label: "Summary",             icon: "/icons/search.png" },
-  { key: "trusses",     label: "Trusses",             icon: "/icons/line-chart.png" },
-  { key: "wallpanels",  label: "Wall Panels",         icon: "/icons/framing.png" },
-  { key: "loose",       label: "Loose Material",      icon: "/icons/loose.png" },
-  { key: "labor",       label: "Labor",               icon: "/icons/worker.png" },
-  { key: "takeoff",     label: "Takeoff list",        icon: "/icons/list.png" },
-  { key: "quote",       label: "Quote (QuickBooks)",  icon: "/icons/dollar.png" },
-  { key: "items",       label: "Material List",       icon: "/icons/trolley.png" },
-  { key: "export",      label: "Export",              icon: "/icons/download.png" },
-  { key: "save",        label: "Save",                icon: "/icons/save.png" },
-  { key: "mode",        label: "Toggle Mode",         icon: "/icons/brightness.png" }, 
+const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
+const SOFT_SPRING = { type: 'spring', stiffness: 260, damping: 28 };
+
+const TrussIcon = ({ size = 18, ...props }) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 4 2 20h20L12 4z" />
+    <path d="M12 11v9" />
+    <path d="M7 20l5-9 5 9" />
+  </svg>
+);
+
+const NAV = [
+  { key: 'project', label: 'Projects', Icon: FolderOpen },
+  { key: 'summary', label: 'Summary', Icon: LayoutDashboard, needsProject: true },
+  { key: 'wallpanels', label: 'Wall panels', Icon: PanelsTopLeft, needsProject: true },
+  { key: 'loose', label: 'Loose material', Icon: Layers, needsProject: true },
+  { key: 'trusses', label: 'Trusses', Icon: TrussIcon, needsProject: true },
+  { key: 'items', label: 'Material list', Icon: Package },
+  { sep: true },
+  { key: 'labor', label: 'Labor', Icon: HardHat, soon: true },
+  { key: 'takeoff', label: 'Takeoff list', Icon: ClipboardList, soon: true },
+  { key: 'quote', label: 'Quote', Icon: Receipt, soon: true },
+  { key: 'export', label: 'Export', Icon: Download, soon: true },
 ];
 
-export default function Sidebar({
-  active = "wallpanels",
-  collapsed = false,
-  onChange, 
-  onCollapsedChange, 
-}) {
-  const { user, signIn, signOutUser } = useAuth();
-  const { saveProject, isSaving, projectData, projectId } = useProject();
+function applyTheme(dark) {
+  document.documentElement.classList.toggle('dark', dark);
+  try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch { /* storage blocked */ }
+}
 
+function Label({ show, children, className = 'menu-label' }) {
+  return (
+    <AnimatePresence initial={false}>
+      {show ? (
+        <motion.span
+          className={className}
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0, transition: { ...SOFT_SPRING, delay: 0.04 } }}
+          exit={{ opacity: 0, x: -8, transition: { duration: 0.08 } }}
+        >
+          {children}
+        </motion.span>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function NavItem({ active, disabled, collapsed, onClick, title, Icon, label, trailing }) {
+  return (
+    <motion.button
+      type="button"
+      className={`menu-item${active ? ' active' : ''}`}
+      onClick={onClick}
+      disabled={disabled}
+      aria-current={active ? 'page' : undefined}
+      title={title}
+      whileHover={disabled ? undefined : { x: collapsed ? 0 : 3 }}
+      whileTap={disabled ? undefined : { scale: 0.96 }}
+      transition={SPRING}
+    >
+      {active ? <motion.span layoutId="nav-active" className="nav-pill" transition={SPRING} /> : null}
+      <span className="menu-ico"><Icon size={18} /></span>
+      <Label show={!collapsed}>{label}</Label>
+      {!collapsed && trailing ? <span className="soon">{trailing}</span> : null}
+    </motion.button>
+  );
+}
+
+const TIME_FMT = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
+const isTextField = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+
+function SaveStatus({ status, lastSavedAt, error, collapsed }) {
+  const text = status === 'saving' ? 'Saving…'
+    : status === 'error' ? 'Not saved — retrying'
+    : status === 'dirty' ? 'Unsaved changes'
+    : lastSavedAt ? `Saved ${TIME_FMT.format(lastSavedAt)}` : 'Saved';
+  const title = status === 'error' ? `Save failed: ${error}. Changes are kept and retried automatically.`
+    : status === 'dirty' ? 'Changes save automatically in a moment (Ctrl+S saves now)'
+    : text;
+  return (
+    <span className={`save-status is-${status}`} title={title} role="status" aria-live="polite">
+      {status === 'saving' ? <LoaderCircle size={11} className="animate-spin" /> : <span className="dot" />}
+      {collapsed ? null : <span>{text}</span>}
+    </span>
+  );
+}
+
+export default function Sidebar({ active, onChange, collapsed, onCollapsedChange }) {
+  const { user } = useAuth();
+  const {
+    saveProject, isSaving, projectId, projectData, saveStatus, saveError, lastSavedAt, isDirty,
+    undo, redo, canUndo, canRedo,
+  } = useProject();
+
+  // Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo. Inside a text field the
+  // browser's own undo for that field wins.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'z' && k !== 'y') return;
+      if (isTextField(document.activeElement)) return;
+      if (!projectId) return;
+      e.preventDefault();
+      if (k === 'y' || (k === 'z' && e.shiftKey)) redo(); else undo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [projectId, undo, redo]);
   const [isDark, setIsDark] = useState(true);
 
+  useEffect(() => { setIsDark(document.documentElement.classList.contains('dark')); }, []);
+  const setTheme = (dark) => { setIsDark(dark); applyTheme(dark); };
+
+  // Ctrl/Cmd + S saves the open project
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    let dark = true;
-    if (savedTheme === 'light') dark = false;
-    else if (savedTheme === 'dark') dark = true;
-    else if (!prefersDark) dark = false;
-
-    setIsDark(dark);
-    if (dark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newIsDark = !isDark;
-    setIsDark(newIsDark);
-    if (newIsDark) {
-      document.documentElement.classList.add('dark');
-      window.localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      window.localStorage.setItem('theme', 'light');
-    }
-  };
-
-  const items = useMemo(() => {
-    return MENU.map(item => {
-      // *** MODIFICADO: Lógica de iconos simplificada ***
-      // Solo actualiza etiquetas e iconos especiales (como el de 'mode')
-      let icon = item.icon;
-      let label = item.label;
-
-      if (item.key === 'mode') {
-        label = isDark ? "Light Mode" : "Dark Mode";
-        icon = isDark ? "/icons/brightness.png" : "/icons/moon.png";
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (projectId && !isSaving) saveProject();
       }
-      if (item.key === 'auth') {
-        label = user ? "Logout" : "Login";
-      }
-      if (item.key === 'save' && isSaving) {
-        label = "Saving...";
-      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [projectId, isSaving, saveProject]);
 
-      // Devuelve el objeto con la etiqueta y el icono correctos
-      return { ...item, label, icon };
-    });
-  }, [isDark, user, isSaving]); // Se recalcula si el tema, usuario o estado de guardado cambian
-
-  const activeVisualIdx = items.findIndex((i) => i.key === active);
-  const topOffset = 6 + (activeVisualIdx >= 0 ? activeVisualIdx * 56 : 0);
-
-  const canSave = !!user && !!projectId && !!projectData && !isSaving;
-  const alwaysVisibleKeys = ["auth", "project", "mode"];
-
-  const handleItemClick = (item) => {
-    if (item.key === "save") {
-      if (canSave) saveProject();
-      return; 
-    }
-    if (item.key === "mode") {
-      toggleTheme();
-      return; 
-    }
-    if (item.key === "auth") {
-      if (user) signOutUser();
-      else signIn();
-      return; 
-    }
-    onChange?.(item.key);
-  };
+  const canSave = Boolean(user && projectId && projectData && !isSaving && (isDirty || saveStatus === 'error'));
+  const initial = (user?.displayName || user?.email || 'U')[0].toUpperCase();
 
   return (
-    <aside className={`sidebar ${collapsed ? "open" : ""}`}>
-      <header>
-        <button
-          type="button"
-          style={{paddingLeft:'15px'}}
-          className="sidebar-burger"
-          onClick={() => onCollapsedChange?.(!collapsed)}
-          title={collapsed ? "Expand" : "Collapse"}
-        >
-          <img
-            src="/icons/menu.png"
-            alt={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            width={24}
-            height={24}
-            aria-hidden           
-          />
-        </button>
-      </header>
-
-      <nav
-        className="menu"
-        style={{ ["--top"]: `${topOffset}px` }}
-        role="navigation"
-        aria-label="Main"
+    <MotionConfig reducedMotion="user">
+      <motion.aside
+        className={`app-side${collapsed ? ' is-collapsed' : ''}`}
+        initial={false}
+        animate={{ width: collapsed ? 60 : 224 }}
+        transition={SOFT_SPRING}
       >
-        {items.map((it, idx) => {
-          const isActive =
-            it.key === active && !["save", "mode", "auth", "items", "wallpanels", "trusses", "loose"].includes(it.key);
-          const comingSoonKeys = [
-            "loose", "labor", "takeoff",
-            "quote", "export",
-          ];
-
-          let isDisabled = false;
-          let titleText = it.label;
-
-          if (comingSoonKeys.includes(it.key)) {
-            isDisabled = true;
-            titleText = "Coming soon...";
-          } else if (it.key === "save") {
-            isDisabled = !canSave;
-            if (isSaving) titleText = "Saving...";
-            else if (!projectId) titleText = "Load or create a project to save";
-          } else if (alwaysVisibleKeys.includes(it.key)) {
-            isDisabled = false;
-          } else {
-            isDisabled = !user || !projectId;
-            if (isDisabled && user && !projectId) {
-              titleText = "Load or create a project to view this section";
-            }
-          }
-
-          const labelText = it.label; 
-
-          return (
-            <button
-              key={it.key}
-              type="button"
-              className={`menu-item ${isActive ? " active" : ""} ${
-                isDisabled ? " disabled" : ""
-              }`}
-              onClick={() => !isDisabled && handleItemClick(it)}
-              title={titleText} 
-              aria-current={isActive ? "page" : undefined}
-              aria-disabled={isDisabled ? true : undefined}
-            >
-              {/* Este <img> ahora será filtrado por la regla CSS */}
-              <img
-                src={it.icon}
-                alt=""
-                width={20}
-                height={20}
-                className="menu-ico"
-                aria-hidden
-              />
-              <p className="menu-label">{labelText}</p>
-            </button>
-          );
-        })}
-      </nav>
-      <div
-        className="side-foot"
-        style={{
-          marginTop: "auto",
-          textAlign: collapsed ? "center" : "left",
-          padding: collapsed ? "10px 0" : "10px",
-        }}
-      >
-        {user && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: collapsed ? "center" : "flex-start",
-              gap: "8px",
-              padding: "0 10px",
-            }}
+        <div className="side-head">
+          <Label show={!collapsed} className="side-brand">{projectData?.name || 'Estimator'}</Label>
+          <motion.button
+            type="button"
+            className="ew-icon-btn side-toggle"
+            onClick={() => onCollapsedChange(!collapsed)}
+            title={collapsed ? 'Expand menu' : 'Collapse menu'}
+            aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
+            whileTap={{ scale: 0.9 }}
+            transition={SPRING}
           >
-            {!collapsed && (
-              <span
-                className="ew-subtle"
-                style={{
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-                title={user.displayName || user.email}
-              >
-                {user.displayName || user.email}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </aside>
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </motion.button>
+        </div>
+
+        <nav className="side-menu" aria-label="Main">
+          {NAV.map((it, i) => {
+            if (it.sep) return <div key={`sep${i}`} className="side-sep" />;
+            const disabled = it.soon || (it.needsProject && !projectId);
+            return (
+              <NavItem
+                key={it.key}
+                active={active === it.key}
+                disabled={disabled}
+                collapsed={collapsed}
+                onClick={() => !disabled && onChange(it.key)}
+                title={it.soon ? `${it.label} — coming soon` : disabled ? 'Open a project first' : it.label}
+                Icon={it.Icon}
+                label={it.label}
+                trailing={it.soon ? 'soon' : null}
+              />
+            );
+          })}
+
+          <div className="side-sep" />
+          {projectId && projectData ? (
+            <div className={`side-tools${collapsed ? ' is-collapsed' : ''}`}>
+              <SaveStatus status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} collapsed={collapsed} />
+              <motion.button type="button" className="ew-icon-btn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo" whileTap={canUndo ? { scale: 0.85 } : undefined} transition={SPRING}>
+                <Undo2 size={16} />
+              </motion.button>
+              <motion.button type="button" className="ew-icon-btn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo" whileTap={canRedo ? { scale: 0.85 } : undefined} transition={SPRING}>
+                <Redo2 size={16} />
+              </motion.button>
+            </div>
+          ) : null}
+          <NavItem
+            active={false}
+            disabled={!canSave}
+            collapsed={collapsed}
+            onClick={() => canSave && saveProject()}
+            title={projectId ? (isDirty ? 'Save now (Ctrl+S) — changes also save automatically' : 'All changes saved') : 'Open a project first'}
+            Icon={isSaving ? (p) => <LoaderCircle {...p} className="animate-spin" /> : Save}
+            label={isSaving ? 'Saving…' : 'Save now'}
+          />
+        </nav>
+
+        <div className="side-foot">
+          {collapsed ? (
+            <motion.button
+              type="button"
+              className="ew-icon-btn"
+              onClick={() => setTheme(!isDark)}
+              title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+              aria-label="Toggle theme"
+              style={{ alignSelf: 'center' }}
+              whileTap={{ scale: 0.85, rotate: -30 }}
+              transition={SPRING}
+            >
+              {isDark ? <Moon size={16} /> : <Sun size={16} />}
+            </motion.button>
+          ) : (
+            <div className="theme-switch" role="group" aria-label="Theme">
+              <motion.span className="theme-knob" layout transition={SPRING} style={{ gridColumn: isDark ? 1 : 2 }} />
+              <button type="button" aria-pressed={isDark} onClick={() => setTheme(true)}><Moon size={14} /> Dark</button>
+              <button type="button" aria-pressed={!isDark} onClick={() => setTheme(false)}><Sun size={14} /> Light</button>
+            </div>
+          )}
+
+          {user ? (
+            <div className="side-user">
+              {collapsed ? (
+                <motion.button type="button" className="avatar" onClick={() => onChange('auth')} title={`${user.email} — sign out`} aria-label="Sign out" whileTap={{ scale: 0.9 }} transition={SPRING}>
+                  {initial}
+                </motion.button>
+              ) : (
+                <span className="avatar" aria-hidden="true">{initial}</span>
+              )}
+              <Label show={!collapsed} className="name">{user.displayName || user.email}</Label>
+              {!collapsed ? (
+                <button type="button" className="ew-icon-btn" style={{ marginLeft: 'auto' }} onClick={() => onChange('auth')} title="Sign out" aria-label="Sign out">
+                  <LogOut size={16} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </motion.aside>
+    </MotionConfig>
   );
 }

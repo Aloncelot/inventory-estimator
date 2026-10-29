@@ -1,149 +1,47 @@
 // src/components/ui/AccordionSection.jsx
-"use client";
-import { Children, useCallback, useEffect, useId, useRef, useState } from "react";
+// Lightweight collapsible: renders `bar` (or a title button) and the body only
+// while open. Kept for compatibility; new sections use GroupBlock in ui/mat.jsx.
+'use client';
+
+import { useCallback, useId, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 export default function AccordionSection({
-  title,
-  bar,
-  summary,
-  header,
-  actions,
-  defaultOpen = true,
-  open: openProp,
-  onOpenChange,
-  hideHeaderWhenCollapsed = false,
-  children,
-  className = "",
+  title, bar, summary, header, actions, defaultOpen = true, open: openProp,
+  onOpenChange, hideHeaderWhenCollapsed = false, children, className = '',
 }) {
-  const isControlled = typeof openProp === "boolean";
+  const isControlled = typeof openProp === 'boolean';
   const [uncontrolled, setUncontrolled] = useState(!!defaultOpen);
   const open = isControlled ? openProp : uncontrolled;
-
-  const setOpen = useCallback(
-    (next) => {
-      const value = typeof next === "function" ? next(open) : !!next;
-      if (!isControlled) setUncontrolled(value);
-      onOpenChange?.(value);
-    },
-    [isControlled, onOpenChange, open]
-  );
-
-  const toggle = useCallback(() => setOpen(!open), [setOpen, open]);
-
-  // 2. Re-added bodyRef
-  const bodyRef = useRef(null);
-  const innerRef = useRef(null);
   const id = useId();
 
-  // 3. Re-added the useEffect to manage max-height
-  useEffect(() => {
-    const el = bodyRef.current;
-    const innerEl = innerRef.current;
-    if (!el || !innerEl) return;
+  const setOpen = useCallback((next) => {
+    const value = typeof next === 'function' ? next(open) : !!next;
+    if (!isControlled) setUncontrolled(value);
+    onOpenChange?.(value);
+  }, [isControlled, onOpenChange, open]);
+  const toggle = useCallback(() => setOpen(!open), [setOpen, open]);
 
-    let resizeObserver;
-
-    if (open) {
-      // --- Al abrir ---
-      el.style.maxHeight = `${innerEl.scrollHeight}px`; // Ajustar altura inicial
-      el.style.opacity = "1";
-      el.setAttribute("aria-hidden", "false");
-
-      // 1. Definimos el callback del observador
-      // Esto se disparará CADA VEZ que el tamaño del contenido interno cambie
-      const onResize = () => {
-        el.style.maxHeight = `${innerEl.scrollHeight}px`;
-      };
-
-      // 2. Creamos y activamos el observador
-      resizeObserver = new ResizeObserver(onResize);
-      resizeObserver.observe(innerEl); // Empezamos a observar el div interior
-
-    } else {
-      // --- Al cerrar ---
-      el.style.maxHeight = "0px";
-      el.style.opacity = "0";
-      el.setAttribute("aria-hidden", "true");
-    }
-    
-    return () => {
-      if (resizeObserver) {
-        resizeObserver.disconnect(); // Dejamos de observar
-      }
-    };
-  }, [open]);
-
-  const resolve = (nodeOrFn) =>
-    typeof nodeOrFn === "function" ? nodeOrFn({ open, toggle, id }) : nodeOrFn;
-
+  const resolve = (n) => (typeof n === 'function' ? n({ open, toggle, id }) : n);
   const barNode = resolve(bar);
-  const summaryNode = resolve(summary);
-  const headerNode = resolve(header);
 
   return (
-    <section className={`acc ${open ? "acc--open" : ""} ${className}`}>
+    <section className={`acc ${open ? 'acc--open' : ''} ${className}`}>
       {barNode ? (
         <div className="acc__summary">{barNode}</div>
-      ) : (
-        <>
-          {(open || !hideHeaderWhenCollapsed) && (
-            <div
-              className="acc__header"
-              style={{ display: "flex", alignItems: "center", gap: 8 }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  flex: 1,
-                }}
-              >
-                {open && headerNode ? (
-                  headerNode
-                ) : (
-                  <button
-                    type="button"
-                    className="acc__button"
-                    style={{
-                      fontFamily: "Nova Flat",
-                      color: "#59d2c8",
-                      fontSize: "18px",
-                    }}
-                    aria-expanded={open}
-                    aria-controls={id}
-                    onClick={toggle}
-                    title={open ? "Collapse" : "Expand"}
-                  >
-                    <img
-                      src={open ? "/icons/down.png" : "/icons/minimize.png"}
-                      alt={open ? "Collapse section" : "Expand section"}
-                      width={16}
-                      height={16}
-                      className="acc__chev"
-                      style={{
-                        display: "inline-block",
-                        verticalAlign: "middle",
-                      }}
-                    />
-                    <span className="acc__title">{title}</span>
-                  </button>
-                )}
-              </div>
-              {actions ? <div className="acc__actions">{actions}</div> : null}
-            </div>
+      ) : (open || !hideHeaderWhenCollapsed) ? (
+        <div className="acc__header">
+          {open && header ? resolve(header) : (
+            <button type="button" className="acc__button" aria-expanded={open} aria-controls={id} onClick={toggle} title={open ? 'Collapse' : 'Expand'} style={{ width: 'auto', gap: 6, padding: '0 4px' }}>
+              <ChevronDown size={16} className={`acc__chev${open ? '' : ' is-closed'}`} />
+              <span className="acc__title">{title}</span>
+            </button>
           )}
-
-          {!open && summaryNode ? (
-            <div className="acc__summary">{summaryNode}</div>
-          ) : null}
-        </>
-      )}
-
-      {/* 4. Re-added the ref to the body div */}
-      <div id={id} ref={bodyRef} className="acc__body">
-        <div ref={innerRef} className="acc__bodyInner">{children}</div>
-      </div>
+          {actions ? <div className="acc__actions">{actions}</div> : null}
+        </div>
+      ) : null}
+      {!open && summary ? <div className="acc__summary">{resolve(summary)}</div> : null}
+      {open ? <div id={id} className="acc__body"><div className="acc__bodyInner">{children}</div></div> : null}
     </section>
   );
 }

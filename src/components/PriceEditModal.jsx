@@ -68,29 +68,31 @@ export default function PriceEditModal({
     }));
   };
 
+  const [formError, setFormError] = useState('');
+  useEffect(() => { if (isOpen) setFormError(''); }, [isOpen]);
+  const fail = (msg) => { setFormError(msg); setIsSaving(false); };
+
   const handleSaveClick = async () => {
     setIsSaving(true);
+    setFormError('');
     
     // Validation Logic
     if (isCreatingItem && !item.familyDisplay) {
         if (isNewFamilyMode) {
              if (!formData.newFamilyName.trim()) {
-                alert("Please enter a Family Name.");
-                setIsSaving(false); return;
+                return fail('Enter a family name.');
              }
         }
     }
     if (isCreatingItem && !formData.sizeDisplay.trim()) {
-        alert("Please enter a Size Name (e.g. 2x4-12')");
-        setIsSaving(false); return;
+        return fail("Enter a size name, e.g. 2x4-12'.");
     }
 
     let supplierName = item.supplierName;
     if (isCreating || isCreatingItem) {
       if (isNewVendorMode) {
         if (!formData.newVendorName.trim()) {
-          alert("Please enter a vendor name.");
-          setIsSaving(false); return;
+          return fail('Enter a vendor name.');
         }
         supplierName = formData.newVendorName;
       } else {
@@ -124,7 +126,7 @@ export default function PriceEditModal({
       onClose(); 
     } catch (error) {
       console.error("Failed to save price:", error);
-      alert("Error saving: " + error.message);
+      setFormError(`The price wasn't saved: ${error?.message || 'unknown error'}. Check your connection and try again.`);
     } finally {
       setIsSaving(false);
     }
@@ -284,10 +286,11 @@ export default function PriceEditModal({
           </div>
         </div>
 
+        {formError ? <p role="alert" style={{ margin: '12px 0 0', color: 'var(--danger)' }}>{formError}</p> : null}
         <DialogFooter style={{ marginTop: '16px' }}>
           <Button variant="outline" className="ew-btn" onClick={onClose}>Cancel</Button>
           <Button className="ew-btn ew-btn--turq" onClick={handleSaveClick} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? 'Saving…' : 'Save price'}
           </Button>
         </DialogFooter>
       </DialogContent>

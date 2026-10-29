@@ -1,136 +1,93 @@
 // src/components/ProjectView.jsx
- 'use client';
- import { useState, useEffect } from 'react';
- import { useProject } from '@/context/ProjectContext'; // Ensure alias works or use relative path
+'use client';
 
- export default function ProjectView() {
-     const {
-         projectsList,
-         fetchProjectsList,
-         createNewProject,
-         loadProject,
-         isListLoading,
-         isSaving,
-         appId, // Get appId from context
-         projectId // Currently loaded project ID
-     } = useProject();
-     const [newProjectName, setNewProjectName] = useState('');
+import { useMemo, useState } from 'react';
+import { FolderOpen, RefreshCw, Search } from 'lucide-react';
+import { useProject } from '@/context/ProjectContext';
+import { PageHeader } from '@/components/ui/mat';
 
-     // Determine if the core functionalities are ready (appId loaded, user logged in - user check happens in context)
-     const isReady = appId && appId !== 'default-app-id';
+export default function ProjectView({ onOpened }) {
+  const { projectsList, fetchProjectsList, createNewProject, loadProject, isListLoading, isSaving, appId, projectId } = useProject();
+  const [newName, setNewName] = useState('');
+  const [filter, setFilter] = useState('');
+  const isReady = Boolean(appId);
 
-     // Fetch list on mount if not already loading (context might auto-fetch)
-     useEffect(() => {
-         if (!isListLoading && isReady) { // Fetch only if ready
-             // fetchProjectsList(); // Context should handle initial fetch on load/auth
-         }
-     }, [fetchProjectsList, isListLoading, isReady]);
+  const rows = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return q ? projectsList.filter((p) => (p.name || '').toLowerCase().includes(q)) : projectsList;
+  }, [projectsList, filter]);
 
-     const handleCreateProject = async (e) => {
-         e.preventDefault();
-         if (!newProjectName.trim() || isSaving || !isReady) return; // Check isReady
-         const createdId = await createNewProject(newProjectName);
-         if (createdId) {
-             setNewProjectName('');
-             loadProject(createdId); // Load the newly created project
-             console.log("Created and loading project:", createdId);
-         } else {
-             console.error("Failed to create project");
-             // TODO: Show user feedback
-         }
-     };
+  const create = async (e) => {
+    e.preventDefault();
+    if (!newName.trim() || isSaving || !isReady) return;
+    const id = await createNewProject(newName.trim());
+    if (id) {
+      setNewName('');
+      await loadProject(id);
+      onOpened?.();
+    }
+  };
 
-     const handleLoadProject = (idToLoad) => {
-        if (idToLoad === projectId || !isReady) return; // Check isReady
-        console.log("Load project clicked:", idToLoad);
-        loadProject(idToLoad);
-     };
+  const open = async (id) => {
+    if (id === projectId || !isReady) return;
+    await loadProject(id);
+    onOpened?.();
+  };
 
-     return (
-         <div className="app-content">
-             {/* Page Title Card */}
-             <div className="ew-card">
-                 <h2 className="ew-h2 nova-flat-turquoise" style={{ margin: 0 }}>Projects Management</h2>
-             </div>
+  return (
+    <div className="app-content">
+      <PageHeader icon={FolderOpen} title="Projects" meta={`${projectsList.length} saved`} />
 
-             {/* Create New Project Card */}
-             <div className="ew-card">
-                 <h3 className="ew-h3">Create New Project</h3>
-                 <form onSubmit={handleCreateProject} className="ew-inline" style={{ alignItems: 'stretch', gap: '8px' }}>
-                     <input
-                         type="text"
-                         value={newProjectName}
-                         onChange={(e) => setNewProjectName(e.target.value)}
-                         placeholder="New project name..."
-                         className="ew-input"
-                         style={{ flexGrow: 1 }}
-                         disabled={isSaving || !isReady} // Disable if not ready
-                         aria-label="New project name"
-                     />
-                     <button type="submit" className="ew-btn ew-btn--turq" disabled={!newProjectName.trim() || isSaving || !isReady}> {/* Disable if not ready */}
-                         {isSaving ? 'Creating...' : 'Create Project'}
-                     </button>
-                 </form>
-                  {!isReady && <p className="ew-subtle" style={{color: 'orange', marginTop: '8px'}}>Waiting for App ID configuration...</p>}
-             </div>
+      <form onSubmit={create} className="toolbar" style={{ paddingTop: 0 }}>
+        <input
+          className="ew-input"
+          style={{ width: 280 }}
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="New project name"
+          aria-label="New project name"
+          disabled={isSaving || !isReady}
+        />
+        <button type="submit" className="ew-btn ew-btn--primary" disabled={!newName.trim() || isSaving || !isReady}>
+          {isSaving ? 'Creating…' : 'Create project'}
+        </button>
+        <span style={{ flex: 1 }} />
+        <label className="fld" style={{ '--w': '200px' }}>
+          <Search size={13} />
+          <input className="ew-input" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter projects" aria-label="Filter projects" />
+        </label>
+        <button type="button" className="ew-btn" onClick={() => fetchProjectsList(appId)} disabled={isListLoading || !isReady}>
+          <RefreshCw size={12} className={isListLoading ? 'animate-spin' : ''} /> Refresh
+        </button>
+      </form>
 
-             {/* Existing Projects List Card */}
-             <div className="ew-card">
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                     <h3 className="ew-h3" style={{ margin: 0 }}>Existing Projects</h3>
-                     <button onClick={fetchProjectsList} className="ew-btn" style={{ padding: '4px 8px' }} disabled={isListLoading || !isReady}> {/* Disable if not ready */}
-                         {isListLoading ? 'Refreshing...' : 'Refresh'}
-                     </button>
-                 </div>
-                 {!isReady ? (
-                     <p className="ew-subtle">App configuration loading...</p>
-                 ) : isListLoading && projectsList.length === 0 ? (
-                     <p className="ew-subtle">Loading projects...</p>
-                 ) : projectsList.length === 0 ? (
-                     <p className="ew-subtle">No projects found. Create one above.</p>
-                 ) : (
-                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                         {projectsList.map((proj) => (
-                             <li key={proj.id} style={{ marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--border-color)' }}>
-                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-                                     {/* Project Info */}
-                                     <div style={{ flexGrow: 1, overflow: 'hidden' }}>
-                                         {/* Project Name (Clickable to Load) */}
-                                         <button
-                                            onClick={() => handleLoadProject(proj.id)}
-                                            style={{
-                                                background: 'none', border: 'none', padding: 0, margin: 0,
-                                                color: proj.id === projectId ? 'var(--text-primary)' : 'var(--text-accent)', // Highlight if loaded
-                                                textAlign: 'left', cursor: 'pointer',
-                                                fontWeight: proj.id === projectId ? 'bold' : 'normal',
-                                                fontSize: '1em',
-                                                fontFamily: 'inherit', textDecoration: 'underline',
-                                            }}
-                                            title={`Load project: ${proj.name}`}
-                                            disabled={!isReady} // Disable if not ready
-                                         >
-                                            {proj.name} {proj.id === projectId ? '(Loaded)' : ''}
-                                         </button>
-                                         {/* Last Updated Time */}
-                                         <div className="ew-subtle" style={{ fontSize: '11px', marginTop: '2px', whiteSpace: 'nowrap' }}>
-                                             Last updated: {proj.updatedAt ? proj.updatedAt.toLocaleString() : 'N/A'}
-                                         </div>
-                                     </div>
-                                     {/* Load Button */}
-                                     <button
-                                         onClick={() => handleLoadProject(proj.id)}
-                                         className="ew-btn"
-                                         disabled={proj.id === projectId || !isReady} // Disable if not ready
-                                         style={{ flexShrink: 0 }}
-                                     >
-                                         {proj.id === projectId ? 'Currently Loaded' : 'Load Project'}
-                                     </button>
-                                 </div>
-                             </li>
-                         ))}
-                     </ul>
-                 )}
-             </div>
-         </div>
-     );
- }
+      <div className="ew-card" style={{ padding: '0 6px' }}>
+        <div className="proj-row ew-head" style={{ borderBottom: '1px solid var(--border-strong)' }}>
+          <span>Project</span><span>Last saved</span><span />
+        </div>
+        {!isReady ? (
+          <div className="empty-state">Loading your account…</div>
+        ) : isListLoading && projectsList.length === 0 ? (
+          <div className="empty-state">Loading projects…</div>
+        ) : rows.length === 0 ? (
+          <div className="empty-state">{projectsList.length ? 'No project matches that filter.' : 'No projects yet. Create one above.'}</div>
+        ) : (
+          rows.map((p) => {
+            const current = p.id === projectId;
+            return (
+              <div key={p.id} className={`proj-row${current ? ' is-current' : ''}`}>
+                <button type="button" className="ew-link" style={{ textAlign: 'left', textDecoration: current ? 'none' : undefined, fontWeight: current ? 700 : 500 }} onClick={() => open(p.id)} disabled={current}>
+                  {p.name || 'Untitled'}
+                </button>
+                <span className="ew-subtle">{p.updatedAt ? p.updatedAt.toLocaleString() : '—'}</span>
+                {current ? <span className="ew-subtle" style={{ textAlign: 'right' }}>Open</span> : (
+                  <button type="button" className="ew-btn" onClick={() => open(p.id)}>Open</button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}

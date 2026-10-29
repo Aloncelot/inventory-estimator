@@ -1,6 +1,8 @@
 // src/components/MaterialListView.jsx
 'use client';
 
+import { Plus, Pencil, Package } from 'lucide-react';
+import { PageHeader } from '@/components/ui/mat';
 import { useState, useEffect, useMemo } from "react";
 import { 
   getFamilies, 
@@ -195,14 +197,14 @@ export default function MaterialListView() {
 
   return (
     <div className="app-content">
-      {/* Usamos la clase global para altura completa y alineación */}
+      <PageHeader icon={Package} title="Material list" meta="Families, sizes and vendor prices" />
       <div className="ew-card full-height-card">
         
         <div className="search-wrapper">
           <div className="search-cell">
             <input 
               type="text" 
-              placeholder="Search Families..." 
+              placeholder="Search families" 
               className="ew-input" 
               value={familySearch} 
               onChange={(e) => setFamilySearch(e.target.value)} 
@@ -211,7 +213,7 @@ export default function MaterialListView() {
           <div className="search-cell">
             <input 
               type="text" 
-              placeholder="Search Items..." 
+              placeholder="Search items" 
               className="ew-input" 
               value={itemSearch} 
               onChange={(e) => setItemSearch(e.target.value)} 
@@ -231,12 +233,11 @@ export default function MaterialListView() {
             loading={loadingFamilies}
             headerAction={
                 <button 
-                  className="ew-btn ew-btn--turq ew-icon-btn" 
-                  style={{ padding: '2px 2px', fontSize: '0.7rem' }}
+                  className="ew-icon-btn"
                   onClick={handleAddGlobalClick}
                   title="Create New Family and Item"
                 >
-                   <img src="/icons/plus-sign.png" width={12} height={12} alt="Add Item" />
+                   <Plus size={12} aria-hidden="true" />
                 </button>
             }
           />
@@ -251,12 +252,11 @@ export default function MaterialListView() {
             headerAction={
               selectedFamily && (
                 <button 
-                  className="ew-btn ew-btn--turq ew-icon-btn" 
-                  style={{ padding: '2px 2px', fontSize: '0.7rem' }}
+                  className="ew-icon-btn"
                   onClick={handleAddItemClick}
                   title="Create a new item in this family"
                 >
-                   <img src="/icons/plus-sign.png" width={12} height={12} alt="Add Item" />
+                   <Plus size={12} aria-hidden="true" />
                 </button>
               )
             }
@@ -268,11 +268,10 @@ export default function MaterialListView() {
               <span>Prices</span>
               {selectedItem && (
                 <button 
-                  className="ew-btn ew-btn--turq" 
-                  style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                  className="ew-btn"
                   onClick={handleAddPriceClick}
                 >
-                  + Add Price
+                  <Plus size={12} aria-hidden="true" /> Add price
                 </button>
               )}
             </div>
@@ -309,7 +308,7 @@ export default function MaterialListView() {
                             title="Edit Price"
                             onClick={() => handleEditClick(p)}
                           >
-                            <img src="/icons/edit.png" width={16} height={16} alt="Edit" />
+                            <Pencil size={13} aria-hidden="true" />
                           </button>
                         </td>
                       </tr>
