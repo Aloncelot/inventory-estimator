@@ -4,8 +4,9 @@
 // notes as Wall Panels. Quantities come from computeLooseSection.
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
-import { EyeOff, RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { EyeOff, RotateCcw, ScanLine, Plus } from 'lucide-react';
+import { tryEvaluate } from '@/domain/lib/calc';
 import ItemPicker from '@/components/ItemPicker';
 import EditableTitle from '@/components/ui/EditableTitle';
 import { LEVEL_NAME_SUGGESTIONS } from '@/domain/lib/levelNames';
@@ -21,7 +22,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 
 const LOOSE_ITEMS = [
-  'Angle', 'Beams', 'Blocking', 'Blocking at openings', 'Bolts', 'Bottom Plate - Loose', 'Bottom Plate - Panel',
+  'Extra', 'Angle', 'Beams', 'Blocking', 'Blocking at openings', 'Bolts', 'Bottom Plate - Loose', 'Bottom Plate - Panel',
   'Bottom Plate PT - Panel', 'Brace', 'Caulk', 'Clips', 'Coiled Strap', 'Collar tie', 'Column Cap', 'Concrete nails',
   'Cornice', 'Diagonal Bracing', 'Eave', 'Epoxy', 'Fascia', 'Flashing Tape', 'Foam sill sealer', 'Framing nails', 'Gable',
   'Glue', 'Hangers - Beams', 'Hangers - Joist', 'Hangers - Stringer', 'Header Infill', 'Headers', 'Holdown',
@@ -35,6 +36,46 @@ const LOOSE_ITEMS = [
 ].map((label) => ({ value: label, label }));
 
 export { sectionKind };
+
+/* An extra row: anything the plan cannot count. Its quantity is the result
+   of a calculation typed here (12*16+4, 3*(24+18)/8, 15%…) or a plain number. */
+function ExtraCalc({ value, onCommit }) {
+  const [text, setText] = useState(value || '');
+  useEffect(() => { setText(value || ''); }, [value]);
+  const t = text.trim();
+  const res = t ? tryEvaluate(t) : null;
+  const commit = () => { if (t !== (value || '')) onCommit(t); };
+  return (
+    <Fld label="Calculation" title="Type the quantity or the calculation for it: + − × ÷ ( ) and %">
+      <input
+        className={`ew-input extra-calc${res?.error ? ' is-bad' : ''}`}
+        value={text}
+        placeholder="e.g. 12*16+4"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setText(value || ''); }}
+        aria-label="Extra calculation"
+      />
+      {t ? <span className={`extra-res${res?.error ? ' is-bad' : ''}`}>{res?.error ? 'Check it' : `= ${Number(res.value).toLocaleString('en-US', { maximumFractionDigits: 4 })}`}</span> : null}
+    </Fld>
+  );
+}
+
+function ExtraLabel({ value, onCommit }) {
+  const [text, setText] = useState(value || '');
+  useEffect(() => { setText(value || ''); }, [value]);
+  return (
+    <input
+      className="ew-input extra-desc"
+      value={text}
+      placeholder="Extra — what is it?"
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => text !== (value || '') && onCommit(text)}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      aria-label="Extra description"
+    />
+  );
+}
 
 export default function LooseMaterialSection({ section, calc: calcProp, onUpdate, onRemove, onToggleHidden, dragHandleProps, foundationData }) {
   const { name, collapsed = false, inputs = {}, sel = {}, notes = {} } = section;
@@ -62,6 +103,7 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
     else if (ct === 'sheathing') Object.assign(row, { inputs: { lengthLF: 0, height: 4 }, wastePct: 15 });
     else if (['tape', 'joist', 'ijoist', 'beam', 'strapping'].includes(ct)) row.inputs = { lengthLF: 0 };
     else if (ct === 'subfloor') row.inputs = { area: 0 };
+    else if (ct === 'extra') Object.assign(row, { desc: '', inputs: { formula: '' }, wastePct: 0 });
     update((p) => ({ ...p, rows: [...(p.rows || []), row] }));
   }, [update]);
 
@@ -99,6 +141,7 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
         <Fld key="mult" label="Per location"><MultiplierSelect value={row.inputs?.multiplier} onChange={(v) => updateRow(row.id, { inputs: { ...(row.inputs || {}), multiplier: v } })} /></Fld>,
       ];
       case 'sheathing': return [rowInput(row, 'lengthLF', 'Length (LF)', 56), rowInput(row, 'height', 'Height (ft)', 44, 4)];
+      case 'extra': return [<ExtraCalc key="calc" value={row.inputs?.formula ?? (row.qty ? String(row.qty) : '')} onCommit={(v) => updateRow(row.id, { inputs: { ...(row.inputs || {}), formula: v } })} />];
       default: return null;
     }
   };
@@ -107,8 +150,26 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
   let toolbar = null;
   if (kind === 'foundation') {
     const fLF = Number(inputs.foundationLF) || 0;
-    toolbar = (
+    const hasPlan = inputs.planFoamLF != null;
+    const fromPlan = hasPlan && !inputs.foundationManual;
+    toolbar = fromPlan ? (
       <>
+        <Fld label="Walls on concrete (LF)" title={`Exterior, bearing and shear walls of ${inputs.planFrom} (Plan takeoff)`}>
+          <span className="strong plan-lf"><ScanLine size={12} /> {Number(inputs.planFoamLF).toLocaleString('en-US')}</span>
+        </Fld>
+        <label className="fld plan-src" title="Checked: foam sealer and sill plates (by wall size) come from Plan takeoff. Unchecked: type the LF here.">
+          <span>From plan</span>
+          <input type="checkbox" checked onChange={() => setInput('foundationManual', true)} />
+        </label>
+      </>
+    ) : (
+      <>
+        {hasPlan ? (
+          <label className="fld plan-src" title="Use the walls of the levels on concrete from Plan takeoff">
+            <span>From plan</span>
+            <input type="checkbox" checked={false} onChange={() => setInput('foundationManual', false)} />
+          </label>
+        ) : null}
         <Fld label="Foundation LF" w={64}>
           <NumInput value={inputs.foundationLF ?? 0} onCommit={(v) => update((p) => ({
             ...p, inputs: { ...(p.inputs || {}), foundationLF: v, ...(p.inputs?.sillPlateEdited ? {} : { sillPlateLF: v }) },
@@ -177,7 +238,7 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
               <Fld key="sp" label="Spacing (in)" w={44}><NumInput value={inputs.gableStudSpacing ?? 16} onCommit={(v) => setInput('gableStudSpacing', v)} /></Fld>,
               <Fld key="mu" label="Per location"><MultiplierSelect value={inputs.gableStudMultiplier} onChange={(v) => setInput('gableStudMultiplier', v)} /></Fld>,
             ] : null}
-            material={<ItemPicker value={sel[r.key]} onSelect={(v) => setSel(r.key, v)} defaults={LOOSE_SECTION_DEFAULTS[r.key]} />}
+            material={<ItemPicker value={sel[r.key]} onSelect={(v) => setSel(r.key, v)} defaults={r.defaults || LOOSE_SECTION_DEFAULTS[r.key]} />}
             qty={r.qtyRaw}
             waste={r.wastePct}
             onWasteCommit={(v) => setWaste(r.key, v)}
@@ -199,13 +260,16 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
               <SortableMatRow
                 key={r.id}
                 id={r.id}
-                label={r.type || 'Custom item'}
+                label={r.calcType === 'extra' ? <ExtraLabel value={r.desc} onCommit={(v) => updateRow(r.id, { desc: v })} /> : (r.type || 'Custom item')}
+                labelTitle={r.calcType === 'extra' ? `Extra: ${r.desc || 'no description'}` : undefined}
                 piece={r.piece}
                 inputs={manualInputs(r)}
                 material={<ItemPicker value={r.item} onSelect={(v) => updateRow(r.id, { item: v })} defaults={looseRowDefaults(r)} />}
-                qty={r.calcType === 'manual'
-                  ? <NumInput value={r.qty ?? 0} onCommit={(v) => updateRow(r.id, { qty: v })} aria-label="Quantity" />
-                  : r.qtyRaw}
+                qty={r.planHw
+                  ? <span className="strong plan-lf" title={`Counted from the walls in Plan takeoff: ${r.plan || ''}`}>{r.qty ?? 0}</span>
+                  : r.calcType === 'manual'
+                    ? <NumInput value={r.qty ?? 0} onCommit={(v) => updateRow(r.id, { qty: v })} aria-label="Quantity" />
+                    : r.qtyRaw}
                 waste={r.wastePct}
                 onWasteCommit={(v) => updateRow(r.id, { wastePct: v })}
                 final={r.qtyFinal}
@@ -230,6 +294,9 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
         ) : null}
 
         <div className="mat-foot">
+          <button type="button" className="ew-btn" onClick={() => addRow('Extra')} title="A line for anything the plan cannot count: describe it, pick the material, type its calculation, add notes, plan label and images">
+            <Plus size={13} /> Extra
+          </button>
           <div style={{ width: 240 }}>
             <SearchableSelect placeholder="Add item…" ariaLabel="Add item" options={LOOSE_ITEMS} value="" onChange={addRow} />
           </div>

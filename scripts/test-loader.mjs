@@ -8,8 +8,11 @@ register('data:text/javascript,' + encodeURIComponent(`
 import { existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 const isFile = (u) => { try { return statSync(fileURLToPath(u)).isFile(); } catch { return false; } };
+const SRC = ${JSON.stringify(new URL('../src/', import.meta.url).href)};
 export async function resolve(specifier, context, next) {
-  if ((specifier.startsWith('.') || specifier.startsWith('/')) && context.parentURL?.startsWith('file:')) {
+  // "@/…" is the app's alias for src/ (jsconfig.json)
+  if (specifier.startsWith('@/')) specifier = new URL(specifier.slice(2), SRC).href;
+  if ((specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('file:')) && context.parentURL?.startsWith('file:')) {
     const base = new URL(specifier, context.parentURL);
     if (!isFile(base)) {
       for (const ext of ['.js', '.mjs', '/index.js']) {

@@ -6,6 +6,7 @@ import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/AuthContext'; 
 import { getFinalItem } from '@/lib/catalog';
 import { migrateEstimate } from '@/domain/estimate/migrate';
+import { withPlanLoose } from '@/domain/plans/loose';
 import { slimEstimate, slimSelection } from '@/domain/lib/selection';
 
 const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
@@ -264,9 +265,13 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
                 // drop stored totals and slim prices; the saved copy is then
                 // "dirty" only if migration changed something worth saving
-                data.estimateData = migrateEstimate(est);
+                const migrated = migrateEstimate(est);
+                // bring the plan's loose material (floor, blocking, hardware,
+                // foam sealer and sill plates) up to date; if it changed, the
+                // project shows as unsaved so the new numbers get saved
+                data.estimateData = withPlanLoose(migrated);
                 setProjectData(data);
-                setSavedEstimate(data.estimateData);
+                setSavedEstimate(migrated);
                 setLastSavedAt(data.updatedAt?.toDate?.() || null);
             } else {
                 console.log('No such project document! Cannot load:', pId);

@@ -389,3 +389,15 @@ describe('defaults', () => {
     assert.ok(!isGroundLevelName('Level 2'));
   });
 });
+
+test('fireblocking row for tall walls without blocking (IRC R302.11)', async () => {
+  const { computeWallSection } = await import('./index.js');
+  const tall = computeWallSection({ lengthLF: 100, heightFt: 12, kind: 'partition', sel: {} }, 'interior');
+  const row = tall.baseRows.find((r) => r.key === 'fireBlocking');
+  assert.ok(row, 'a 12 ft partition gets fireblocking');
+  assert.equal(row.piece.lf, 100);
+  const ten = computeWallSection({ lengthLF: 100, heightFt: 10, kind: 'partition', sel: {} }, 'interior');
+  assert.ok(!ten.baseRows.some((r) => r.key === 'fireBlocking'));
+  const ext = computeWallSection({ lengthLF: 100, heightFt: 12, sel: {} }, 'exterior');
+  assert.ok(!ext.baseRows.some((r) => r.key === 'fireBlocking'), 'blocking rows already fireblock');
+});

@@ -27,6 +27,12 @@ function migrateSection(s) {
     if (out.sel?.headersInfill === undefined && infill.item) out.sel = { ...(out.sel || {}), headersInfill: infill.item };
     if (out.waste?.headersInfill === undefined && infill.wastePct !== undefined) out.waste = { ...(out.waste || {}), headersInfill: infill.wastePct };
   }
+  // openings briefly lived on the section; they now belong to the Header row that frames them
+  if (Array.isArray(out.openings) && out.openings.length) {
+    out.extras = [...(out.extras || []), { id: `x-open-${out.id || 'h'}`, type: 'Header', item: null, wastePct: 10, inputs: {}, openings: out.openings }];
+  }
+  delete out.openings;
+  delete out.openingSpec;
   return out;
 }
 

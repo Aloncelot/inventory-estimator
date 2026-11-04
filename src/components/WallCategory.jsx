@@ -8,6 +8,8 @@ import { useProject } from '@/context/ProjectContext';
 import WallGroup from '@/components/WallGroup';
 import { useConfirm } from '@/components/ui/confirm';
 import { AddRowButton, fmtMoney, SortableList, SortableBlock, reorderById } from '@/components/ui/mat';
+import { ArrowDownWideNarrow } from 'lucide-react';
+import { sortSections } from '@/domain/plans/sync';
 
 export default function WallCategory({ variant = 'exterior', sectionsData, calcs = [], groundLevel = false, onSectionsChange, title }) {
   const { blankSection } = useProject();
@@ -75,6 +77,11 @@ export default function WallCategory({ variant = 'exterior', sectionsData, calcs
           </SortableList>
           <div className="cat-foot">
             <AddRowButton onClick={addSection} title={`Add a ${variant} wall section`}>Add {variant} section</AddRowButton>
+            {sections.length > 1 ? (
+              <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onSectionsChange((prev) => sortSections(prev || [], variant === 'exterior' ? 'exterior' : 'interior'))} title="Exterior, bearing, shear, partition, knee; thickest studs first">
+                <ArrowDownWideNarrow size={13} /> Sort by type
+              </button>
+            ) : null}
           </div>
         </>
       )}

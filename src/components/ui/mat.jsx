@@ -333,7 +333,7 @@ export function ViewImageLink({ images = [], className = '' }) {
  */
 export const MatRow = memo(function MatRow({
   label, labelTitle, material, inputs, piece, tag, warn,
-  qty, waste, onWasteCommit, final, unit, unitPrice, subtotal, priceDate,
+  qty, waste, onWasteCommit, final, unit, unitPrice, subtotal, priceDate, below,
   note = emptyNote, onNoteChange,
   onRemove, extraActions, handleProps, rowRef, rowStyle, isDragging,
 }) {
@@ -394,6 +394,7 @@ export const MatRow = memo(function MatRow({
           {onRemove ? <RemoveIconButton onClick={onRemove} title="Remove row" /> : null}
         </div>
       </div>
+      {below || null}
       {!noteOpen && n.comment ? <div className="note-preview" title={n.comment}>{n.comment}</div> : null}
       {noteOpen && onNoteChange ? (
         <NoteEditor note={n} onChange={onNoteChange} onClose={() => setNoteOpen(false)} />

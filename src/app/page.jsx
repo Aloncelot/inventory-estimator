@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import { ProjectProvider, useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/AuthContext';
-import { Hammer, ClipboardList, Receipt, Download } from 'lucide-react';
+import { Hammer, ClipboardList, Download } from 'lucide-react';
 
 import Sidebar from '@/components/Sidebar';
 import LoginView from '@/components/LoginView';
@@ -16,13 +16,15 @@ import WallPanelsView from '@/components/WallPanelsView';
 import TrussesView from '@/components/TrussesView';
 import MaterialListView from '@/components/MaterialListView';
 import LooseMaterialView from '@/components/LooseMaterialView';
+import QuoteView from '@/components/QuoteView';
+import LayoutView from '@/components/LayoutView';
+import PlanTakeoffView from '@/components/PlanTakeoffView';
 import { PageHeader } from '@/components/ui/mat';
 import { ConfirmProvider } from '@/components/ui/confirm';
 
 const SOON = {
   labor: { title: 'Labor', icon: Hammer },
   takeoff: { title: 'Takeoff list', icon: ClipboardList },
-  quote: { title: 'Quote (QuickBooks)', icon: Receipt },
   export: { title: 'Export', icon: Download },
 };
 
@@ -61,6 +63,9 @@ function Shell({ ui, setUi }) {
       case 'project': return <ProjectView onOpened={() => setActive('summary')} />;
       case 'items': return <MaterialListView />;
       case 'summary': return <Summary />;
+      case 'quote': return <QuoteView />;
+      case 'layout': return <LayoutView />;
+      case 'plans': return <PlanTakeoffView />;
       default:
         if (SOON[active]) {
           return (

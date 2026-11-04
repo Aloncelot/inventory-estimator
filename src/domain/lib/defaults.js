@@ -8,20 +8,28 @@ const d = (family, size, vendor = GP) => ({ family, size, vendor });
 /** Ground-level walls sit on pressure-treated plates. */
 export const isGroundLevelName = (name = '') => /basement|cellar|ground|(\b|^)level\s*1(\b|$)|1st/i.test(String(name));
 
-export function wallRowDefaults(variant, key, { groundLevel = false } = {}) {
+export function wallRowDefaults(variant, key, { groundLevel = false, studSize = '2x6' } = {}) {
+  const sz = /^2x(4|6|8|10)$/.test(studSize || '') ? studSize : '2x6';
   switch (key) {
-    case 'bottomPlate': return d(groundLevel ? 'PT' : 'SPF#2', `2x6"-8'`);
+    case 'bottomPlate': return d(groundLevel ? 'PT' : 'SPF#2', `${sz}"-8'`);
     case 'topPlate':
-    case 'blocking': return d('SPF#2', `2x6"-8'`);
-    case 'studs': return d('SPF#2', `2x6"-10'`);
+    case 'blocking':
+    case 'fireBlocking': return d('SPF#2', `${sz}"-8'`);
+    case 'studs': return d('SPF#2', `${sz}"-10'`);
     case 'sheathing': return variant === 'exterior' ? d('Green Zip', `4x8'-7/16"`) : d('CDX SE', `4x8'-1/2"`);
     default: return null;
   }
 }
 
+/** Kings & jacks of the openings default to the wall's studs. */
+export function openingDefaults(key, { wide = true } = {}) {
+  return key === 'openStuds' ? d('SPF#2', wide ? `2x6"-10'` : `2x4"-10'`) : null;
+}
+
 export function wallExtraDefaults(type) {
   if (type === 'Headers infill' || type === 'Extra sheathing') return d('CDX SE', `4x8'-1/2"`);
-  if (['Header', 'Post', 'Studs', 'Extra blocking'].includes(type)) return d('SPF#2', `2x6"-10'`);
+  if (type === 'Header') return d('SPF#2', `2x10"-16'`);
+  if (['Post', 'Studs', 'Extra blocking'].includes(type)) return d('SPF#2', `2x6"-10'`);
   return null;
 }
 

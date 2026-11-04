@@ -42,7 +42,7 @@ export default function PanelsManufactureEstimate({ data, calc: calcProp, onChan
     }
   };
 
-  const lfKeys = ["exteriorWalls", "interiorShear", "interiorBlockingOnly", "interiorNonLoad", "kneeWall", "blocking2x10"];
+  const lfKeys = ["exteriorWalls", "interiorBlockingOnly", "interiorShear", "interiorNonLoad", "kneeWall", "blocking2x10"];
 
   return (
     <GroupBlock
@@ -74,7 +74,28 @@ export default function PanelsManufactureEstimate({ data, calc: calcProp, onChan
               <td style={{ fontWeight: 600 }}>{r.label}</td>
               <td className="num">
                 {r.isQtyBased ? (
-                  <NumInput w={72} value={manualInputByKey[r.key] ?? 0} onCommit={(v) => handleBlur('manualInputByKey', r.key, v)} />
+                  <span className="rate-cell">
+                    {r.typed && r.auto ? (
+                      <button
+                        type="button"
+                        className="row-action-btn"
+                        title={`Use the openings count (${r.auto})`}
+                        onClick={() => onChangeRef.current?.((p) => {
+                          const m = { ...(p.manualInputByKey || {}) };
+                          delete m[r.key];
+                          return { ...p, manualInputByKey: m };
+                        })}
+                      >
+                        <RotateCcw size={12} />
+                      </button>
+                    ) : null}
+                    <NumInput
+                      w={72}
+                      value={r.qty}
+                      title={r.typed ? 'Typed in' : 'From the openings in Wall panels'}
+                      onCommit={(v) => handleBlur('manualInputByKey', r.key, v)}
+                    />
+                  </span>
                 ) : Number(r.lf || 0).toLocaleString('en-US')}
               </td>
               <td className="num">

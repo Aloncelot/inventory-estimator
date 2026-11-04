@@ -8,15 +8,7 @@ import { PageHeader, NumInput, TextInput, fmtMoney } from '@/components/ui/mat';
 import { projectTotals } from '@/domain/aggregate/projectTotals';
 import { useConfirm } from '@/components/ui/confirm';
 
-const TAX_RATES = { MA: 6.25, RI: 7.0, CT: 6.35, ME: 5.5, NH: 0.0, 'NO TAX': 0.0 };
-
-const parseStateFromAddress = (address) => {
-  if (!address) return null;
-  const match = address.match(/\b([A-Z]{2})\b/g);
-  if (!match) return null;
-  const st = match[match.length - 1];
-  return TAX_RATES[st] !== undefined ? st : null;
-};
+import { TAX_RATES, parseStateFromAddress } from '@/domain/lib/tax';
 
 export default function Summary() {
   const { projectData, updateProject, refreshProjectPrices, isSaving } = useProject();

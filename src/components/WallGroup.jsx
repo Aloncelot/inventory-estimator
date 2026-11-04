@@ -6,6 +6,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
+import { ScanLine } from 'lucide-react';
 import ItemPicker from '@/components/ItemPicker';
 import EditableTitle from '@/components/ui/EditableTitle';
 import {
@@ -15,7 +16,8 @@ import {
 import { isLVL, isVersaColumn } from '@/domain/lib/families';
 import { getFamily } from '@/domain/lib/selection';
 import { computeWallSection } from '@/domain/estimate';
-import { wallRowDefaults, wallExtraDefaults } from '@/domain/lib/defaults';
+import { wallRowDefaults, wallExtraDefaults, openingDefaults } from '@/domain/lib/defaults';
+import OpeningsEditor from '@/components/OpeningsEditor';
 
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -94,9 +96,37 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
       </Fld>
     );
     // LVL (and PT / FRT LVL) is counted only by header LF; lumber headers also use header LF ÷ piece length
+    // with openings the header LF comes from them; without, it is typed (beams, special headers)
     if (ex.type === 'Header') {
+      const h = ex.header || {};
+      // plies set by the opening type (header schedule in Plan takeoff) are shown, not typed here
+      const plies = ex.planPlies
+        ? <Fld key="plies" label="Plies" title={`From ${ex.planType} in Plan takeoff (header schedule)`}><span className="strong plan-lf"><ScanLine size={12} /> {ex.planPlies}</span></Fld>
+        : n('plies', 'Plies', 36, h.plies || '');
+      if (h.fromOpenings) {
+        const f1 = (v) => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 1 });
+        return [
+          <Fld key="lf1" label="Header LF" title={ex.planType ? 'Length of the headers (one ply), from Plan takeoff' : 'Length of the headers (one ply), from the openings below'}>
+            <span className="strong">{f1(h.headerLenLF)}</span>
+          </Fld>,
+          plies,
+          <Fld key="lf" label="Total LF" title="Header LF × plies (default 3 plies in 2x6 walls, 2 in 2x4 walls)">
+            <span className="strong">{f1(h.headerLF)}</span>
+          </Fld>,
+        ];
+      }
       const legacyLF = isLVL(fam) && !ex.inputs?.headerLF ? Number(ex.inputs?.lvlPieces || 0) * Number(ex.inputs?.lvlLength || 0) : '';
       return [n('headerLF', 'Header LF', 64, legacyLF || '')];
+    }
+    if (ex.type === 'Post' && ex.planPost) {
+      // counts come from the posts placed in Plan takeoff
+      const lf = isLVL(fam) || isVersaColumn(fam);
+      return [
+        <Fld key="np" label="Posts" title={`${ex.planPost}: posts placed on the plan`}><span className="strong plan-lf"><ScanLine size={12} /> {ex.inputs?.numPosts || 0}</span></Fld>,
+        lf
+          ? n('heightFt', 'Height (ft)', 56, heightFt)
+          : <Fld key="pp" label="Pcs/post"><span className="strong">{ex.inputs?.piecesPerPost || 1}</span></Fld>,
+      ];
     }
     if (ex.type === 'Post') return (isLVL(fam) || isVersaColumn(fam))
       ? [n('pieces', 'Pieces'), n('heightFt', 'Height (ft)', 56, heightFt)]
@@ -111,7 +141,27 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
 
   const toolbar = (
     <>
-      <Fld label="Length (LF)" w={64}><NumInput value={lengthLF} onCommit={(v) => setField('lengthLF', v)} /></Fld>
+      {sectionData.planKey && !sectionData.planManual ? (
+        <Fld label="Length (LF)" w={64} title="Measured on the plan (Plan takeoff): edit the walls there">
+          <span className="strong plan-lf"><ScanLine size={12} /> {Number(lengthLF || 0).toLocaleString('en-US')}</span>
+        </Fld>
+      ) : (
+        <Fld label="Length (LF)" w={64} title={sectionData.planKey ? `Typed by hand; the plan measures ${Number(sectionData.planLF ?? 0).toLocaleString('en-US')} LF` : undefined}>
+          <NumInput value={lengthLF} onCommit={(v) => setField('lengthLF', v)} />
+        </Fld>
+      )}
+      {sectionData.planKey ? (
+        <label className="fld plan-src" title="Checked: the length comes from Plan takeoff. Unchecked: type it here (the plan length stays as a reference).">
+          <span>From plan</span>
+          <input
+            type="checkbox"
+            checked={!sectionData.planManual}
+            onChange={(e) => update((p) => (e.target.checked
+              ? { ...p, planManual: false, lengthLF: p.planLF ?? p.lengthLF }
+              : { ...p, planManual: true }))}
+          />
+        </label>
+      ) : null}
       <Fld label="Height (ft)" w={48}><NumInput value={heightFt} onCommit={(v) => setField('heightFt', v)} /></Fld>
       <Fld label="Spacing (in)" w={44}><NumInput value={studSpacingIn} onCommit={(v) => setField('studSpacingIn', v)} /></Fld>
       <Fld label="Studs/loc."><MultiplierSelect value={studMultiplier} onChange={(v) => setField('studMultiplier', v)} /></Fld>
@@ -124,7 +174,7 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
       ) : null}
       {variant === 'interior' ? (
         <Fld label="Kind">
-          <select className="ew-select" style={{ width: 88 }} value={kind} onChange={(e) => setField('kind', e.target.value)}>
+          <select className="ew-select" style={{ width: 88 }} value={kind} disabled={Boolean(sectionData.planKey)} title={sectionData.planKey ? 'Set by the plan walls (Plan takeoff)' : undefined} onChange={(e) => setField('kind', e.target.value)}>
             {KIND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </Fld>
@@ -152,7 +202,7 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
             label={row.label}
             piece={row.piece}
             tag={row.tag}
-            material={<ItemPicker value={sel[row.key]} onSelect={(i) => setSel(row.key, i)} defaults={wallRowDefaults(variant, row.key, { groundLevel })} />}
+            material={<ItemPicker value={sel[row.key]} onSelect={(i) => setSel(row.key, i)} defaults={wallRowDefaults(variant, row.key, { groundLevel, studSize: sectionData.planSize })} />}
             qty={row.qtyRaw}
             waste={row.wastePct}
             onWasteCommit={(v) => setWaste(row.key, v)}
@@ -189,6 +239,22 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
                 note={noteOf(notes, `extra:${ex.id}`)}
                 onNoteChange={(patch) => setNote(`extra:${ex.id}`, patch)}
                 onRemove={() => removeExtra(ex.id)}
+                warn={ex.warn}
+                below={ex.type === 'Header' && ex.planType ? (
+                  <div className="op-plan" title="Comes from the window & door types in Plan takeoff; change the type, its header or its openings there">
+                    <ScanLine size={12} />
+                    {ex.planType} · {(ex.openings || []).map((o) => `${o.qty} ${o.type === 'door' ? 'door' : 'window'}${o.qty > 1 ? 's' : ''} ${o.widthIn}" × ${o.heightIn}"`).join(', ')}
+                    {ex.header?.perOpening?.[0] ? ` · header ${Math.round(ex.header.perOpening[0].headerIn * 100) / 100}"` : ''}
+                    {ex.openings?.[0] ? ` · kings ${ex.openings[0].kings} · jacks ${ex.openings[0].jacks} each side` : ''}
+                    {ex.planNote ? <strong className="op-plan__note"> · per plans: {ex.planNote}</strong> : null}
+                  </div>
+                ) : ex.type === 'Header' && variant === 'exterior' ? (
+                  <OpeningsEditor
+                    openings={ex.openings || []}
+                    perOpening={ex.header?.perOpening}
+                    onChange={(fn) => updateExtra(ex.id, { openings: fn(ex.openings || []) })}
+                  />
+                ) : null}
               />
             ))}
           </SortableContext>
@@ -209,6 +275,30 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
             note={noteOf(notes, 'extra:headersInfill')}
             onNoteChange={(patch) => setNote('extra:headersInfill', patch)}
           />
+        ) : null}
+
+        {calc.openingRows.length ? (
+          <>
+            <MatSub>Openings · {calc.openings.windows} window{calc.openings.windows === 1 ? '' : 's'}, {calc.openings.doors} door{calc.openings.doors === 1 ? '' : 's'}</MatSub>
+            {calc.openingRows.map((r) => (
+              <MatRow
+                key={r.key}
+                label={r.label}
+                labelTitle={`${r.label} — ${r.hint}`}
+                material={<ItemPicker value={sel[r.key]} onSelect={(i) => setSel(r.key, i)} defaults={openingDefaults(r.key, { wide: calc.depthIn >= 5.5 })} />}
+                qty={r.qtyRaw}
+                waste={r.wastePct}
+                onWasteCommit={(v) => setWaste(r.key, v)}
+                final={r.qtyFinal}
+                unit={r.unit}
+                unitPrice={r.unitPrice}
+                priceDate={r.priceDate}
+                subtotal={r.subtotal}
+                note={noteOf(notes, `open:${r.key}`)}
+                onNoteChange={(patch) => setNote(`open:${r.key}`, patch)}
+              />
+            ))}
+          </>
         ) : null}
 
         <div className="mat-foot">

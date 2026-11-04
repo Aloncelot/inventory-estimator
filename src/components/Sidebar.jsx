@@ -11,7 +11,7 @@ import { useAuth } from '@/AuthContext';
 import { useProject } from '@/context/ProjectContext';
 import {
   LogOut, FolderOpen, LayoutDashboard, PanelsTopLeft, Layers, HardHat, ClipboardList, Receipt,
-  Package, Download, Save, Sun, Moon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator,
+  Package, Download, Save, Sun, Moon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine,
 } from 'lucide-react';
 
 const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
@@ -28,14 +28,16 @@ const TrussIcon = ({ size = 18, ...props }) => (
 const NAV = [
   { key: 'project', label: 'Projects', Icon: FolderOpen },
   { key: 'summary', label: 'Summary', Icon: LayoutDashboard, needsProject: true },
+  { key: 'plans', label: 'Plan takeoff', Icon: ScanLine, needsProject: true },
   { key: 'wallpanels', label: 'Wall panels', Icon: PanelsTopLeft, needsProject: true },
   { key: 'loose', label: 'Loose material', Icon: Layers, needsProject: true },
   { key: 'trusses', label: 'Trusses', Icon: TrussIcon, needsProject: true },
+  { key: 'layout', label: 'Layout check', Icon: Ruler, needsProject: true },
   { key: 'items', label: 'Material list', Icon: Package },
   { sep: true },
   { key: 'labor', label: 'Labor', Icon: HardHat, soon: true },
   { key: 'takeoff', label: 'Takeoff list', Icon: ClipboardList, soon: true },
-  { key: 'quote', label: 'Quote', Icon: Receipt, soon: true },
+  { key: 'quote', label: 'Quote', Icon: Receipt, needsProject: true },
   { key: 'export', label: 'Export', Icon: Download, soon: true },
 ];
 
@@ -52,7 +54,9 @@ function Label({ show, children, className = 'menu-label' }) {
           className={className}
           initial={{ opacity: 0, x: -8 }}
           animate={{ opacity: 1, x: 0, transition: { ...SOFT_SPRING, delay: 0.04 } }}
-          exit={{ opacity: 0, x: -8, transition: { duration: 0.08 } }}
+          exit={{ opacity: 0, transition: { duration: 0.08 } }}
+          // leaving labels take no room, so the icons beside them never shift
+          style={{ minWidth: 0 }}
         >
           {children}
         </motion.span>

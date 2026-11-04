@@ -14,9 +14,11 @@ import {
   calcRidge, calcRake, calcHurricaneTies, calcRoofSheathing, calcClips, calcTrimScrews,
 } from '../calculators';
 import { parseBoardLengthFt, unitPriceFrom } from '../lib/parsing';
+import { tryEvaluate } from '../lib/calc';
 import { isLVL, isVersaColumn, isInfillFamily } from '../lib/families';
 import { getItem, getUnit, getSize, getFamily, isPTFamily, priceDateOf } from '../lib/selection';
 import { IRC, BLOCK_NAILS, nailsPerSheet, alongRun, nailsPerDoubledStud, perBoxFromSize, rollLengthFromSize } from '../lib/fastening';
+import { headerOpenings, defaultPlies, studDepthIn } from './openings';
 
 const n = (v) => Number(v) || 0;
 const round2 = (v) => Number((Number(v) || 0).toFixed(2));
@@ -60,17 +62,40 @@ export function computeWallSection(section = {}, variant = 'exterior') {
   ];
   if (showBlocking) base.push({ key: 'blocking', label: 'Blocking', wastePct: waste.blocking ?? 10, piece: piece(sel.blocking, n(lengthLF) * blockingRows),
     ...calcBlocking({ lengthLF, heightFt, boardLenFt: blockFt, wastePct: waste.blocking ?? 10, item: getItem(sel.blocking), unit: getUnit(sel.blocking) }) });
+  // fireblocking (IRC R302.11): concealed stud spaces need it horizontally at intervals
+  // not over 10 ft. Blocking rows (every 4 ft) already do it; walls without blocking
+  // that are taller than 10 ft get a solid 2x row at each 10 ft.
+  const fireRows = !showBlocking && n(heightFt) > 10 ? Math.ceil(n(heightFt) / 10) - 1 : 0;
+  if (fireRows > 0) {
+    const fireFt = pieceLength(sel.fireBlocking);
+    base.push({ key: 'fireBlocking', label: 'Fireblocking', wastePct: waste.fireBlocking ?? 10, piece: piece(sel.fireBlocking, n(lengthLF) * fireRows),
+      tag: { text: `${fireRows}×`, title: `IRC R302.11: ${heightFt}' wall without blocking rows — ${fireRows} fireblock row${fireRows > 1 ? 's' : ''} (2x lumber) so no concealed space is taller than 10'` },
+      ...calcPlates({ lengthLF: n(lengthLF) * fireRows, boardLenFt: fireFt, wastePct: waste.fireBlocking ?? 10, item: getItem(sel.fireBlocking), unit: getUnit(sel.fireBlocking) }) });
+  }
   if (showSheathing) base.push({ key: 'sheathing', label: variant === 'exterior' ? 'Sheathing' : 'Sheathing (4×8)', wastePct: waste.sheathing ?? 20,
     tag: { text: `${edgeIn}/${fieldIn}`, title: `Nailing: edges ${edgeIn}" o.c., field ${fieldIn}" o.c. → ${perSheet} nails per sheet` },
     ...calcSheathing({ lengthLF, heightFt, wastePct: waste.sheathing ?? 20, item: getItem(sel.sheathing), unit: getUnit(sel.sheathing, 'sheet') }) });
   const baseRows = base.map((r) => withPrice(r, sel[r.key]));
 
-  // headers infill is automatic: it appears while any infill-family header has LF
+  // Header rows: their openings (windows / doors) set the header LF, kings and jacks
+  // stud depth: the studs picked, else the plan's wall size (sets the default header plies)
+  const depthIn = studDepthIn(getSize(sel.studs) || getSize(sel.bottomPlate) || section.planSize);
   const stored = (extras || []).filter((r) => r.type !== 'Headers infill');
   const legacyInfill = (extras || []).find((r) => r.type === 'Headers infill');
+  const headerInfo = {};
+  for (const r of stored) {
+    if (r.type !== 'Header') continue;
+    const fam = getFamily(r.item);
+    const lvl = isLVL(fam);
+    const plies = n(r.inputs?.plies) || defaultPlies(depthIn);
+    const o = headerOpenings(r.openings, { plies, lvl, boardLenIn: (parseBoardLengthFt(getSize(r.item)) || 0) * 12 });
+    const typedLF = n(r.inputs?.headerLF) || (lvl ? n(r.inputs?.lvlPieces) * n(r.inputs?.lvlLength) : 0);
+    headerInfo[r.id] = { ...o, lvl, fromOpenings: o.count > 0, effectiveLF: o.count > 0 ? o.headerLF : typedLF };
+  }
+  // headers infill is automatic: it appears while any infill-family header has LF
   const headerLFPool = stored
     .filter((r) => r.type === 'Header' && isInfillFamily(getFamily(r.item)))
-    .reduce((s, r) => s + n(r?.inputs?.headerLF), 0);
+    .reduce((s, r) => s + n(headerInfo[r.id]?.effectiveLF), 0);
 
   const computeExtra = (r) => {
     const fam = getFamily(r.item);
@@ -80,8 +105,20 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     let res = { qtyRaw: 0, qtyFinal: 0, unit: getUnit(r.item), unitPrice: unitPriceFrom(it), subtotal: 0 };
     let pc;
     if (r.type === 'Header') {
-      // LVL (incl. PT / FRT) is bought by header LF; lumber headers are LF ÷ piece length
-      res = calcHeader({ isLVL: isLVL(fam), headerLF: n(r.inputs?.headerLF), lvlPieces: n(r.inputs?.lvlPieces), lvlLength: n(r.inputs?.lvlLength), boardLenFt, wastePct: w, item: it });
+      const h = headerInfo[r.id];
+      if (h.fromOpenings && !h.lvl) {
+        // lumber headers from openings: every ply cut from the picked piece length
+        const qtyFinal = Math.ceil(h.pieces * (1 + n(w) / 100));
+        const unitPrice = unitPriceFrom(it);
+        res = { qtyRaw: h.pieces, qtyFinal, unit: getUnit(r.item), unitPrice, subtotal: qtyFinal * unitPrice };
+      } else {
+        // LVL (incl. PT / FRT) is bought by header LF; typed lumber headers are LF ÷ piece length
+        res = calcHeader({ isLVL: h.lvl, headerLF: h.effectiveLF, lvlPieces: 0, lvlLength: 0, boardLenFt, wastePct: w, item: it });
+      }
+      return {
+        ...r, ...res, wastePct: w, priceDate: priceDateOf(r.item), header: h,
+        warn: h.tooLong ? `${h.tooLong} header plies are longer than the picked piece: choose a longer size` : undefined,
+      };
     } else if (r.type === 'Post') {
       res = calcPost({ isLinearLF: isLVL(fam) || isVersaColumn(fam), pieces: n(r.inputs?.pieces), heightFt: n(r.inputs?.heightFt ?? heightFt), piecesPerPost: n(r.inputs?.piecesPerPost), numPosts: n(r.inputs?.numPosts), wastePct: w, item: it });
     } else if (r.type === 'Studs') {
@@ -107,7 +144,23 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     };
   }
 
-  const subtotal = round2(sum(baseRows) + sum(extraRows) + n(infill?.subtotal));
+  // kings & jacks of every opening, cut from stud stock
+  const ot = Object.values(headerInfo).reduce((acc, h) => ({
+    kings: acc.kings + h.kings, jacks: acc.jacks + h.jacks, kingsJacks: acc.kingsJacks + h.kingsJacks,
+    windows: acc.windows + h.windows, doors: acc.doors + h.doors, headerLenLF: acc.headerLenLF + h.headerLenLF,
+  }), { kings: 0, jacks: 0, kingsJacks: 0, windows: 0, doors: 0, headerLenLF: 0 });
+  const openingRows = [];
+  if (ot.kingsJacks) {
+    const wastePct = n(waste.openStuds ?? 10);
+    const qtyFinal = Math.ceil(ot.kingsJacks * (1 + wastePct / 100));
+    const unitPrice = unitPriceFrom(getItem(sel.openStuds));
+    openingRows.push(withPrice({
+      key: 'openStuds', label: 'Kings & jacks', hint: `${ot.kings} kings + ${ot.jacks} jacks at ${ot.windows + ot.doors} openings`,
+      qtyRaw: ot.kingsJacks, wastePct, qtyFinal, unit: getUnit(sel.openStuds), unitPrice, subtotal: qtyFinal * (unitPrice || 0),
+    }, sel.openStuds));
+  }
+
+  const subtotal = round2(sum(baseRows) + sum(extraRows) + n(infill?.subtotal) + sum(openingRows));
 
   // numbers the level, nails & manufacture need
   const row = Object.fromEntries(baseRows.map((r) => [r.key, r]));
@@ -130,10 +183,12 @@ export function computeWallSection(section = {}, variant = 'exterior') {
       doubled += (n(r.qtyRaw) / m) * (m - 1) * nailsPerDoubledStud(heightFt);
     } else if (r.type === 'Extra blocking') {
       blocks += Math.max(1, n(r.inputs?.rows) || 1) * blocksPerRow;
-    } else if (r.type === 'Header') {
+    } else if (r.type === 'Header' && !headerInfo[r.id]?.fromOpenings) {
       headerLF += n(r.inputs?.headerLF) || n(r.inputs?.lvlPieces) * n(r.inputs?.lvlLength);
     }
   }
+  plateStud += ot.kingsJacks * 2 * IRC.plateToStud;
+  headerLF += ot.headerLenLF;   // header length of the openings (one ply)
   const braced = variant === 'exterior' || kind === 'shear';
   const nailing = {
     edgeIn, fieldIn, perSheet, braced,
@@ -161,9 +216,11 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     bottomPlatePiecesPanel: bottomQty,
     panelPtBoards: isPTFamily(getFamily(sel.bottomPlate)) ? bottomQty : 0,
     ptLF: n(lengthLF),
+    windows: ot.windows,
+    doors: ot.doors,
   };
 
-  return { variant, kind, baseRows, extraRows, infill, headerLFPool, subtotal, stats, nailing };
+  return { variant, kind, baseRows, extraRows, infill, openingRows, openings: ot, depthIn, headerLFPool, subtotal, stats, nailing };
 }
 
 /* ───────────────────────── Panel nails (per level) ─────────────────────────
@@ -495,7 +552,7 @@ export function sectionAddonPerLF(stats = {}) {
   return extraStuds * STUD_MULTIPLIER_ADDON_PER_LF + tall;
 }
 
-export function computeManufacture(data = {}, lf = {}, addons = {}, rates = MANUFACTURE_RATES) {
+export function computeManufacture(data = {}, lf = {}, addons = {}, rates = MANUFACTURE_RATES, counts = {}) {
   const rateByKey = data.rateByKey || {};
   const panelLenByKey = data.panelLenByKey || {};
   const manual = data.manualInputByKey || {};
@@ -510,13 +567,17 @@ export function computeManufacture(data = {}, lf = {}, addons = {}, rates = MANU
     lines.push({ label, key, lf: qty, panelLenFt: len, panels: Math.ceil((qty / Math.max(1, len)) * 1.1), baseRate, addonPerLF, ratePerLF, ratePerPanel: len * ratePerLF, total: qty * ratePerLF, isQtyBased: false });
   };
   const pushQty = (label, key, cfg) => {
-    const qty = n(manual[key]);
+    // window / door counts come from the openings unless typed in
+    const auto = counts[key];
+    const typed = manual[key] !== undefined && manual[key] !== null && manual[key] !== '';
+    const qty = typed ? n(manual[key]) : n(auto);
     const rate = n(rateByKey[key] ?? cfg?.each ?? 0);
-    lines.push({ label, key, qty, lf: 0, panelLenFt: null, panels: null, baseRate: rate, addonPerLF: 0, ratePerLF: rate, ratePerPanel: null, total: qty * rate, isQtyBased: true });
+    lines.push({ label, key, qty, auto: auto ?? null, typed, lf: 0, panelLenFt: null, panels: null, baseRate: rate, addonPerLF: 0, ratePerLF: rate, ratePerPanel: null, total: qty * rate, isQtyBased: true });
   };
   pushLF('Exterior walls', 'exteriorWalls', rates.exteriorWalls);
+  // same order as the walls everywhere: exterior, bearing, shear, partition, knee
+  pushLF('Interior bearing walls (blocking)', 'interiorBlockingOnly', rates.interiorBlocking);
   pushLF('Interior shear walls', 'interiorShear', rates.interiorShear);
-  pushLF('Interior walls (blocking only)', 'interiorBlockingOnly', rates.interiorBlocking);
   pushLF('Interior non-load bearing', 'interiorNonLoad', rates.interiorNonLoad);
   pushLF('Knee walls', 'kneeWall', rates.kneeWall);
   pushQty('Windows', 'windows', rates.windows);
@@ -529,7 +590,7 @@ export function computeManufacture(data = {}, lf = {}, addons = {}, rates = MANU
 /* ───────────────────────── Wall panels page ───────────────────────── */
 
 /** Wall types whose LF becomes panels (2×10 blocking rows are not panels). */
-const PANEL_KEYS = ['exteriorWalls', 'interiorShear', 'interiorBlockingOnly', 'interiorNonLoad', 'kneeWall'];
+const PANEL_KEYS = ['exteriorWalls', 'interiorBlockingOnly', 'interiorShear', 'interiorNonLoad', 'kneeWall'];
 
 export function computeWallPanels(est = {}) {
   const panelLenFt = n(est.manufactureEstimate?.panelLenByKey?.exteriorWalls) || 8;
@@ -566,7 +627,9 @@ export function computeWallPanels(est = {}) {
     t.sheetsBandAll += L.loose.stats.sheetsBand;
     t.sheetsExtraAll += L.loose.stats.sheetsExtra;
   }
-  const manufacture = computeManufacture(est.manufactureEstimate, lf, addons);
+  const counts = { windows: 0, exteriorDoors: 0 };
+  for (const L of levels) for (const s of [...L.exterior, ...L.interior]) { counts.windows += n(s.stats.windows); counts.exteriorDoors += L.exterior.includes(s) ? n(s.stats.doors) : 0; }
+  const manufacture = computeManufacture(est.manufactureEstimate, lf, addons, MANUFACTURE_RATES, counts);
   const panelCount = manufacture.lines.filter((x) => PANEL_KEYS.includes(x.key)).reduce((acc, x) => acc + n(x.panels), 0);
   const roof = (est.looseList || []).find((x) => x && sectionKind(x) === 'roof');
   const bracing = computeBracing(est.bracing, { panels: panelCount, roofAreaSqFt: n(roof?.inputs?.roofArea) });
@@ -588,6 +651,7 @@ export function sectionKind(section) {
 
 export function rowCalcType(type = '') {
   const t = String(type).toLowerCase();
+  if (t === 'extra') return 'extra';
   if (t.startsWith('hanger')) return 'manual';
   if (t.includes('rimboard')) return 'rimboard';
   if (t === 'joist' || t === 'joists') return 'joist';
@@ -613,11 +677,21 @@ export function computeLooseSection(section = {}, foundation = null) {
 
   let calcRows = [];
   if (kind === 'foundation') {
-    const fLF = n(inputs.foundationLF);
+    // from the plan: exterior, bearing and shear walls of the levels on concrete,
+    // one PT sill plate row per wall size; otherwise the LF typed here
+    const fromPlan = inputs.planFoamLF != null && !inputs.foundationManual;
+    const fLF = fromPlan ? n(inputs.planFoamLF) : n(inputs.foundationLF);
     const sLF = n(inputs.sillPlateEdited ? inputs.sillPlateLF : (inputs.sillPlateLF ?? fLF));
+    const sizes = fromPlan ? Object.entries(inputs.planSillBySize || {}).filter(([, v]) => n(v) > 0)
+      .sort((a, b) => (Number(b[0].split('x')[1]) || 0) - (Number(a[0].split('x')[1]) || 0)) : [];
+    const sillRow = (key, label, lf, size) => mk(key, label, calcSillPlate({ lengthLF: lf, boardLenFt: pieceLength(sel[key]), wastePct: w(key), item: getItem(sel[key]) }), 5, {
+      piece: piece(sel[key], lf), defaults: { family: 'PT', size: `${size || '2x6'}"-16'`, vendor: 'Gillies & Prittie Warehouse' },
+    });
     calcRows = [
-      mk('foamSeal', 'Foam sill sealer', calcFoamSeal({ lengthLF: fLF, wastePct: w('foamSeal'), item: getItem(sel.foamSeal) })),
-      mk('sillPlate', 'Sill plate', calcSillPlate({ lengthLF: sLF, boardLenFt: pieceLength(sel.sillPlate), wastePct: w('sillPlate'), item: getItem(sel.sillPlate) }), 5, { piece: piece(sel.sillPlate, sLF) }),
+      mk('foamSeal', 'Foam sill sealer', calcFoamSeal({ lengthLF: fLF, wastePct: w('foamSeal'), item: getItem(sel.foamSeal) }), 5, fromPlan ? { hint: `${fLF} LF of walls on concrete (${inputs.planFrom})` } : {}),
+      ...(sizes.length
+        ? sizes.map(([size, lf], i) => sillRow(i === 0 && size === '2x6' ? 'sillPlate' : `sillPlate_${size}`, `Sill plate ${size}`, n(lf), size))
+        : [sillRow('sillPlate', 'Sill plate', sLF, '2x6')]),
     ];
   } else if (kind === 'basement') {
     let sillQty = 0;
@@ -654,8 +728,9 @@ export function computeLooseSection(section = {}, foundation = null) {
   }
 
   const rows = section.rows || [];
-  const sub = rows.find((r) => rowCalcType(r.type) === 'subfloor');
-  const subfloorSheets = sub ? Math.ceil((n(sub.inputs?.area) / 32) * (1 + n(sub.wastePct) / 100)) : 0;
+  // glue for every subfloor row of the section (field and FRT band)
+  const subfloorSheets = rows.filter((r) => rowCalcType(r.type) === 'subfloor')
+    .reduce((s, r) => s + Math.ceil((n(r.inputs?.area) / 32) * (1 + n(r.wastePct) / 100)), 0);
   const manualRows = rows.map((row) => {
     const item = getItem(row.item);
     const wp = n(row.wastePct);
@@ -676,7 +751,9 @@ export function computeLooseSection(section = {}, foundation = null) {
       case 'sheathing': res = calcSheathing({ lengthLF: lf, heightFt: n(row.inputs?.height) || 4, wastePct: wp, item }); break;
       case 'tape': res = calcTape({ seamLF: lf, rollLenFt: 75, wastePct: wp, item }); break;
       default: {
-        const qtyRaw = n(row.qty);
+        // an extra: the quantity is the result of its calculation (e.g. 12*16+4), or the number typed
+        const f = ct === 'extra' && String(row.inputs?.formula ?? '').trim();
+        const qtyRaw = f ? Math.max(0, n(tryEvaluate(f).value)) : n(row.qty);
         const qtyFinal = Math.ceil(qtyRaw * (1 + wp / 100));
         const unitPrice = unitPriceFrom(item);
         res = { qtyRaw, qtyFinal, unit: getUnit(row.item), unitPrice, subtotal: qtyFinal * unitPrice };
