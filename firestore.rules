@@ -1,18 +1,128 @@
 rules_version = '2';
+// Companies and roles. Everyone in a company can read its data; the roles
+// decide who changes what:
+//   admin     — the company document, members and invitations
+//   estimator — projects (with their history), templates, note images, the company's price list
+//   warehouse — the inventory (stock and movements), when the company keeps one
+// Every project save records who made it (updatedBy) and must be that user.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isOwner() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email.lower() in [
-          'aloncelot@gmail.com',
-          'arch.alonso.correa@gmail.com'
-        ];
+
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    // may create a company (everyone else joins by invitation);
+    // keep in sync with src/lib/allowedUsers.js
+    function canFound() { return signedIn() && myEmail() in ['aloncelot@gmail.com', 'arch.alonso.correa@gmail.com']; }
+
+    function memberPath(cid) { return /databases/$(database)/documents/companies/$(cid)/members/$(request.auth.uid); }
+    function isMember(cid) { return signedIn() && exists(memberPath(cid)); }
+    function hasRole(cid, role) { return isMember(cid) && role in get(memberPath(cid)).data.roles; }
+    function isAdmin(cid) { return hasRole(cid, 'admin'); }
+    function myCompany() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId; }
+    function knownRoles(r) { return r is list && r.size() <= 3 && r.hasOnly(['admin', 'estimator', 'warehouse']); }
+    function invitePath(cid) { return /databases/$(database)/documents/companies/$(cid)/invites/$(myEmail()); }
+    function stampedByMe() { return request.resource.data.updatedBy.uid == request.auth.uid; }
+    function inventoryOn(cid) { return get(/databases/$(database)/documents/companies/$(cid)).data.inventoryEnabled == true; }
+    function canStock(cid) { return hasRole(cid, 'warehouse') && inventoryOn(cid); }
+
+    /* where each user belongs */
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && (request.resource.data.companyId == null
+            || existsAfter(/databases/$(database)/documents/companies/$(request.resource.data.companyId)/members/$(uid)));
+      allow delete: if false;
     }
 
-    // Personal app: only the allowed accounts can read/write anything.
-    match /{document=**} {
-      allow read, write: if isOwner();
+    /* a user finds the invitations sent to their email */
+    match /{path=**}/invites/{email} {
+      allow read: if signedIn() && resource.data.email == myEmail();
+    }
+
+    match /companies/{cid} {
+      allow read: if isMember(cid);
+      allow create: if canFound()
+        && request.resource.data.createdBy == request.auth.uid
+        && existsAfter(memberPath(cid));
+      allow update: if isAdmin(cid) && request.resource.data.createdBy == resource.data.createdBy;
+      allow delete: if false;
+
+      match /members/{uid} {
+        allow read: if isMember(cid);
+        allow create: if signedIn() && request.auth.uid == uid && knownRoles(request.resource.data.roles) && (
+            // the founder, in the same write that creates the company
+            (!exists(/databases/$(database)/documents/companies/$(cid))
+              && getAfter(/databases/$(database)/documents/companies/$(cid)).data.createdBy == uid)
+            // or accepting an invitation, with exactly its roles
+            || (exists(invitePath(cid)) && get(invitePath(cid)).data.roles == request.resource.data.roles));
+        allow update: if isAdmin(cid) && knownRoles(request.resource.data.roles)
+          && request.resource.data.uid == resource.data.uid;
+        allow delete: if isAdmin(cid) || (signedIn() && request.auth.uid == uid);
+      }
+
+      match /invites/{email} {
+        allow read: if isAdmin(cid) || (signedIn() && email == myEmail());
+        allow create, update: if isAdmin(cid) && request.resource.data.email == email
+          && request.resource.data.companyId == cid && knownRoles(request.resource.data.roles);
+        allow delete: if isAdmin(cid) || (signedIn() && email == myEmail());
+      }
+
+      match /projects/{pid} {
+        allow read: if isMember(cid);
+        allow create, update: if hasRole(cid, 'estimator') && stampedByMe();
+        allow delete: if hasRole(cid, 'estimator');
+
+        // history entries: written by whoever saved, never rewritten by anyone else
+        match /history/{hid} {
+          allow read: if isMember(cid);
+          allow create: if hasRole(cid, 'estimator') && request.resource.data.by.uid == request.auth.uid;
+          allow update: if hasRole(cid, 'estimator') && resource.data.by.uid == request.auth.uid
+            && request.resource.data.by.uid == request.auth.uid;
+          allow delete: if false;
+        }
+      }
+
+      // inventory: counts change only together with a movement; movements are never edited
+      match /stock/{itemKey} {
+        allow read: if isMember(cid);
+        allow create, update: if canStock(cid) && stampedByMe();
+        allow delete: if isAdmin(cid) && resource.data.sample == true;
+      }
+      match /movements/{mid} {
+        allow read: if isMember(cid);
+        allow create: if canStock(cid) && request.resource.data.by.uid == request.auth.uid
+          && (!('priceReview' in request.resource.data) || request.resource.data.priceReview == 'open');
+        // only the price review of a receipt changes, decided by an Estimator or Admin
+        allow update: if (hasRole(cid, 'estimator') || isAdmin(cid))
+          && resource.data.priceReview == 'open'
+          && request.resource.data.priceReview in ['accepted', 'ignored']
+          && request.resource.data.reviewedBy.uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['priceReview', 'reviewedBy', 'reviewedAt']);
+        allow delete: if isAdmin(cid) && resource.data.sample == true;
+      }
+
+      // the company's own price list (materials, sizes, suppliers, prices)
+      match /families/{path=**} { allow read: if isMember(cid); allow write: if hasRole(cid, 'estimator') || isAdmin(cid); }
+      match /priceLists/{path=**} { allow read: if isMember(cid); allow write: if hasRole(cid, 'estimator') || isAdmin(cid); }
+      match /itemVendorLookup/{path=**} { allow read: if isMember(cid); allow write: if hasRole(cid, 'estimator') || isAdmin(cid); }
+
+      match /{coll}/{docId} {
+        allow read: if isMember(cid) && coll in ['laborTemplates', 'headerSchedules', 'noteImages'];
+        allow write: if hasRole(cid, 'estimator') && coll in ['laborTemplates', 'headerSchedules', 'noteImages'];
+      }
+    }
+
+    /* the starter price list: companies copy it into their own; changed only
+       with the admin import script (scripts/import-prices.js) */
+    function inAnyCompany() { return signedIn() && isMember(myCompany()); }
+    match /families/{id=**} { allow read: if inAnyCompany(); allow write: if false; }
+    match /priceLists/{id=**} { allow read: if inAnyCompany(); allow write: if false; }
+    match /itemVendorLookup/{id=**} { allow read: if inAnyCompany(); allow write: if false; }
+
+    /* the old personal workspace: read-only, kept so it can be imported */
+    match /artifacts/{uid}/{document=**} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
   }
 }

@@ -9,9 +9,11 @@ import FloatingCalc from '@/components/FloatingCalc';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { useAuth } from '@/AuthContext';
 import { useProject } from '@/context/ProjectContext';
+import { useCompany } from '@/context/CompanyContext';
+import { roleLabel } from '@/domain/team';
 import {
   LogOut, FolderOpen, LayoutDashboard, PanelsTopLeft, Layers, HardHat, ClipboardList, Receipt,
-  Package, Save, Sun, Moon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine,
+  Package, Save, Sun, Moon, History, Users, Eye, Warehouse, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine,
 } from 'lucide-react';
 
 const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
@@ -33,11 +35,15 @@ const NAV = [
   { key: 'loose', label: 'Loose material', Icon: Layers, needsProject: true },
   { key: 'trusses', label: 'Trusses', Icon: TrussIcon, needsProject: true },
   { key: 'layout', label: 'Layout check', Icon: Ruler, needsProject: true },
-  { key: 'items', label: 'Material list', Icon: Package },
+  { key: 'items', label: 'Price list', Icon: Package },
   { sep: true },
   { key: 'labor', label: 'Labor', Icon: HardHat, needsProject: true },
   { key: 'takeoff', label: 'Takeoff list', Icon: ClipboardList, needsProject: true },
   { key: 'quote', label: 'Quote', Icon: Receipt, needsProject: true },
+  { key: 'history', label: 'History', Icon: History, needsProject: true },
+  { sep: true },
+  { key: 'inventory', label: 'Inventory', Icon: Warehouse },
+  { key: 'team', label: 'Company & team', Icon: Users },
 ];
 
 function applyTheme(dark) {
@@ -89,6 +95,13 @@ const TIME_FMT = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-
 const isTextField = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 
 function SaveStatus({ status, lastSavedAt, error, collapsed }) {
+  if (status === 'readonly') {
+    return (
+      <span className="save-status is-readonly" title="You can see this project but not change it: editing needs the Estimator role." role="status">
+        <Eye size={12} />{collapsed ? null : <span>View only</span>}
+      </span>
+    );
+  }
   const text = status === 'saving' ? 'Saving…'
     : status === 'error' ? 'Not saved — retrying'
     : status === 'dirty' ? 'Unsaved changes'
@@ -106,6 +119,7 @@ function SaveStatus({ status, lastSavedAt, error, collapsed }) {
 
 export default function Sidebar({ active, onChange, collapsed, onCollapsedChange }) {
   const { user } = useAuth();
+  const { company, roles } = useCompany();
   const {
     saveProject, isSaving, projectId, projectData, saveStatus, saveError, lastSavedAt, isDirty,
     undo, redo, canUndo, canRedo,
@@ -278,7 +292,10 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
               ) : (
                 <span className="avatar" aria-hidden="true">{initial}</span>
               )}
-              <Label show={!collapsed} className="name">{user.displayName || user.email}</Label>
+              <Label show={!collapsed} className="name">
+                <span className="side-user__who">{user.displayName || user.email}</span>
+                {company ? <span className="side-user__role" title={company.name}>{roles.map(roleLabel).join(' · ') || 'No role'}</span> : null}
+              </Label>
               {!collapsed ? (
                 <button type="button" className="ew-icon-btn" style={{ marginLeft: 'auto' }} onClick={() => onChange('auth')} title="Sign out" aria-label="Sign out">
                   <LogOut size={16} />

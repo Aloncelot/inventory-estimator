@@ -9,6 +9,7 @@ import { Receipt, Printer } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import { PageHeader, TextInput, NumInput, fmtMoney } from '@/components/ui/mat';
 import { computeQuote } from '@/domain/estimate/quote';
+import { useCompany } from '@/context/CompanyContext';
 import { scopeOf } from '@/domain/scope';
 import { getCurrency } from '@/domain/lib/currency';
 
@@ -89,7 +90,9 @@ export default function QuoteView() {
   };
 
   const detail = quote.detail || 'detail';
-  const q = useMemo(() => computeQuote(est, { shipping: quote.shipping, detail }), [est, quote.shipping, detail]);
+  const { company } = useCompany();
+  const markupDefault = company?.materialMarkupPct ?? 0;
+  const q = useMemo(() => computeQuote(est, { shipping: quote.shipping, detail, markupDefault }), [est, quote.shipping, detail, markupDefault]);
   const sc = scopeOf(est);
   const include = { wallPanels: sc.structural || sc.partitions, structural: sc.structural, partitions: sc.partitions, loose: sc.loose, trusses: sc.trusses, labor: sc.labor };
   const only = q.blocks.length === 1 && q.blocks[0].key === 'wallPanels';

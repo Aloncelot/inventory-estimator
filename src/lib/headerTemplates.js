@@ -1,11 +1,12 @@
 // src/lib/headerTemplates.js
-// Header schedule templates of a user (or, later, a company): kept apart from
+// Header schedule templates of the company: kept apart from
 // the projects so every new project can start from one. One document each
-// under artifacts/{uid}/headerSchedules.
+// under companies/{cid}/headerSchedules.
 import { collection, doc, getDocs, setDoc, addDoc, deleteDoc, orderBy, query, Timestamp } from 'firebase/firestore';
 import { db } from './firebase';
 
-const path = (uid) => `artifacts/${uid}/headerSchedules`;
+// uid here is the company's base path (companies/{cid})
+const path = (uid) => `${uid}/headerSchedules`;
 
 export async function listHeaderTemplates(uid) {
   if (!uid) return [];

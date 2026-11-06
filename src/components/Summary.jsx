@@ -11,9 +11,12 @@ import { useConfirm } from '@/components/ui/confirm';
 import { US_STATES, CA_PROVINCES, NO_TAX, SOURCES, regionOf, taxFor } from '@/domain/lib/tax';
 import { CURRENCIES, currencyOf } from '@/domain/lib/currency';
 import { SCOPE_PARTS, scopeOf } from '@/domain/scope';
+import { useCompany } from '@/context/CompanyContext';
 
 export default function Summary() {
   const { projectData, updateProject, refreshProjectPrices, isSaving } = useProject();
+  const { company } = useCompany();
+  const markupDefault = company?.materialMarkupPct ?? 0;
   const est = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const info = useMemo(() => est.summaryInfo || {}, [est.summaryInfo]);
   const snapshot = est.snapshotTotals || null;
@@ -22,12 +25,13 @@ export default function Summary() {
     updateProject((prev) => ({ ...prev, summaryInfo: { ...(prev.summaryInfo || {}), [key]: value } }));
   }, [updateProject]);
 
-  // first open: fill estimate date and project name
+  // first open: fill estimate date, project name and the company's material markup
   useEffect(() => {
     if (!projectData) return;
     const needsDate = !info.estimateDate;
     const needsName = !info.projectName && projectData.name;
-    if (!needsDate && !needsName) return;
+    const needsMarkup = info.materialMarkupPct === undefined && company?.materialMarkupPct != null;
+    if (!needsDate && !needsName && !needsMarkup) return;
     const d = new Date();
     const iso = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10);
     updateProject((prev) => ({
@@ -36,11 +40,12 @@ export default function Summary() {
         ...(prev.summaryInfo || {}),
         ...(needsDate ? { estimateDate: iso } : {}),
         ...(needsName ? { projectName: projectData.name } : {}),
+        ...(needsMarkup ? { materialMarkupPct: company.materialMarkupPct } : {}),
       },
     }));
-  }, [projectData, info.estimateDate, info.projectName, updateProject]);
+  }, [projectData, info.estimateDate, info.projectName, info.materialMarkupPct, company?.materialMarkupPct, updateProject]);
 
-  const totals = projectTotals(est);
+  const totals = projectTotals(est, { markupDefault });
   const taxInfo = taxFor(info);
   const state = taxInfo.state;
   const region = regionOf(state);
@@ -58,6 +63,7 @@ export default function Summary() {
       ...prev,
       snapshotTotals: {
         wallPanelsTotal: totals.wallPanels, trussTotal: totals.trusses, looseTotal: totals.loose, laborTotal: totals.labor,
+        markupTotal: totals.markup, markupPct: totals.markupPct,
         subtotal: totals.subtotal, taxAmount: tax, shippingAmount: shipping, grandTotal: grand,
         lockedAt: new Date().toISOString(),
       },
@@ -67,7 +73,7 @@ export default function Summary() {
     if (await confirm({ title: 'Clear the original quote?', message: 'The comparison columns disappear. Lock a new quote any time.', confirmLabel: 'Clear quote', tone: 'danger' })) updateProject((prev) => ({ ...prev, snapshotTotals: null }));
   };
   const refresh = async () => {
-    if (await confirm({ title: 'Refresh prices?', message: 'Every selected item gets the latest price from the material list. Totals update right away.', confirmLabel: 'Refresh prices' })) refreshProjectPrices();
+    if (await confirm({ title: 'Refresh prices?', message: 'Every selected item gets the latest price from the price list. Totals update right away.', confirmLabel: 'Refresh prices' })) refreshProjectPrices();
   };
 
   if (!projectData) {
@@ -169,6 +175,19 @@ export default function Summary() {
                 {snapshot ? diffCell(orig, cur) : null}
               </tr>
             ))}
+            <tr>
+              <td>
+                <div className="ew-inline" title="Added to the wall panel materials and loose material (not to panel manufacture, trusses or labor). The quote shows the prices with it; the estimate pages and the price list show cost.">
+                  <span>Material markup</span>
+                  <NumInput w={64} step="0.5" value={totals.markupPct} onCommit={(v) => setInfo('materialMarkupPct', Math.max(0, v))} aria-label="Material markup %" />
+                  <span className="ew-subtle">% of {fmtMoney(totals.markupBase)} in materials</span>
+                  {!totals.markupPct ? <span className="sm-warn">No markup on materials</span> : null}
+                </div>
+              </td>
+              <td className="num">{fmtMoney(totals.markup)}</td>
+              {snapshot ? <td className="num ew-subtle">{snapshot.markupTotal !== undefined ? fmtMoney(snapshot.markupTotal) : '—'}</td> : null}
+              {snapshot ? diffCell(snapshot.markupTotal, totals.markup) : null}
+            </tr>
             <tr>
               <td style={{ fontWeight: 700 }}>Subtotal</td>
               <td className="num money-section">{fmtMoney(totals.subtotal)}</td>

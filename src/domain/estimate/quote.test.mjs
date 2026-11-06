@@ -60,3 +60,24 @@ test('the whole quote: wall panels, loose material, trusses, labor; summary line
   const onLabor = computeQuote({ ...est, summaryInfo: { ...est.summaryInfo, taxLabor: true } });
   assert.equal(onLabor.tax, Number((onLabor.subtotal * 0.0625).toFixed(2)));
 });
+
+test('material markup: the estimate adds it, the price list does not', async () => {
+  const { computeQuote } = await import('./quote.js');
+  const { projectTotals } = await import('../aggregate/projectTotals.js');
+  const { unitPriceFrom } = await import('../lib/parsing.js');
+  assert.equal(unitPriceFrom({ basePrice: 4, markupPct: 25, priceWithMarkup: 5 }), 4, 'list prices are cost');
+  const cost = projectTotals(est);
+  assert.equal(cost.markup, 0);
+  const marked = { ...est, summaryInfo: { ...est.summaryInfo, materialMarkupPct: 20 } };
+  const t = projectTotals(marked);
+  const wp = wallPanelsOf(marked);
+  assert.equal(t.markupBase, Math.round((wp.total - wp.manufacture.total + t.loose) * 100) / 100, 'not on manufacture or trusses');
+  assert.equal(t.markup, Math.round(t.markupBase * 20) / 100);
+  assert.equal(t.materials, Math.round((cost.materials + t.markup) * 100) / 100);
+  const q = computeQuote(marked);
+  assert.ok(Math.abs(q.materials - t.materials) < 0.02, 'the quote spreads the markup over its lines');
+  assert.equal(q.blocks.find((b) => b.key === 'loose').total, Math.round(t.loose * 120) / 100);
+  assert.equal(q.blocks.find((b) => b.key === 'trusses').total, 9999);
+  // a project without its own % takes the company default
+  assert.equal(projectTotals(est, { markupDefault: 20 }).markup, t.markup);
+});

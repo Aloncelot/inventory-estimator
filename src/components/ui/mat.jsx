@@ -184,7 +184,7 @@ export function MatHead({ labels = HEAD }) {
   return (
     <div className="mat-head" role="row">
       {labels.map((h, i) => (
-        <div key={i} role="columnheader" className={i >= 2 && i <= 9 && i !== 7 ? 'r' : ''} title={i === 7 ? 'How old the price is (from the material list)' : undefined}>{h}</div>
+        <div key={i} role="columnheader" className={i >= 2 && i <= 9 && i !== 7 ? 'r' : ''} title={i === 7 ? 'How old the price is (from the price list)' : undefined}>{h}</div>
       ))}
     </div>
   );

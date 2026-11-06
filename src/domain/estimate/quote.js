@@ -11,6 +11,7 @@ import { wallPanelsOf, looseOf, trussesOf, sectionKind } from './index';
 import { computeLabor } from '../labor';
 import { taxFor } from '../lib/tax';
 import { scoped, scopeOf } from '../scope';
+import { materialMarkupOf, markupFactor } from '../markup';
 
 const n = (v) => Number(v) || 0;
 const round2 = (v) => Number((Number(v) || 0).toFixed(2));
@@ -26,7 +27,8 @@ export const QUOTE_PARTS = [
 const KIND_LABEL = { exterior: 'Exterior walls', bearing: 'Interior bearing walls', shear: 'Shear walls', partition: 'Partition walls', knee: 'Knee walls' };
 const KIND_ORDER = ['exterior', 'bearing', 'shear', 'partition', 'knee'];
 
-function wallPanelsBlock(est) {
+// the client sees prices with the material markup in them, never the markup itself
+function wallPanelsBlock(est, f = 1) {
   const wp = wallPanelsOf(est);
   const levels = (est.levels || []).filter(Boolean);
   const nameOf = Object.fromEntries(levels.map((l, i) => [l.id, l.name || `Level ${i + 1}`]));
@@ -35,37 +37,39 @@ function wallPanelsBlock(est) {
     for (const c of [...L.exterior, ...L.interior]) {
       const k = c.kind || 'partition';
       const g = byKind.get(k) || { amount: 0, lf: 0 };
-      g.amount += n(c.subtotal); g.lf += n(c.stats?.lengthLF);
+      g.amount += n(c.subtotal) * f; g.lf += n(c.stats?.lengthLF);
       byKind.set(k, g);
     }
     const lines = [
       ...KIND_ORDER.filter((k) => byKind.has(k)).map((k) => ({ key: k, label: KIND_LABEL[k], detail: lf(byKind.get(k).lf), amount: round2(byKind.get(k).amount) })),
-      { key: 'nails', label: 'Panel nails & fasteners', detail: L.panelNails.onConcrete ? 'Incl. drive pins and epoxy' : '', amount: round2(L.panelNails.total) },
-      { key: 'loosePanel', label: 'Loose plates, band & blocking', detail: '', amount: round2(L.loose.subtotal) },
+      { key: 'nails', label: 'Panel nails & fasteners', detail: L.panelNails.onConcrete ? 'Incl. drive pins and epoxy' : '', amount: round2(L.panelNails.total * f) },
+      { key: 'loosePanel', label: 'Loose plates, band & blocking', detail: '', amount: round2(L.loose.subtotal * f) },
     ].filter((x) => n(x.amount) !== 0);
-    return { id: L.id, title: nameOf[L.id] || 'Level', lines, subtotal: round2(L.total) };
+    return { id: L.id, title: nameOf[L.id] || 'Level', lines, subtotal: round2(L.total * f) };
   }).filter((g) => g.lines.length > 0);
   const mfLines = wp.manufacture.lines.filter((x) => !x.isQtyBased && x.key !== 'blocking2x10');
   const panels = mfLines.reduce((s, x) => s + n(x.panels), 0);
   const panelLF = mfLines.reduce((s, x) => s + n(x.lf), 0);
   const general = [
-    { key: 'bracing', label: 'Temporary bracing', detail: `${num(wp.bracing.panels)} panels`, amount: round2(wp.bracing.total) },
+    { key: 'bracing', label: 'Temporary bracing', detail: `${num(wp.bracing.panels)} panels`, amount: round2(wp.bracing.total * f) },
     { key: 'manufacture', label: 'Panels manufacture', detail: `${num(panels)} panels · ${lf(panelLF)}`, amount: round2(wp.manufacture.total) },
   ].filter((x) => n(x.amount) !== 0);
   if (general.length) groups.push({ id: 'wp-all', title: 'All levels', lines: general, subtotal: round2(general.reduce((a, x) => a + x.amount, 0)) });
-  return { key: 'wallPanels', title: 'Wall panels', groups, total: round2(wp.total), material: true };
+  const total = round2((wp.total - wp.manufacture.total) * f + wp.manufacture.total);
+  return { key: 'wallPanels', title: 'Wall panels', groups, total, material: true };
 }
 
-function looseBlock(est) {
+function looseBlock(est, f = 1) {
   const loose = looseOf(est);
   const lines = (est.looseList || []).filter(Boolean).map((sec) => {
     const c = loose.byId[sec.id];
     if (!c || c.hidden || !n(c.subtotal)) return null;
     const kind = sectionKind(sec);
     const rows = [...(c.calcRows || []), ...(c.manualRows || [])].filter((r) => n(r.qtyFinal));
-    return { key: sec.id, label: sec.name || (kind === 'roof' ? 'Roof' : 'Loose material'), detail: `${rows.length} item${rows.length === 1 ? '' : 's'}`, amount: round2(c.subtotal) };
+    return { key: sec.id, label: sec.name || (kind === 'roof' ? 'Roof' : 'Loose material'), detail: `${rows.length} item${rows.length === 1 ? '' : 's'}`, amount: round2(c.subtotal * f) };
   }).filter(Boolean);
-  return { key: 'loose', title: 'Loose material', groups: lines.length ? [{ id: 'loose', title: '', lines, subtotal: round2(loose.total) }] : [], total: round2(loose.total), material: true };
+  const total = round2(loose.total * f);
+  return { key: 'loose', title: 'Loose material', groups: lines.length ? [{ id: 'loose', title: '', lines, subtotal: total }] : [], total, material: true };
 }
 
 function trussesBlock(est) {
@@ -106,17 +110,19 @@ function laborBlock(est) {
 
 /**
  * The quote of a project.
- * @param {object} opts shipping: typed on the quote; include: { wallPanels, loose, trusses, labor }; detail: 'detail' | 'summary'
+ * @param {object} opts shipping: typed on the quote; include: { wallPanels, loose, trusses, labor }; detail: 'detail' | 'summary';
+ *   markupDefault: the company's material markup % for a project without its own
  */
-export function computeQuote(full = {}, { shipping, include, detail = 'detail' } = {}) {
+export function computeQuote(full = {}, { shipping, include, detail = 'detail', markupDefault = 0 } = {}) {
+  const f = markupFactor(materialMarkupOf(full, markupDefault));
   // the project's scope (Summary), unless a quote passes its own parts
   const sc = scopeOf(full);
   const inc = include || { wallPanels: sc.structural || sc.partitions, loose: sc.loose, trusses: sc.trusses, labor: sc.labor };
   const est = scoped(full);
   const on = (k) => inc[k] !== false;
   const blocks = [
-    on('wallPanels') && wallPanelsBlock(est),
-    on('loose') && looseBlock(est),
+    on('wallPanels') && wallPanelsBlock(est, f),
+    on('loose') && looseBlock(est, f),
     on('trusses') && trussesBlock(est),
     on('labor') && laborBlock(est),
   ].filter((b) => b && n(b.total) !== 0);

@@ -4,7 +4,6 @@
  import { createContext, useContext, useState, useEffect, useMemo } from 'react';
  import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'; // Import sign-in/out
  import { auth, googleProvider } from '@/lib/firebase'; // Import auth and provider
- import { isAllowedEmail } from '@/lib/allowedUsers';
 
  const AuthContext = createContext({
      user: undefined, // undefined: loading, null: logged out, object: logged in
@@ -43,13 +42,7 @@
          // Listen for auth state changes
          const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
              console.log("Auth State Changed:", currentUser?.uid || 'No user'); // Debug log
-             if (currentUser && !isAllowedEmail(currentUser.email)) {
-                 // Not on the allow-list: kick them out right away
-                 setAuthError(`The account ${currentUser.email} does not have access.`);
-                 signOut(auth).catch(() => {});
-                 setUser(null);
-                 return;
-             }
+             // access is decided by the company membership (and the security rules)
              setUser(currentUser); // Will be null if logged out, user object if logged in
          });
 

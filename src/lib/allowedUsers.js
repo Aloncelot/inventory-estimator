@@ -1,5 +1,6 @@
 // src/lib/allowedUsers.js
-// Only these Google accounts can use the app.
+// Google accounts that may create a company (everyone else joins by invitation).
+// Keep in sync with canFound() in firestore.rules.
 // Override with NEXT_PUBLIC_ALLOWED_EMAILS="a@x.com,b@y.com" if needed.
 const DEFAULT_ALLOWED = ["aloncelot@gmail.com", "arch.alonso.correa@gmail.com"];
 

@@ -162,11 +162,11 @@ export default function LaborView() {
               {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               <option value="__defaults">Defaults</option>
             </select>
-            <button type="button" className="ew-btn ew-btn--ghost" onClick={useTpl} disabled={!pick}><FolderOpen size={13} /> Use</button>
-            {templates.some((t) => t.id === pick) ? <button type="button" className="ew-icon-btn" onClick={remove} aria-label="Delete template" title="Delete this template"><Trash2 size={13} /></button> : null}
-            {mine ? <button type="button" className="ew-btn ew-btn--ghost" onClick={update} title={`Save crew, rates and times into "${mine.name}"`}><Save size={13} /> Update template</button> : null}
+            <button type="button" className="ew-btn ew-btn--ghost ro-hide" onClick={useTpl} disabled={!pick}><FolderOpen size={13} /> Use</button>
+            {templates.some((t) => t.id === pick) ? <button type="button" className="ew-icon-btn ro-hide" onClick={remove} aria-label="Delete template" title="Delete this template"><Trash2 size={13} /></button> : null}
+            {mine ? <button type="button" className="ew-btn ew-btn--ghost ro-hide" onClick={update} title={`Save crew, rates and times into "${mine.name}"`}><Save size={13} /> Update template</button> : null}
             {naming === null
-              ? <button type="button" className="ew-btn ew-btn--ghost" onClick={() => setNaming('')} disabled={!appId}><Save size={13} /> Save as template</button>
+              ? <button type="button" className="ew-btn ew-btn--ghost ro-hide" onClick={() => setNaming('')} disabled={!appId}><Save size={13} /> Save as template</button>
               : (
                 <span className="hs-name">
                   <input className="ew-input" autoFocus value={naming} placeholder="e.g. Crew A · 2026 rates" onChange={(e) => setNaming(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveAs(); if (e.key === 'Escape') setNaming(null); }} />

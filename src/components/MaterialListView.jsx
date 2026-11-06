@@ -1,7 +1,13 @@
 // src/components/MaterialListView.jsx
 'use client';
 
-import { Plus, Pencil, Package } from 'lucide-react';
+import { Plus, Pencil, Package, Copy, Warehouse, Check, X } from 'lucide-react';
+import { getStockItem, listPriceReviews, resolvePriceReview } from '@/lib/inventory';
+import { useAuth } from '@/AuthContext';
+import { buyUnitLabel, ageDays, STALE_PRICE_DAYS } from '@/domain/purchase';
+import { goTo, takeFocus } from '@/lib/nav';
+import { onHand } from '@/domain/inventory';
+import { useCompany } from '@/context/CompanyContext';
 import { PageHeader } from '@/components/ui/mat';
 import { useState, useEffect, useMemo } from "react";
 import { 
@@ -11,12 +17,65 @@ import {
   updateItemPrice, 
   createItemPrice, 
   createNewMaterial, 
-  getAllVendors    
+  getAllVendors,
+  copyStarterCatalog
 } from "@/lib/catalog"; 
 import PriceEditModal from "./PriceEditModal";
 import { formatMoney } from "@/domain/lib/currency";
 
 const fmt = (n) => (Number.isFinite(Number(n)) ? formatMoney(Number(n)) : "—");
+const pctFmt = (v) => `${v > 0 ? '+' : ''}${v}%`;
+const fmtDay = (ts) => (ts?.toDate ? ts.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+
+/** How the supplier sells it, for the prices table. */
+function soldBy(p) {
+  if (p.buyUnit === 'bundle') return `Bundle of ${p.pcsPerBundle || '?'}${p.buyPrice ? ` · ${fmt(p.buyPrice)}` : ''}`;
+  if (p.buyUnit === 'mbf') return `MBF${p.buyPrice ? ` · ${fmt(p.buyPrice)}` : ''}`;
+  return buyUnitLabel('each');
+}
+
+/**
+ * Receipts where Warehouse paid a different price than the list: the
+ * estimator takes the price paid as the supplier's new price, or ignores it.
+ */
+function PriceReviews({ reviews, onResolve, busy }) {
+  if (!reviews?.length) return null;
+  return (
+    <div className="ew-card pl-review">
+      <h3>{reviews.length} price change{reviews.length === 1 ? '' : 's'} to review</h3>
+      <p className="ew-subtle">Warehouse paid a different price than the list on these receipts. Use the price paid as the supplier&apos;s new price, or ignore it if it was a one-off.</p>
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Material</th><th>Supplier</th><th>Invoice</th>
+            <th className="num">List</th><th className="num">Paid</th><th className="num">Change</th>
+            <th>Received</th><th />
+          </tr>
+        </thead>
+        <tbody>
+          {reviews.map((m) => {
+            const p = m.purchase || {};
+            return (
+              <tr key={m.id}>
+                <td>{m.family} · {m.size}</td>
+                <td>{p.vendorName || '—'}</td>
+                <td className="ew-subtle">{p.buyQty} {p.buyUnit === 'bundle' ? `bundle${p.buyQty === 1 ? '' : 's'}` : p.buyUnit === 'mbf' ? 'MBF' : m.unit} · {fmt(p.totalPaid)}{m.ref ? ` · ${m.ref}` : ''}</td>
+                <td className="num">{fmt(p.listPrice)}</td>
+                <td className="num"><strong>{fmt(m.unitCost)}</strong></td>
+                <td className={`num ${p.variancePct > 0 ? 'pl-up' : 'pl-down'}`}>{pctFmt(p.variancePct)}</td>
+                <td className="ew-subtle">{fmtDay(m.at)} · {m.by?.name || m.by?.email || ''}</td>
+                <td className="pl-review__acts">
+                  <button type="button" className="ew-btn ew-btn--primary" disabled={busy} onClick={() => onResolve(m, true)} title="Use the price paid as the new list price"><Check size={12} /> Update price</button>
+                  <button type="button" className="ew-btn ew-btn--ghost" disabled={busy} onClick={() => onResolve(m, false)} title="Keep the list price"><X size={12} /> Ignore</button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 // ListColumn component using global classes
 function ListColumn({ title, items, selectedValue, onSelect, loading, headerAction }) {
@@ -48,6 +107,15 @@ function ListColumn({ title, items, selectedValue, onSelect, loading, headerActi
 }
 
 export default function MaterialListView() {
+  const { company, companyId, perms } = useCompany();
+  const { user } = useAuth();
+  const [reviews, setReviews] = useState([]);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [stock, setStock] = useState(null);   // the selected material in the inventory
+  // the company's own price list: Estimators and Admins change it, everyone sees it
+  const canEdit = Boolean(perms?.canEditEstimate || perms?.isAdmin);
+  const [copying, setCopying] = useState('');
+  const [reload, setReload] = useState(0);
   const [families, setFamilies] = useState([]);
   const [items, setItems] = useState([]);
   const [prices, setPrices] = useState([]);
@@ -78,8 +146,55 @@ export default function MaterialListView() {
       setFamilies(fams);
       setAllVendors(vendors);
       setLoadingFamilies(false);
+      // opened from the inventory: show that material
+      const f = takeFocus('items');
+      if (f) {
+        const fam = fams.find((x) => x.label === f.family);
+        if (fam) {
+          const its = await selectFamily(fam);
+          const it = its.find((x) => x.value === f.itemKey);
+          if (it) handleItemSelect(it);
+        }
+      }
     })();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reload]);
+
+  // how much of the selected material the company has (when it keeps inventory)
+  useEffect(() => {
+    setStock(null);
+    if (!selectedItem || !companyId || !company?.inventoryEnabled) return;
+    let alive = true;
+    getStockItem(companyId, selectedItem.value).then((s) => { if (alive) setStock(s || { qty: {} }); }).catch(() => {});
+    return () => { alive = false; };
+  }, [selectedItem, companyId, company?.inventoryEnabled]);
+
+  // price changes seen on receipts (only where the company keeps inventory)
+  useEffect(() => {
+    if (!canEdit || !companyId || !company?.inventoryEnabled) { setReviews([]); return; }
+    listPriceReviews(companyId).then(setReviews).catch((e) => console.warn('Price reviews not read:', e));
+  }, [canEdit, companyId, company?.inventoryEnabled, reload]);
+
+  const resolveReview = async (m, accept) => {
+    setReviewBusy(true);
+    try {
+      await resolvePriceReview(companyId, m, accept, user);
+      setReviews((list) => list.filter((x) => x.id !== m.id));
+      setCopying(accept ? `${m.purchase?.vendorName}: ${m.family} ${m.size} is now ${fmt(m.unitCost)}.` : 'Ignored; the list price stays.');
+      if (accept && selectedItem?.value === m.itemKey) {
+        setPrices(await getPricesForItem(selectedItem.fullItemData));
+      }
+    } catch (e) { setCopying(`Could not save: ${e?.message || e}`); } finally { setReviewBusy(false); }
+  };
+
+  const copyStarter = async () => {
+    setCopying('Copying the starter price list…');
+    try {
+      const c = await copyStarterCatalog({ onProgress: (x) => setCopying(`Copying the starter price list… ${x.prices} prices`) });
+      setCopying(`Copied ${c.families} families, ${c.items} sizes, ${c.suppliers} suppliers and ${c.prices} prices.`);
+      setReload((r) => r + 1);
+    } catch (e) { setCopying(`Could not copy: ${e?.message || e}`); }
+  };
 
   const filteredFamilies = useMemo(() => {
     const query = familySearch.toLowerCase();
@@ -93,7 +208,7 @@ export default function MaterialListView() {
     return items.filter(i => i.label.toLowerCase().includes(query));
   }, [items, itemSearch]);
 
-  const handleFamilySelect = async (family) => {
+  const selectFamily = async (family) => {
     setSelectedFamily(family.value);
     setSelectedItem(null); 
     setPrices([]); 
@@ -102,7 +217,9 @@ export default function MaterialListView() {
     const familyItems = await getSizesForFamily(family.value);
     setItems(familyItems);
     setLoadingItems(false);
+    return familyItems;
   };
+  const handleFamilySelect = (family) => { selectFamily(family); };
 
   const handleItemSelect = async (item) => {
     setSelectedItem(item); 
@@ -196,8 +313,17 @@ export default function MaterialListView() {
   };
 
   return (
-    <div className="app-content">
-      <PageHeader icon={Package} title="Material list" meta="Families, sizes and vendor prices" />
+    <div className={`app-content${canEdit ? '' : ' is-readonly'}`}>
+      <PageHeader icon={Package} title="Price list" meta={`${company?.name ? `${company.name}: ` : ''}families, sizes and supplier prices`} />
+      {!canEdit ? <p className="ew-subtle">View only: the price list is changed by Estimators and Admins.</p> : null}
+      {!loadingFamilies && families.length === 0 ? (
+        <div className="ew-card inv-empty">
+          <p>Your company&apos;s price list is empty. Each company keeps its own materials, suppliers and prices.{canEdit ? ' Start from a copy of the starter list and edit it, or add materials one by one.' : ''}</p>
+          {canEdit ? <button type="button" className="ew-btn" onClick={copyStarter} disabled={copying.startsWith('Copying')}><Copy size={13} /> Copy the starter price list</button> : null}
+        </div>
+      ) : null}
+      {copying ? <p className="team-msg">{copying}</p> : null}
+      <PriceReviews reviews={reviews} onResolve={resolveReview} busy={reviewBusy} />
       <div className="ew-card full-height-card">
         
         <div className="search-wrapper">
@@ -205,7 +331,7 @@ export default function MaterialListView() {
             <input 
               type="text" 
               placeholder="Search families" 
-              className="ew-input" 
+              className="ew-input ro-ok" 
               value={familySearch} 
               onChange={(e) => setFamilySearch(e.target.value)} 
             />
@@ -214,7 +340,7 @@ export default function MaterialListView() {
             <input 
               type="text" 
               placeholder="Search items" 
-              className="ew-input" 
+              className="ew-input ro-ok" 
               value={itemSearch} 
               onChange={(e) => setItemSearch(e.target.value)} 
             />
@@ -233,7 +359,7 @@ export default function MaterialListView() {
             loading={loadingFamilies}
             headerAction={
                 <button 
-                  className="ew-icon-btn"
+                  className="ew-icon-btn ro-hide"
                   onClick={handleAddGlobalClick}
                   title="Create New Family and Item"
                 >
@@ -252,7 +378,7 @@ export default function MaterialListView() {
             headerAction={
               selectedFamily && (
                 <button 
-                  className="ew-icon-btn"
+                  className="ew-icon-btn ro-hide"
                   onClick={handleAddItemClick}
                   title="Create a new item in this family"
                 >
@@ -268,13 +394,29 @@ export default function MaterialListView() {
               <span>Prices</span>
               {selectedItem && (
                 <button 
-                  className="ew-btn"
+                  className="ew-btn ro-hide"
                   onClick={handleAddPriceClick}
                 >
                   <Plus size={12} aria-hidden="true" /> Add price
                 </button>
               )}
             </div>
+
+            {selectedItem && company?.inventoryEnabled ? (
+              <div className="pl-stock">
+                <Warehouse size={13} aria-hidden="true" />
+                {stock === null ? <span className="ew-subtle">Checking the inventory…</span> : (
+                  <span>
+                    <strong>{onHand(stock).toLocaleString('en-US')}</strong> {stock.unit || selectedItem.fullItemData?.unit || ''} in stock
+                    {(company.warehouses || []).length > 1 && onHand(stock) > 0 ? (
+                      <span className="ew-subtle"> · {(company.warehouses || []).filter((w) => onHand(stock, w.id) > 0).map((w) => `${w.name} ${onHand(stock, w.id)}`).join(' · ')}</span>
+                    ) : null}
+                    {stock.avgCost ? <span className="ew-subtle"> · avg cost {fmt(stock.avgCost)}</span> : null}
+                  </span>
+                )}
+                <button type="button" className="ew-link pl-stock__go" onClick={() => goTo('inventory', { itemKey: selectedItem.value })}>Open in Inventory</button>
+              </div>
+            ) : null}
 
             <div className="material-scroll">
               {loadingPrices && <div style={{padding: 12}}>Loading...</div>}
@@ -286,6 +428,8 @@ export default function MaterialListView() {
                       <th>Vendor</th>
                       <th className="num">Price</th>
                       <th>Unit</th>
+                      <th>Sold by</th>
+                      <th title={`Prices older than ${STALE_PRICE_DAYS} days show as old`}>Updated</th>
                       <th>Link</th>
                       <th></th> 
                     </tr>
@@ -296,6 +440,15 @@ export default function MaterialListView() {
                         <td>{p.vendorName}</td>
                         <td className="num">{fmt(p.basePrice)}</td>
                         <td>{p.unit}</td>
+                        <td className="ew-subtle">{soldBy(p)}</td>
+                        <td>
+                          {(() => {
+                            const d = ageDays(p.updatedAt);
+                            if (d == null) return '—';
+                            const old = d > STALE_PRICE_DAYS;
+                            return <span className={old ? 'pl-old' : 'ew-subtle'} title={fmtDay(p.updatedAt)}>{d === 0 ? 'today' : `${d}d ago`}{old ? ' · old' : ''}</span>;
+                          })()}
+                        </td>
                         <td>
                           {p.url ? (
                             <a href={p.url} target="_blank" rel="noopener noreferrer" className="ew-link" title={p.url}>View</a>
@@ -304,7 +457,7 @@ export default function MaterialListView() {
                         <td style={{ textAlign: 'center' }}>
                           <button
                             type="button"
-                            className="ew-btn ew-icon-btn"
+                            className="ew-btn ew-icon-btn ro-hide"
                             title="Edit Price"
                             onClick={() => handleEditClick(p)}
                           >

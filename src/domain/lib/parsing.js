@@ -23,18 +23,17 @@ export function applyWaste(qtyRaw = 0, wastePct = 0) {
   return Math.ceil(q * (1 + w));
 }
 
-/** Try to compute a unit price regardless of shape (compact or raw) */
+/**
+ * The supplier's price of an item (cost, no markup), whatever its shape
+ * (compact or raw). The markup is the estimate's, applied in Summary and the
+ * Quote: see src/domain/markup.js.
+ */
 export function unitPriceFrom(item) {
   if (!item) return 0;
-  const supplier = item.supplierPrice ?? item.raw?.basePrice ?? item.raw?.supplierPrice ?? null;
-  const markup   = item.markupPct     ?? item.raw?.markupPct     ?? null;
-  if (supplier != null && markup != null) return Number(supplier) * (1 + Number(markup)/100);
-  const peg = item.priceWithMarkup ?? item.raw?.priceWithMarkup ?? null;
-  if (peg != null) return Number(peg || 0);
-  // catalog rows without a stored "price with markup": base price (+ markup when known)
-  const base = item.basePrice ?? null;
-  if (base != null) return Number(base) * (1 + (markup != null ? Number(markup) : 0) / 100);
-  return 0;
+  const cost = item.supplierPrice ?? item.raw?.basePrice ?? item.raw?.supplierPrice ?? item.basePrice ?? null;
+  if (cost != null) return Number(cost) || 0;
+  // very old rows kept only the price with markup
+  return Number(item.priceWithMarkup ?? item.raw?.priceWithMarkup ?? 0) || 0;
 }
 
 /** Currency formatter: follows the open project's currency (USD / CAD) */

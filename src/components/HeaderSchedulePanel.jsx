@@ -90,11 +90,11 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
             <option value="__example">{EXAMPLE_TEMPLATE.name}</option>
             <option value="__blank">Blank</option>
           </select>
-          <button type="button" className="ew-btn ew-btn--ghost" onClick={load} disabled={!pick}><FolderOpen size={13} /> Use</button>
-          {templates.some((t) => t.id === pick) ? <button type="button" className="ew-icon-btn" onClick={remove} title="Delete this template" aria-label="Delete template"><Trash2 size={13} /></button> : null}
-          {mine ? <button type="button" className="ew-btn ew-btn--ghost" onClick={update} disabled={!uid} title={`Save these rows into "${mine.name}"`}><Save size={13} /> Update template</button> : null}
+          <button type="button" className="ew-btn ew-btn--ghost ro-hide" onClick={load} disabled={!pick}><FolderOpen size={13} /> Use</button>
+          {templates.some((t) => t.id === pick) ? <button type="button" className="ew-icon-btn ro-hide" onClick={remove} title="Delete this template" aria-label="Delete template"><Trash2 size={13} /></button> : null}
+          {mine ? <button type="button" className="ew-btn ew-btn--ghost ro-hide" onClick={update} disabled={!uid} title={`Save these rows into "${mine.name}"`}><Save size={13} /> Update template</button> : null}
           {naming === null
-            ? <button type="button" className="ew-btn ew-btn--ghost" onClick={() => setNaming(schedule?.name && !mine ? schedule.name : '')} disabled={!rows.length || !uid}><Save size={13} /> Save as template</button>
+            ? <button type="button" className="ew-btn ew-btn--ghost ro-hide" onClick={() => setNaming(schedule?.name && !mine ? schedule.name : '')} disabled={!rows.length || !uid}><Save size={13} /> Save as template</button>
             : (
               <span className="hs-name">
                 <input className="ew-input" autoFocus value={naming} placeholder="e.g. RRM Design · wood" onChange={(e) => setNaming(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveAs(); if (e.key === 'Escape') setNaming(null); }} />

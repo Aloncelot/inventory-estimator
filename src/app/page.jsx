@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import { ProjectProvider, useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/AuthContext';
+import { DOC_WARN_BYTES, DOC_LIMIT_BYTES, fmtKB } from '@/domain/team';
+import { CompanyProvider, useCompany } from '@/context/CompanyContext';
 
 import Sidebar from '@/components/Sidebar';
 import LoginView from '@/components/LoginView';
@@ -20,6 +22,10 @@ import LayoutView from '@/components/LayoutView';
 import PlanTakeoffView from '@/components/PlanTakeoffView';
 import LaborView from '@/components/LaborView';
 import TakeoffView from '@/components/TakeoffView';
+import HistoryView from '@/components/HistoryView';
+import TeamView from '@/components/TeamView';
+import InventoryView from '@/components/InventoryView';
+import CompanyGate from '@/components/CompanyGate';
 import { PageHeader } from '@/components/ui/mat';
 import { ConfirmProvider } from '@/components/ui/confirm';
 
@@ -34,17 +40,20 @@ const PERSISTENT = ['wallpanels', 'loose', 'trusses'];
 export default function Home() {
   const [ui, setUi] = useLocalStorageJson('ui-state', { active: 'summary', collapsed: false, currentProjectId: null });
   return (
-    <ProjectProvider initialProjectId={ui.currentProjectId || null}>
-      <ConfirmProvider>
-        <Shell ui={ui} setUi={setUi} />
-      </ConfirmProvider>
-    </ProjectProvider>
+    <CompanyProvider>
+      <ProjectProvider initialProjectId={ui.currentProjectId || null}>
+        <ConfirmProvider>
+          <Shell ui={ui} setUi={setUi} />
+        </ConfirmProvider>
+      </ProjectProvider>
+    </CompanyProvider>
   );
 }
 
 function Shell({ ui, setUi }) {
   const { user, loading: authLoading } = useAuth();
-  const { projectId } = useProject();
+  const { projectId, projectData, readOnly, projectBytes } = useProject();
+  const { status: companyStatus } = useCompany();
 
   // remember the open project so a reload reopens it
   useEffect(() => {
@@ -52,6 +61,12 @@ function Shell({ ui, setUi }) {
   }, [projectId, ui.currentProjectId, setUi]);
 
   const setActive = (key) => setUi((prev) => ({ ...prev, active: key }));
+  // other pages can send the user here with something to show (src/lib/nav.js)
+  useEffect(() => {
+    const onNav = (e) => { if (e.detail?.page) setUi((prev) => ({ ...prev, active: e.detail.page })); };
+    window.addEventListener('app:navigate', onNav);
+    return () => window.removeEventListener('app:navigate', onNav);
+  }, [setUi]);
   const setCollapsed = (val) => setUi((prev) => ({ ...prev, collapsed: val }));
   const active = ui.active;
 
@@ -66,6 +81,9 @@ function Shell({ ui, setUi }) {
       case 'plans': return <PlanTakeoffView />;
       case 'labor': return <LaborView />;
       case 'takeoff': return <TakeoffView />;
+      case 'history': return <HistoryView />;
+      case 'team': return <TeamView />;
+      case 'inventory': return <InventoryView />;
       default:
         if (SOON[active]) {
           return (
@@ -83,13 +101,25 @@ function Shell({ ui, setUi }) {
     <div className="app-container">
       <Sidebar active={active} onChange={setActive} collapsed={ui.collapsed} onCollapsedChange={setCollapsed} />
 
-      <main className="app-main">
+      <main className={`app-main${readOnly && user && companyStatus === 'ready' && !['team', 'project', 'items', 'inventory'].includes(active) ? ' is-readonly' : ''}`}>
         {authLoading ? (
           <div className="app-content"><div className="empty-state">Checking your session…</div></div>
         ) : !user ? (
           <LoginView />
+        ) : companyStatus !== 'ready' ? (
+          active === 'auth' ? <LogoutView onCancel={() => setActive('summary')} /> : <CompanyGate />
         ) : (
           <>
+            {projectData && projectBytes > DOC_WARN_BYTES && active !== 'team' ? (
+              <div className={`size-warn no-print${projectBytes > DOC_LIMIT_BYTES ? ' is-over' : ''}`}>
+                {projectBytes > DOC_LIMIT_BYTES
+                  ? `This project is ${fmtKB(projectBytes)}, over the 1 MB limit, and can't be saved. Remove unused plan walls or levels, or split it.`
+                  : `This project is ${fmtKB(projectBytes)} of the 1 MB a project can hold. Consider splitting very large jobs.`}
+              </div>
+            ) : null}
+            {readOnly && projectData && !['team', 'project', 'auth', 'history', 'inventory'].includes(active) ? (
+              <div className="ro-banner no-print">View only: you can see this project but not change it. Editing needs the Estimator role; ask an Admin.</div>
+            ) : null}
             <div hidden={active !== 'wallpanels'}><WallPanelsView /></div>
             <div hidden={active !== 'loose'}><LooseMaterialView /></div>
             <div hidden={active !== 'trusses'}><TrussesView /></div>

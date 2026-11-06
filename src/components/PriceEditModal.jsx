@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { BUY_UNITS, boardFeetOf, piecePriceFromQuote } from '@/domain/purchase';
 
 // Helper component using global classes
 function InfoRow({ label, value }) {
@@ -49,11 +50,13 @@ export default function PriceEditModal({
         vendorId: item.vendorId || (vendorsList.length > 0 ? vendorsList[0].value : ''), 
         newVendorName: '',
         basePrice: item.basePrice || 0,
-        markupPct: item.markupPct || 0,
-        priceWithMarkup: item.priceWithMarkup || 0,
         unit: item.unit || 'pcs',
         materialType: item.materialType || 'Lumber',
         url: item.url || '',
+        // how this supplier sells it: each, by the bundle or per MBF
+        buyUnit: item.buyUnit || 'each',
+        pcsPerBundle: item.pcsPerBundle || '',
+        buyPrice: item.buyPrice ?? '',
       });
       setIsNewVendorMode(false);
       setIsNewFamilyMode(false);
@@ -67,6 +70,17 @@ export default function PriceEditModal({
       [name]: type === 'number' ? Number(value) : value,
     }));
   };
+
+  // a quote per bundle or per MBF sets the price per piece
+  const sizeLabel = item?.sizeDisplay || formData.sizeDisplay || '';
+  const boardFeet = boardFeetOf(sizeLabel);
+  const setBuying = (patch) => setFormData((prev) => {
+    const next = { ...prev, ...patch };
+    if (next.buyUnit === 'each') return next;
+    const per = piecePriceFromQuote(next.buyUnit, next.buyPrice, { pcsPerBundle: next.pcsPerBundle, boardFeet });
+    if (per == null) return next;
+    return { ...next, basePrice: per };
+  });
 
   const [formError, setFormError] = useState('');
   useEffect(() => { if (isOpen) setFormError(''); }, [isOpen]);
@@ -83,6 +97,12 @@ export default function PriceEditModal({
                 return fail('Enter a family name.');
              }
         }
+    }
+    if (formData.buyUnit === 'bundle' && !(Number(formData.pcsPerBundle) > 0)) {
+        return fail('Enter how many pieces come in a bundle from this supplier.');
+    }
+    if (formData.buyUnit === 'mbf' && !boardFeet) {
+        return fail('MBF works only for sawn lumber with a size like 2x6"-8\'.');
     }
     if (isCreatingItem && !formData.sizeDisplay.trim()) {
         return fail("Enter a size name, e.g. 2x4-12'.");
@@ -112,9 +132,17 @@ export default function PriceEditModal({
          }
     }
 
+    const buying = formData.buyUnit === 'each'
+      ? { buyUnit: 'each', pcsPerBundle: null, buyPrice: null }
+      : {
+          buyUnit: formData.buyUnit,
+          pcsPerBundle: formData.buyUnit === 'bundle' ? Number(formData.pcsPerBundle) : null,
+          buyPrice: formData.buyPrice === '' ? null : Number(formData.buyPrice),
+        };
     const updatedItem = {
       ...item, 
       ...formData, 
+      ...buying,
       familyDisplay, 
       supplierName, 
       isNewVendor: isNewVendorMode,
@@ -263,15 +291,10 @@ export default function PriceEditModal({
 
         <div className="controls2" style={{ alignItems: 'flex-start', gap: '16px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <Label><span>Base Price ($)</span>
+            <Label><span>Supplier price ($)</span>
               <Input type="number" name="basePrice" className="ew-input focus-anim" value={formData.basePrice || ''} onChange={handleChange} />
             </Label>
-            <Label><span>Markup (%)</span>
-              <Input type="number" name="markupPct" className="ew-input focus-anim" value={formData.markupPct || ''} onChange={handleChange} />
-            </Label>
-            <Label><span>Price w/ Markup ($)</span>
-              <Input type="number" name="priceWithMarkup" className="ew-input focus-anim" value={formData.priceWithMarkup || ''} onChange={handleChange} />
-            </Label>
+            <span className="ew-subtle" style={{ fontSize: '.78rem', maxWidth: 220 }}>What the supplier charges, without markup. Each estimate adds its own material markup in Summary.</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <Label><span>Unit</span>
@@ -284,6 +307,33 @@ export default function PriceEditModal({
               <Input type="text" name="url" className="ew-input focus-anim" value={formData.url || ''} onChange={handleChange} />
             </Label>
           </div>
+        </div>
+
+        <div className="pe-buy">
+          <Label><span>Sold by</span>
+            <select className="ew-select focus-anim" value={formData.buyUnit || 'each'} onChange={(e) => setBuying({ buyUnit: e.target.value })}>
+              {BUY_UNITS.map((u) => (
+                <option key={u.key} value={u.key} disabled={u.key === 'mbf' && !boardFeet}>{u.label}{u.key === 'mbf' && !boardFeet ? ' (lumber only)' : ''}</option>
+              ))}
+            </select>
+          </Label>
+          {formData.buyUnit === 'bundle' ? (
+            <Label><span>Pieces per bundle</span>
+              <Input type="number" min="1" step="1" className="ew-input focus-anim" value={formData.pcsPerBundle ?? ''} onChange={(e) => setBuying({ pcsPerBundle: e.target.value === '' ? '' : Number(e.target.value) })} />
+            </Label>
+          ) : null}
+          {formData.buyUnit !== 'each' ? (
+            <Label><span>Quote per {formData.buyUnit === 'mbf' ? 'MBF' : 'bundle'} ($)</span>
+              <Input type="number" min="0" step="0.01" className="ew-input focus-anim" value={formData.buyPrice ?? ''} onChange={(e) => setBuying({ buyPrice: e.target.value === '' ? '' : Number(e.target.value) })} />
+            </Label>
+          ) : null}
+          <p className="ew-subtle pe-buy__note">
+            {formData.buyUnit === 'each'
+              ? 'The supplier sells it one at a time. Receipts are recorded in units.'
+              : formData.buyUnit === 'mbf'
+                ? `${boardFeet} board feet per piece: 1 MBF = ${Math.round((1000 / boardFeet) * 10) / 10} pieces. The quote sets the base price per piece.`
+                : 'Bundles from this supplier are turned into pieces on receipts. The quote sets the base price per piece.'}
+          </p>
         </div>
 
         {formError ? <p role="alert" style={{ margin: '12px 0 0', color: 'var(--danger)' }}>{formError}</p> : null}

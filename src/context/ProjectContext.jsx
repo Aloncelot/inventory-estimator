@@ -4,6 +4,9 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo, u
 import { doc, getDoc, setDoc, addDoc, collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase'; 
 import { useAuth } from '@/AuthContext'; 
+import { useCompany } from '@/context/CompanyContext';
+import { addHistory, updateHistory } from '@/lib/company';
+import { actorOf, changeSummary, mergeSummary, continuesEntry, approxDocBytes, DOC_LIMIT_BYTES, fmtKB } from '@/domain/team';
 import { getFinalItem } from '@/lib/catalog';
 import { migrateEstimate } from '@/domain/estimate/migrate';
 import { withPlanLoose } from '@/domain/plans/loose';
@@ -129,6 +132,11 @@ const AUTOSAVE_MS = 2500;     // save this long after the last change
 
 export function ProjectProvider({ children, initialProjectId = null }) {
     const { user } = useAuth();
+    const { base, perms } = useCompany();
+    // without the Estimator role the project can be seen, not changed
+    const readOnly = !perms?.canEditEstimate;
+    const readOnlyRef = useRef(readOnly);
+    readOnlyRef.current = readOnly;
     const [projectId, setProjectId] = useState(initialProjectId);
     const [projectData, setProjectData] = useState(null);
     const [projectsList, setProjectsList] = useState([]);
@@ -142,6 +150,8 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     const [savedEstimate, setSavedEstimate] = useState(null);
     const [historySize, setHistorySize] = useState({ past: 0, future: 0 });
     const [appId, setAppId] = useState(null);
+    // size of the project document as last saved (Firestore allows 1 MB)
+    const [projectBytes, setProjectBytes] = useState(0);
 
     const dataRef = useRef(projectData);
     dataRef.current = projectData;
@@ -163,15 +173,17 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         syncHistorySize();
     }, [syncHistorySize]);
 
+    // appId is the company's base path (companies/{cid}); templates and note
+    // images live under it too
     useEffect(() => {
-        setAppId(user ? user.uid : null);
-    }, [user]);
+        setAppId(user && base ? base : null);
+    }, [user, base]);
 
-    const getProjectsCollectionPath = useCallback(() => (appId ? `artifacts/${appId}/projects` : null), [appId]);
-    const getProjectPath = useCallback((pId) => (appId && pId ? `artifacts/${appId}/projects/${pId}` : null), [appId]);
+    const getProjectsCollectionPath = useCallback(() => (appId ? `${appId}/projects` : null), [appId]);
+    const getProjectPath = useCallback((pId) => (appId && pId ? `${appId}/projects/${pId}` : null), [appId]);
 
-    const fetchProjectsList = useCallback(async (currentUserId) => {
-        const collectionPath = currentUserId ? `artifacts/${currentUserId}/projects` : null;
+    const fetchProjectsList = useCallback(async (basePath) => {
+        const collectionPath = basePath ? `${basePath}/projects` : null;
         if (!collectionPath) return;
         setIsListLoading(true);
         try {
@@ -181,6 +193,8 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                 id: d.id,
                 name: d.data().name || 'Untitled',
                 updatedAt: d.data().updatedAt?.toDate(),
+                updatedBy: d.data().updatedBy || null,
+                sizeBytes: d.data().sizeBytes || 0,
             })));
         } catch (error) {
             console.error('Error fetching projects list:', error);
@@ -192,12 +206,15 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
     const createNewProject = useCallback(async (name) => {
         const collectionPath = getProjectsCollectionPath();
-        if (!user || !collectionPath) return null;
+        if (!user || !collectionPath || readOnlyRef.current) return null;
         setIsSaving(true);
         try {
+            const actor = actorOf(user);
             const docRef = await addDoc(collection(db, collectionPath), {
                 name: name || 'Untitled Project',
                 ownerId: user.uid,
+                createdBy: actor,
+                updatedBy: actor,
                 createdAt: Timestamp.now(),
                 updatedAt: Timestamp.now(),
                 estimateData: blankEstimateData(),
@@ -229,6 +246,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         setSavedEstimate(null);
         setSaveError(null);
         resetHistory();
+        histEntryRef.current = null;
         setProjectId(pId);
 
         try {
@@ -273,6 +291,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                 data.estimateData = withPlanLoose(migrated);
                 setProjectData(data);
                 setSavedEstimate(migrated);
+                setProjectBytes(approxDocBytes(docSnap.data()));
                 setLastSavedAt(data.updatedAt?.toDate?.() || null);
             } else {
                 console.log('No such project document! Cannot load:', pId);
@@ -290,10 +309,34 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
     /* ── saving ─────────────────────────────────────────────────────── */
     const savingRef = useRef(false);
+    const savedEstimateRef = useRef(null);
+    savedEstimateRef.current = savedEstimate;
+    // the history entry this session keeps adding to: { id, by, atMs, sections }
+    const histEntryRef = useRef(null);
+    const writeHistory = useCallback(async (path, prevEst, nextEst, at) => {
+        const sections = changeSummary(prevEst, nextEst);
+        if (!sections.length) return;
+        const actor = actorOf(user);
+        const now = at.toMillis();
+        const last = histEntryRef.current;
+        try {
+            if (continuesEntry(last, user.uid, now) && last.path === path) {
+                const merged = mergeSummary(last.sections, sections);
+                await updateHistory(path, last.id, { sections: merged, at, by: actor });
+                histEntryRef.current = { ...last, sections: merged, atMs: now };
+            } else {
+                const id = await addHistory(path, { by: actor, at, startedAt: at, sections });
+                histEntryRef.current = { id, path, by: actor, atMs: now, sections };
+            }
+        } catch (e) {
+            console.warn('History entry not written:', e);
+        }
+    }, [user]);
+
     const saveProject = useCallback(async () => {
         const data = dataRef.current;
         const pId = projectIdRef.current;
-        if (!user || !pId || !data || savingRef.current) return false;
+        if (!user || !pId || !data || savingRef.current || readOnlyRef.current) return false;
         const path = getProjectPath(pId);
         if (!path) return false;
 
@@ -302,19 +345,30 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         const estimate = data.estimateData;
         try {
             const updatedAt = Timestamp.now();
-            await setDoc(doc(db, path), {
+            const updatedBy = actorOf(user);
+            const before = savedEstimateRef.current;
+            const record = {
                 ...data,
                 estimateData: slimEstimate(estimate),
                 updatedAt,
+                updatedBy,
                 createdAt: data.createdAt || updatedAt,
-            });
+            };
+            const bytes = approxDocBytes(record);
+            record.sizeBytes = bytes;
+            setProjectBytes(bytes);
+            if (bytes > DOC_LIMIT_BYTES) {
+                throw new Error(`The project is ${fmtKB(bytes)}, over the 1 MB a project can hold. Remove unused plan walls or levels, or split the project.`);
+            }
+            await setDoc(doc(db, path), record);
+            writeHistory(path, before, estimate, updatedAt);
             // keep the in-memory estimate as is (edits made while saving stay unsaved)
             setSavedEstimate(estimate);
             setSaveError(null);
             setLastSavedAt(updatedAt.toDate());
-            setProjectData((p) => (p ? { ...p, updatedAt } : p));
+            setProjectData((p) => (p ? { ...p, updatedAt, updatedBy } : p));
             setProjectsList((list) => list
-                .map((p) => (p.id === pId ? { ...p, updatedAt: updatedAt.toDate() } : p))
+                .map((p) => (p.id === pId ? { ...p, updatedAt: updatedAt.toDate(), updatedBy, sizeBytes: bytes } : p))
                 .sort((a, b) => b.updatedAt - a.updatedAt));
             return true;
         } catch (error) {
@@ -325,12 +379,13 @@ export function ProjectProvider({ children, initialProjectId = null }) {
             savingRef.current = false;
             setIsSaving(false);
         }
-    }, [user, getProjectPath]);
+    }, [user, getProjectPath, writeHistory]);
 
-    const isDirty = Boolean(projectData && savedEstimate && projectData.estimateData !== savedEstimate);
+    // a viewer's screen may refresh numbers, but nothing of theirs is saved
+    const isDirty = !readOnly && Boolean(projectData && savedEstimate && projectData.estimateData !== savedEstimate);
     dirtyRef.current = isDirty;
     saveRef.current = saveProject;
-    const saveStatus = isSaving ? 'saving' : saveError ? 'error' : isDirty ? 'dirty' : 'saved';
+    const saveStatus = readOnly ? 'readonly' : isSaving ? 'saving' : saveError ? 'error' : isDirty ? 'dirty' : 'saved';
 
     // autosave a moment after the last change; retried after an error
     useEffect(() => {
@@ -354,6 +409,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
      * changes made inside runSilently (automatic defaults).
      */
     const updateProject = useCallback((updaterFn) => {
+        if (readOnlyRef.current) return;
         const silent = silentRef.current;
         setProjectData((prevData) => {
             if (!prevData) return null;
@@ -383,6 +439,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     }, []);
 
     const undo = useCallback(() => {
+        if (readOnlyRef.current) return false;
         const cur = dataRef.current;
         const prev = pastRef.current.pop();
         if (!cur || !prev) return false;
@@ -394,6 +451,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     }, [syncHistorySize]);
 
     const redo = useCallback(() => {
+        if (readOnlyRef.current) return false;
         const cur = dataRef.current;
         const next = futureRef.current.pop();
         if (!cur || !next) return false;
@@ -408,7 +466,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
     const refreshProjectPrices = useCallback(async () => {
         const data = dataRef.current;
-        if (!data) return;
+        if (!data || readOnlyRef.current) return;
         setIsSaving(true);
         try {
             const newEstimateData = JSON.parse(JSON.stringify(data.estimateData));
@@ -458,13 +516,13 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     // document or a permission error does not trigger an endless reload loop.
     const attemptedLoadRef = useRef(null);
     useEffect(() => {
-        if (initialProjectId && !projectData && !isLoading && user?.uid) {
-            const key = `${user.uid}:${initialProjectId}`;
+        if (initialProjectId && !projectData && !isLoading && user?.uid && appId) {
+            const key = `${appId}:${initialProjectId}`;
             if (attemptedLoadRef.current === key) return;
             attemptedLoadRef.current = key;
             loadProject(initialProjectId);
         }
-    }, [initialProjectId, projectData, isLoading, user?.uid, loadProject]);
+    }, [initialProjectId, projectData, isLoading, user?.uid, appId, loadProject]);
 
     // money shows in the open project's currency (set before the pages render)
     setCurrency(currencyOf(projectData?.estimateData?.summaryInfo));
@@ -499,10 +557,12 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         saveError,
         lastSavedAt,
         isListLoading,
+        readOnly,
+        projectBytes,
     }), [
         projectId, projectData, projectsList, appId, fetchProjectsList, createNewProject,
         loadProject, saveProject, updateEstimateData, updateProject, runSilently, undo, redo, historySize,
-        refreshProjectPrices, isLoaded, isLoading, isSaving, isDirty, saveStatus, saveError, lastSavedAt, isListLoading,
+        refreshProjectPrices, isLoaded, isLoading, isSaving, isDirty, saveStatus, saveError, lastSavedAt, isListLoading, readOnly, projectBytes,
     ]);
 
     return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;

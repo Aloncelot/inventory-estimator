@@ -1,11 +1,12 @@
 // src/lib/laborTemplates.js
-// Labor templates of a user (or, later, a company): crew, rates, production
+// Labor templates of the company: crew, rates, production
 // times and level factors, so every project starts from the company's own.
-// One document each under artifacts/{uid}/laborTemplates.
+// One document each under companies/{cid}/laborTemplates.
 import { collection, doc, getDocs, setDoc, addDoc, deleteDoc, orderBy, query, Timestamp } from 'firebase/firestore';
 import { db } from './firebase';
 
-const path = (uid) => `artifacts/${uid}/laborTemplates`;
+// uid here is the company's base path (companies/{cid})
+const path = (uid) => `${uid}/laborTemplates`;
 
 export async function listLaborTemplates(uid) {
   if (!uid) return [];

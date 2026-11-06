@@ -5,12 +5,14 @@ import { useMemo, useState } from 'react';
 import { FolderOpen, RefreshCw, Search } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import { PageHeader } from '@/components/ui/mat';
+import { fmtKB } from '@/domain/team';
 
 export default function ProjectView({ onOpened }) {
-  const { projectsList, fetchProjectsList, createNewProject, loadProject, isListLoading, isSaving, appId, projectId } = useProject();
+  const { projectsList, fetchProjectsList, createNewProject, loadProject, isListLoading, isSaving, appId, projectId, readOnly } = useProject();
   const [newName, setNewName] = useState('');
   const [filter, setFilter] = useState('');
   const isReady = Boolean(appId);
+  const canCreate = isReady && !readOnly;
 
   const rows = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -19,7 +21,7 @@ export default function ProjectView({ onOpened }) {
 
   const create = async (e) => {
     e.preventDefault();
-    if (!newName.trim() || isSaving || !isReady) return;
+    if (!newName.trim() || isSaving || !canCreate) return;
     const id = await createNewProject(newName.trim());
     if (id) {
       setNewName('');
@@ -39,6 +41,7 @@ export default function ProjectView({ onOpened }) {
       <PageHeader icon={FolderOpen} title="Projects" meta={`${projectsList.length} saved`} />
 
       <form onSubmit={create} className="toolbar" style={{ paddingTop: 0 }}>
+        {readOnly ? <span className="ew-subtle">View only: creating and editing projects needs the Estimator role.</span> : null}
         <input
           className="ew-input"
           style={{ width: 280 }}
@@ -46,9 +49,10 @@ export default function ProjectView({ onOpened }) {
           onChange={(e) => setNewName(e.target.value)}
           placeholder="New project name"
           aria-label="New project name"
-          disabled={isSaving || !isReady}
+          disabled={isSaving || !canCreate}
+          hidden={readOnly}
         />
-        <button type="submit" className="ew-btn ew-btn--primary" disabled={!newName.trim() || isSaving || !isReady}>
+        <button type="submit" className="ew-btn ew-btn--primary" hidden={readOnly} disabled={!newName.trim() || isSaving || !canCreate}>
           {isSaving ? 'Creating…' : 'Create project'}
         </button>
         <span style={{ flex: 1 }} />
@@ -63,7 +67,7 @@ export default function ProjectView({ onOpened }) {
 
       <div className="ew-card" style={{ padding: '0 6px' }}>
         <div className="proj-row ew-head" style={{ borderBottom: '1px solid var(--border-strong)' }}>
-          <span>Project</span><span>Last saved</span><span />
+          <span>Project</span><span>Last change</span><span />
         </div>
         {!isReady ? (
           <div className="empty-state">Loading your account…</div>
@@ -79,7 +83,7 @@ export default function ProjectView({ onOpened }) {
                 <button type="button" className="ew-link" style={{ textAlign: 'left', textDecoration: current ? 'none' : undefined, fontWeight: current ? 700 : 500 }} onClick={() => open(p.id)} disabled={current}>
                   {p.name || 'Untitled'}
                 </button>
-                <span className="ew-subtle">{p.updatedAt ? p.updatedAt.toLocaleString() : '—'}</span>
+                <span className="ew-subtle">{p.updatedAt ? p.updatedAt.toLocaleString() : '—'}{p.updatedBy ? ` · ${p.updatedBy.name || p.updatedBy.email}` : ''}{p.sizeBytes ? ` · ${fmtKB(p.sizeBytes)}` : ''}</span>
                 {current ? <span className="ew-subtle" style={{ textAlign: 'right' }}>Open</span> : (
                   <button type="button" className="ew-btn" onClick={() => open(p.id)}>Open</button>
                 )}

@@ -1,6 +1,6 @@
 // src/lib/noteImages.js
 // Images attached to row notes (screenshots of plan details).
-// Each image is its own Firestore document under artifacts/{uid}/noteImages,
+// Each image is its own Firestore document under companies/{cid}/noteImages,
 // so the project document stays small; the note keeps only { id, name }.
 // Images are resized/compressed in the browser to stay under Firestore's
 // 1 MB document limit (no Firebase Storage bucket needed).
@@ -53,7 +53,7 @@ export async function saveNoteImage(uid, file) {
   const { dataUrl, width, height } = await compressImage(file);
   const id = newId();
   const name = file.name && file.name !== 'image.png' ? file.name : `Screenshot ${new Date().toLocaleString('en-US')}`;
-  await setDoc(doc(db, `artifacts/${uid}/noteImages/${id}`), { dataUrl, name, width, height, createdAt: Timestamp.now() });
+  await setDoc(doc(db, `${uid}/noteImages/${id}`), { dataUrl, name, width, height, createdAt: Timestamp.now() });
   cache.set(id, Promise.resolve(dataUrl));
   return { id, name };
 }
@@ -61,7 +61,7 @@ export async function saveNoteImage(uid, file) {
 export function loadNoteImage(uid, id) {
   if (!uid || !id) return Promise.resolve(null);
   if (!cache.has(id)) {
-    const p = getDoc(doc(db, `artifacts/${uid}/noteImages/${id}`))
+    const p = getDoc(doc(db, `${uid}/noteImages/${id}`))
       .then((snap) => (snap.exists() ? snap.data().dataUrl : null))
       .catch((e) => { cache.delete(id); throw e; });
     cache.set(id, p);

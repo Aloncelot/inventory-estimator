@@ -12,9 +12,25 @@ import {
   setDoc,
   updateDoc,
   arrayUnion,
-  serverTimestamp
+  serverTimestamp,
+  limit,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
+
+// Each company keeps its own price list: materials, sizes, suppliers and prices
+// under companies/{cid}/families | priceLists | itemVendorLookup. The top-level
+// collections of the same names are only the starter list a new company can copy.
+let BASE = null;
+/** Called by the company context; switching companies empties the caches. */
+export function setCatalogBase(base) {
+  if (base === BASE) return;
+  BASE = base || null;
+  cache.clear();
+  inflight.clear();
+}
+export const catalogPath = (name) => (BASE ? `${BASE}/${name}` : `__no_company__/x/${name}`);
+const C = catalogPath;
 
 // --- Cache Functions ---
 const cache = new Map();
@@ -53,7 +69,7 @@ export async function getFamilies() {
   if (getFromCache(cacheKey)) return getFromCache(cacheKey);
   try {
     return await once(cacheKey, async () => {
-      const q = query(collection(db, 'families'), orderBy('label'));
+      const q = query(collection(db, C('families')), orderBy('label'));
       const snapshot = await getDocs(q);
       const families = snapshot.docs.map(doc => ({ value: doc.id, label: doc.data().label }));
       return setInCache(cacheKey, families);
@@ -64,7 +80,7 @@ export async function getFamilies() {
 export async function getAllVendors() {
   const cacheKey = 'all_vendors';
   try {
-    const q = query(collection(db, 'priceLists'), orderBy('displayName'));
+    const q = query(collection(db, C('priceLists')), orderBy('displayName'));
     const snapshot = await getDocs(q);
     const vendors = snapshot.docs.map(doc => ({ value: doc.id, label: doc.data().displayName || doc.id }));
     return setInCache(cacheKey, vendors);
@@ -80,7 +96,7 @@ export async function getSizesForFamily(familySlug) {
 
 async function loadSizesForFamily(familySlug) {
   {
-    const q = query(collection(db, 'itemVendorLookup'), where('familySlug', '==', familySlug));
+    const q = query(collection(db, C('itemVendorLookup')), where('familySlug', '==', familySlug));
     const snapshot = await getDocs(q);
     const sizes = snapshot.docs.map(doc => {
       const data = doc.data();
@@ -97,7 +113,7 @@ export async function getVendorsForIds(vendorIds) {
    vendorIds.forEach(id => { const c = getFromCache(`vendor:${id}`); if(c) cachedVendors.push(c); else vendorsToFetch.push(id); });
    if (vendorsToFetch.length === 0) return cachedVendors;
    try {
-     const q = query(collection(db, 'priceLists'), where(documentId(), 'in', vendorsToFetch));
+     const q = query(collection(db, C('priceLists')), where(documentId(), 'in', vendorsToFetch));
      const snapshot = await getDocs(q);
      const newVendors = snapshot.docs.map(doc => {
        const v = { value: doc.id, label: doc.data().displayName };
@@ -116,7 +132,7 @@ export async function getFinalItem({ familyLabel, sizeLabel, vendorId }) {
    if (inflight.has(cacheKey)) return inflight.get(cacheKey);
    const p = (async () => {
      try {
-       const docSnap = await getDoc(doc(db, 'priceLists', vendorId, 'items', docId));
+       const docSnap = await getDoc(doc(db, C('priceLists'), vendorId, 'items', docId));
        return docSnap.exists() ? docSnap.data() : null;
      } catch (e) { return null; } finally { inflight.delete(cacheKey); }
    })();
@@ -131,7 +147,7 @@ export async function getPricesForItem(itemData) {
       try {
         const vendorInfo = getFromCache(`vendor:${vendorId}`) || (await getVendorsForIds([vendorId]))[0];
         const itemPriceDoc = await getFinalItem({ familyLabel: familyDisplay, sizeLabel: sizeDisplay, vendorId });
-        return { vendorName: vendorInfo?.label || vendorId, ...itemPriceDoc };
+        return { vendorName: vendorInfo?.label || vendorId, ...itemPriceDoc, vendorId };
       } catch (e) { return null; }
     });
     return (await Promise.all(pricePromises)).filter(Boolean);
@@ -144,7 +160,7 @@ export async function updateItemPrice(updatedItem) {
    const docId = slug(joinKey);
    const cacheKey = `item:${vendorId}:${docId}`;
    try {
-     const itemRef = doc(db, 'priceLists', vendorId, 'items', docId);
+     const itemRef = doc(db, C('priceLists'), vendorId, 'items', docId);
      const docSnap = await getDoc(itemRef);
      if (docSnap.exists()) {
        const oldData = docSnap.data();
@@ -169,7 +185,7 @@ export async function createItemPrice(newItem) {
     supplierName = newItem.newVendorName;
     vendorId = slug(supplierName);
     try {
-      await setDoc(doc(db, 'priceLists', vendorId), {
+      await setDoc(doc(db, C('priceLists'), vendorId), {
         displayName: supplierName, updatedAt: serverTimestamp()
       }, { merge: true });
       cache.delete('all_vendors'); 
@@ -184,14 +200,14 @@ export async function createItemPrice(newItem) {
   const itemLookupId = `${familySlug}_${sizeSlug}`; 
   const cacheKey = `item:${vendorId}:${docId}`;
   try {
-    const itemRef = doc(db, 'priceLists', vendorId, 'items', docId);
+    const itemRef = doc(db, C('priceLists'), vendorId, 'items', docId);
     const { isNewVendor, newVendorName, ...dataToSave } = newItem;
     Object.assign(dataToSave, {
       vendorId, supplierName, joinKey, familySlug, sizeSlug,
       updatedAt: serverTimestamp(), source: 'manual-create'
     });
     await setDoc(itemRef, dataToSave, { merge: true });
-    const lookupRef = doc(db, 'itemVendorLookup', itemLookupId);
+    const lookupRef = doc(db, C('itemVendorLookup'), itemLookupId);
     await updateDoc(lookupRef, { vendorIds: arrayUnion(vendorId) });
     cache.delete(cacheKey); 
     console.log(`Created new price for ${docId}`);
@@ -219,7 +235,7 @@ export async function createNewMaterial(newItemData) {
 
   // 2. Create/Ensure Family Exists
   if (newItemData.isNewFamily) {
-    await setDoc(doc(db, 'families', familySlug), {
+    await setDoc(doc(db, C('families'), familySlug), {
       label: familyName,
       slug: familySlug,
     }, { merge: true });
@@ -230,7 +246,7 @@ export async function createNewMaterial(newItemData) {
 
   // 3. Create the Lookup Document
   // We pass the correct familyDisplay (whether new or existing)
-  await setDoc(doc(db, 'itemVendorLookup', itemLookupId), {
+  await setDoc(doc(db, C('itemVendorLookup'), itemLookupId), {
     familyDisplay: familyName,
     sizeDisplay: newItemData.sizeDisplay,
     familySlug: familySlug,
@@ -245,4 +261,47 @@ export async function createNewMaterial(newItemData) {
   };
   
   await createItemPrice(dataForPrice);
+}
+
+/* ── starter list ───────────────────────────────────────────────────── */
+
+/** True when the company has no supplier in its price list yet. */
+export async function catalogIsEmpty() {
+  const snap = await getDocs(query(collection(db, C('priceLists')), limit(1)));
+  return snap.empty;
+}
+
+/**
+ * Copy the starter price list (top-level collections) into the company, to
+ * edit from there. Existing company documents with the same id are
+ * overwritten by merge, so running it twice does no harm.
+ */
+export async function copyStarterCatalog({ base = BASE, onProgress } = {}) {
+  if (!base) throw new Error('No company is open.');
+  const C = (name) => `${base}/${name}`;
+  const counts = { families: 0, suppliers: 0, prices: 0, items: 0 };
+  let batch = writeBatch(db); let ops = 0;
+  const put = async (ref, data) => {
+    batch.set(ref, data, { merge: true }); ops += 1;
+    if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; onProgress?.({ ...counts }); }
+  };
+  for (const d of (await getDocs(collection(db, 'families'))).docs) { await put(doc(db, C('families'), d.id), d.data()); counts.families += 1; }
+  for (const d of (await getDocs(collection(db, 'itemVendorLookup'))).docs) { await put(doc(db, C('itemVendorLookup'), d.id), d.data()); counts.items += 1; }
+  for (const v of (await getDocs(collection(db, 'priceLists'))).docs) {
+    await put(doc(db, C('priceLists'), v.id), v.data()); counts.suppliers += 1;
+    for (const it of (await getDocs(collection(db, `priceLists/${v.id}/items`))).docs) {
+      await put(doc(db, C('priceLists'), v.id, 'items', it.id), it.data()); counts.prices += 1;
+    }
+  }
+  if (ops) await batch.commit();
+  clearCatalogCache();
+  onProgress?.({ ...counts });
+  return counts;
+}
+
+/** Supplier prices of one material, by its key (familySlug_sizeSlug). */
+export async function getItemPrices(itemKey) {
+  const snap = await getDoc(doc(db, C('itemVendorLookup'), itemKey));
+  if (!snap.exists()) return [];
+  return getPricesForItem(snap.data());
 }
