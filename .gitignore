@@ -17,12 +17,15 @@
 .next/
 node_modules/
 .dist/
-.out/
+/out/
 .turbo/
 .vercel/
 
 # production
 /build
+
+# firebase deploy cache
+.firebase/
 
 # misc
 .DS_Store

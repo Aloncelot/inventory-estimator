@@ -5,12 +5,12 @@ import { computeManufacture, STUD_MULTIPLIER_ADDON_PER_LF, TALL_WALL_ADDON_PER_L
 import { RotateCcw } from 'lucide-react';
 import { GroupBlock, NumInput } from "@/components/ui/mat";
 import { useConfirm } from "@/components/ui/confirm";
+import { formatMoney } from "@/domain/lib/currency";
 
 // rates and add-on rules live in src/domain/estimate (computeManufacture)
 export { STUD_MULTIPLIER_ADDON_PER_LF, TALL_WALL_ADDON_PER_LF, TALL_WALL_LIMIT_FT, sectionAddonPerLF } from '@/domain/estimate';
 
-const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const money = (n) => Number.isFinite(Number(n)) ? USD.format(Number(n)) : "$0.00";
+const money = (n) => formatMoney(n);
 const fmt = (n) => Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US") : "0";
 
 

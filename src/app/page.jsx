@@ -5,7 +5,6 @@ import { useEffect } from 'react';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import { ProjectProvider, useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/AuthContext';
-import { Hammer, ClipboardList, Download } from 'lucide-react';
 
 import Sidebar from '@/components/Sidebar';
 import LoginView from '@/components/LoginView';
@@ -19,13 +18,12 @@ import LooseMaterialView from '@/components/LooseMaterialView';
 import QuoteView from '@/components/QuoteView';
 import LayoutView from '@/components/LayoutView';
 import PlanTakeoffView from '@/components/PlanTakeoffView';
+import LaborView from '@/components/LaborView';
+import TakeoffView from '@/components/TakeoffView';
 import { PageHeader } from '@/components/ui/mat';
 import { ConfirmProvider } from '@/components/ui/confirm';
 
 const SOON = {
-  labor: { title: 'Labor', icon: Hammer },
-  takeoff: { title: 'Takeoff list', icon: ClipboardList },
-  export: { title: 'Export', icon: Download },
 };
 
 // Estimate views stay mounted (hidden when inactive) so scroll position and
@@ -66,6 +64,8 @@ function Shell({ ui, setUi }) {
       case 'quote': return <QuoteView />;
       case 'layout': return <LayoutView />;
       case 'plans': return <PlanTakeoffView />;
+      case 'labor': return <LaborView />;
+      case 'takeoff': return <TakeoffView />;
       default:
         if (SOON[active]) {
           return (

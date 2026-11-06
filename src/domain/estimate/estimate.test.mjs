@@ -182,7 +182,7 @@ describe('panel nails (per level)', () => {
     const upper = computePanelNails({}, { plates, isGround: false });
     assert.ok(!upper.baseRows.some((r) => r.group === 'concrete'));
     const ground = computePanelNails({}, { plates, isGround: true });
-    assert.deepEqual(ground.baseRows.filter((r) => r.group === 'concrete').map((r) => r.key), ['drivePins', 'epoxy', 'foamSill']);
+    assert.deepEqual(ground.baseRows.filter((r) => r.group === 'concrete').map((r) => r.key), ['drivePins', 'epoxy']);
     const forced = computePanelNails({ onConcrete: true }, { plates });
     assert.ok(forced.onConcrete);
   });
@@ -196,7 +196,6 @@ describe('panel nails (per level)', () => {
     assert.equal(r.anchors, 24);
     assert.ok(Math.abs(row.epoxy.count - 18.555) < 0.01);
     assert.equal(row.epoxy.qtyFinal, 2);
-    assert.equal(row.foamSill.qtyFinal, 2);                // 96 ÷ 50'
   });
 
   test('PT bottom plates built into the panels count for the concrete items too', () => {

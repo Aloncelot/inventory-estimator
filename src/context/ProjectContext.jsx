@@ -8,6 +8,7 @@ import { getFinalItem } from '@/lib/catalog';
 import { migrateEstimate } from '@/domain/estimate/migrate';
 import { withPlanLoose } from '@/domain/plans/loose';
 import { slimEstimate, slimSelection } from '@/domain/lib/selection';
+import { setCurrency, currencyOf } from '@/domain/lib/currency';
 
 const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
 
@@ -464,6 +465,9 @@ export function ProjectProvider({ children, initialProjectId = null }) {
             loadProject(initialProjectId);
         }
     }, [initialProjectId, projectData, isLoading, user?.uid, loadProject]);
+
+    // money shows in the open project's currency (set before the pages render)
+    setCurrency(currencyOf(projectData?.estimateData?.summaryInfo));
 
     const value = useMemo(() => ({
         projectId,

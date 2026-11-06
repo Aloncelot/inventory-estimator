@@ -12,6 +12,9 @@
 // - each opening: kings (full height) and jacks (to the header) on both sides,
 //   a built-up header (opening + jacks) across the wall, cripples above it at
 //   the stud layout; windows also get a flat sill and cripples under it;
+// - corners and T's: the wall that runs through gets extra full-height studs
+//   (corner: next to its end; T: on both sides of the wall that butts into it),
+//   as many as the plan's corner / T setting, counted with the studs;
 // - the bottom plate stops at doors;
 // - blocking rows = ceil(height / 4) − 1 between full-height members, not in openings;
 // - exterior walls and shear walls are sheathed with 4×8 sheets on one face
@@ -21,7 +24,8 @@
 import { panelize, studPositions, sheetLayout } from '../estimate/layout';
 import { computeWallSection, pieceLength } from '../estimate';
 import { cutLinear, cutSheets } from '../lib/cutting';
-import { normWall, wallLengthFt, KIND_LABEL, groupRank, postWidthIn } from './sync';
+import { normWall, wallLengthFt, KIND_LABEL, groupRank, postWidthIn, planJunctions } from './sync';
+import { JUNCTION_DEFAULTS } from './junctions';
 
 const n = (v) => Number(v) || 0;
 export const PLATE = 1.5;
@@ -97,9 +101,32 @@ export function frameWall(w) {
     at = next;
   }
 
+  // corner and T studs where other walls meet this one
+  const backers = [];
+  for (const j of w.junctions || []) {
+    const c = Math.max(0, Math.round(n(j.count)));
+    if (!c || L < STUD) continue;
+    const at = Math.max(0, Math.min(L, n(j.at)));
+    const xs = [];
+    if (j.type === 'corner') {
+      // next to the end stud, going in
+      const inward = at < L / 2 ? 1 : -1;
+      const end = inward > 0 ? STUD : L - 2 * STUD;
+      for (let i = 0; i < c; i += 1) xs.push(end + inward * i * STUD);
+    } else {
+      // both sides of the butting wall, alternating
+      const half = Math.max(STUD, n(j.depthIn) || 3.5) / 2;
+      for (let i = 0; i < c; i += 1) {
+        const k2 = Math.floor(i / 2);
+        xs.push(i % 2 ? at + half + k2 * STUD : at - half - (k2 + 1) * STUD);
+      }
+    }
+    for (const x of xs) backers.push(Math.max(0, Math.min(L - STUD, x)));
+  }
+
   const members = [];
   const add = (t, a0, a1, z0, z1, c0 = 0, c1 = d) => { if (a1 - a0 > 0.01 && z1 - z0 > 0.01) members.push({ t, a0, a1, z0, z1, c0, c1 }); };
-  const counts = { studs: 0, kings: 0, jacks: 0, cripples: 0, headers: 0, sills: 0, posts: 0 };
+  const counts = { studs: 0, kings: 0, jacks: 0, cripples: 0, headers: 0, sills: 0, posts: 0, backers: 0 };
   const cuts = { bottomPlate: [], topPlate: [], studs: [], openStuds: [], cripples: [], headers: [], blocking: [], fireBlocking: [] };
 
   for (const p of panels) {
@@ -128,6 +155,12 @@ export function frameWall(w) {
       else for (let i = 0; i < p.plies; i += 1) add('post', p.a0 + i * STUD, p.a0 + (i + 1) * STUD, PLATE, studTop);
       full.push([p.a0, p.a1]);
       counts.posts += 1;
+    }
+    // corner and T studs in this panel
+    for (const x of backers.filter((b) => b >= p0 - 0.01 && b < p1 - 0.01)) {
+      add('backer', x, x + STUD, PLATE, studTop);
+      cuts.studs.push(studLen); counts.backers += 1;
+      full.push([x, x + STUD]);
     }
     // openings in this panel
     for (const o of ops.filter((x) => x.a0 >= p0 - 0.01 && x.a1 <= p1 + 0.01)) {
@@ -197,7 +230,7 @@ export function frameWall(w) {
       sheets.push({ ...cut, pieces, cutouts });
     }
   }
-  return { posts, lengthIn: L, heightIn: H, depthIn: d, studLen, studTop, blockRows, fireRows, panels, members, sheets, openings: ops, counts, cuts };
+  return { posts, lengthIn: L, heightIn: H, depthIn: d, studLen, studTop, blockRows, fireRows, panels, members, sheets, openings: ops, counts, cuts, backers };
 }
 
 function crosses(ax, ay, bx, by, w) {
@@ -252,6 +285,25 @@ export function planModel(level, { panelLenFt = 8, sheathing = 'vertical' } = {}
   const far = Math.hypot(...pts.reduce((m, p) => [Math.max(m[0], p[0] - minX), Math.max(m[1], p[1] - minY)], [0, 0])) * 2 + 120;
   const escapes = (id, x, y, dx, dy) => !segs.some((o) => o.id !== id && crosses(x, y, x + dx * far, y + dy * far, o));
 
+  // corners and T's: where on each through wall, and how many studs
+  const jSet = { ...JUNCTION_DEFAULTS, ...(plan.junctions || {}) };
+  const byId = new Map(walls.map((w) => [w.id, w]));
+  const wallJn = new Map();
+  if (!plan.junctions?.off) {
+    for (const j of planJunctions(plan)) {
+      const w = byId.get(j.wallId);
+      if (!w) continue;
+      const gl = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+      const scale = (wallLengthFt(w, k) * 12) / (gl * s || 1); // a typed length stretches the wall
+      const at = (((j.x - w.x1) * (w.x2 - w.x1) + (j.y - w.y1) * (w.y2 - w.y1)) / gl) * s * scale;
+      const other = byId.get(j.otherId);
+      const depthIn = other ? STUD_DEPTH[normWall(other).size] || 3.5 : 3.5;
+      const list = wallJn.get(w.id) || [];
+      list.push({ type: j.type, at, count: n(jSet[j.type]), depthIn });
+      wallJn.set(w.id, list);
+    }
+  }
+
   const parts = [];
   for (const w of walls) {
     const nw = normWall(w);
@@ -292,7 +344,7 @@ export function planModel(level, { panelLenFt = 8, sheathing = 'vertical' } = {}
       const frame = frameWall({
         lengthIn: L, heightIn, depthIn: depth,
         spacing: n(sec?.studSpacingIn) || 16, mult: n(sec?.studMultiplier) || 1,
-        openings, posts: i === 0 ? wallPosts : [], panelIn: n(panelLenFt) * 12 || 96, sheathed, orientation: sheathing,
+        openings, posts: i === 0 ? wallPosts : [], junctions: i === 0 ? wallJn.get(w.id) || [] : [], panelIn: n(panelLenFt) * 12 || 96, sheathed, orientation: sheathing,
         blocking: p.kind === 'exterior' || p.kind === 'bearing',
       });
       // local frame: a along the wall from its start, c across (from face −d/2 to +d/2)

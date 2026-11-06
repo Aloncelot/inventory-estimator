@@ -5,11 +5,11 @@
 
 export const DEFAULT_COLORS = {
   exterior: '#c0392b', bearing: '#d68910', shear: '#8e44ad', partition: '#2e86c1', knee: '#16a085',
-  window: '#e5b800', door: '#00a3c4', post: '#3d3a35', hardware: '#d35400', blocking: '#27ae60', sheartag: '#8e44ad', missed: '#e5007a',
+  window: '#e5b800', door: '#00a3c4', post: '#3d3a35', hardware: '#d35400', blocking: '#27ae60', sheartag: '#8e44ad', missed: '#e5007a', structwall: '#ff7a00', junction: '#0b7a75', beam: '#a0522d',
 };
 export const DISPLAY_ITEMS = [
   { key: 'exterior', label: 'Exterior' }, { key: 'bearing', label: 'Bearing' }, { key: 'shear', label: 'Shear wall' },
-  { key: 'partition', label: 'Partition' }, { key: 'knee', label: 'Knee wall' }, { key: 'window', label: 'Windows' }, { key: 'door', label: 'Doors' }, { key: 'post', label: 'Posts' }, { key: 'hardware', label: 'Hardware' }, { key: 'blocking', label: 'Blocking' }, { key: 'sheartag', label: 'Shear tags' }, { key: 'missed', label: 'Not placed' },
+  { key: 'partition', label: 'Partition' }, { key: 'knee', label: 'Knee wall' }, { key: 'window', label: 'Windows' }, { key: 'door', label: 'Doors' }, { key: 'post', label: 'Posts' }, { key: 'hardware', label: 'Hardware' }, { key: 'blocking', label: 'Blocking' }, { key: 'sheartag', label: 'Shear tags' }, { key: 'missed', label: 'Not placed' }, { key: 'structwall', label: 'Structural only' }, { key: 'junction', label: 'Corners & T' }, { key: 'beam', label: 'Beams' },
 ];
 
 export function displayOf(planDisplay) {

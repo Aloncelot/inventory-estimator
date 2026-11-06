@@ -13,12 +13,10 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
+import { formatMoney } from '@/domain/lib/currency';
 
 /* ── formatting ─────────────────────────────────────────────────────────── */
-const USD = new Intl.NumberFormat('en-US', {
-  style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2,
-});
-export const fmtMoney = (n) => (Number.isFinite(Number(n)) ? USD.format(Number(n)) : '$0.00');
+export const fmtMoney = (n) => formatMoney(n); // in the open project's currency (USD / CAD)
 export const fmtQty = (n) => {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';

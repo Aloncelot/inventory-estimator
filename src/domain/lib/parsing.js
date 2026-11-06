@@ -37,5 +37,5 @@ export function unitPriceFrom(item) {
   return 0;
 }
 
-/** Simple currency formatter (USD) */
-export const moneyFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+/** Currency formatter: follows the open project's currency (USD / CAD) */
+export { moneyFormatter as moneyFmt } from "./currency";

@@ -167,6 +167,8 @@ export function detectWalls(page, opts = {}) {
     const v = ((s.x1 + s.x2) / 2) * b.n[0] + ((s.y1 + s.y2) / 2) * b.n[1];
     const rec = { u0: Math.min(ua, ub), u1: Math.max(ua, ub), v, style: s.style };
     b.any.push(rec);
+    // poché: the grey fill a CAD export puts in cut walls, any pen
+    if (s.fill && lum(styleColor(s.style)) < 0.9) (b.fills || (b.fills = [])).push(rec);
     all.push({ ...s, deg });
     if (s.arc || len < minSeg) continue;
     if (s.fill && lum(styleColor(s.style)) > 0.97) continue; // white masks
@@ -213,9 +215,16 @@ export function detectWalls(page, opts = {}) {
         g.va = Math.min(g.va, p.va); g.vb = Math.max(g.vb, p.vb);
         groups.set(r, g);
       });
-      for (const g of groups.values()) {
-        if (g.vb - g.va > tMax * 1.05) continue; // chained into something too thick: not a wall
-        bands.push({ deg: b.deg, d: b.d, n: b.n, style, u0: g.u0, u1: g.u1, v: (g.va + g.vb) / 2, t: g.vb - g.va });
+      const members = new Map();
+      pieces.forEach((p, i) => { const r = find(i); if (!members.has(r)) members.set(r, []); members.get(r).push(p); });
+      for (const [r, g] of groups) {
+        // chained into something too thick (a layered wall next to cabinets,
+        // a wall face touching a counter): split it into the bands that fit
+        // (only bands the wall poché backs: cabinets and fixtures have none)
+        const parts = g.vb - g.va > tMax * 1.05
+          ? splitBand(members.get(r), tMax, minSeg).filter((p) => pocheCover(b.fills, p) >= 0.6)
+          : [g];
+        for (const p of parts) bands.push({ deg: b.deg, d: b.d, n: b.n, style, u0: p.u0, u1: p.u1, v: (p.va + p.vb) / 2, t: p.vb - p.va });
       }
     }
   }
@@ -312,6 +321,50 @@ export function detectWalls(page, opts = {}) {
 }
 
 /**
+ * Pieces of a chained group that is too thick for one wall, regrouped from the
+ * longest piece out: a piece joins a band while the band stays a wall thickness.
+ */
+/** Share of a band's length with wall poché (filled areas) inside it. */
+function pocheCover(fills, g) {
+  if (!fills?.length) return 0;
+  const inBand = fills.filter((f) => f.v >= g.va - 0.3 && f.v <= g.vb + 0.3 && f.u1 > g.u0 && f.u0 < g.u1);
+  // the fill has to span the band across, not sit along one face of it
+  const vs = inBand.map((f) => f.v);
+  if (!vs.length || Math.max(...vs) - Math.min(...vs) < (g.vb - g.va) * 0.7) return 0;
+  const iv = inBand
+    .map((f) => [Math.max(g.u0, f.u0), Math.min(g.u1, f.u1)]).sort((a, b) => a[0] - b[0]);
+  let len = 0, end = -Infinity;
+  for (const [a, b] of iv) { if (b <= end) continue; len += b - Math.max(a, end); end = b; }
+  return len / ((g.u1 - g.u0) || 1);
+}
+
+function splitBand(pieces, tMax, minSeg) {
+  const left = pieces.slice().sort((p, q) => (q.u1 - q.u0) - (p.u1 - p.u0));
+  const used = new Set();
+  const out = [];
+  for (const seed of left) {
+    if (used.has(seed)) continue;
+    used.add(seed);
+    const g = { u0: seed.u0, u1: seed.u1, va: seed.va, vb: seed.vb };
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const p of left) {
+        if (used.has(p)) continue;
+        if (Math.min(g.u1, p.u1) - Math.max(g.u0, p.u0) <= 0) continue;
+        if (p.vb < g.va - 0.01 || p.va > g.vb + 0.01) continue;
+        if (Math.max(g.vb, p.vb) - Math.min(g.va, p.va) > tMax) continue;
+        used.add(p); grew = true;
+        g.u0 = Math.min(g.u0, p.u0); g.u1 = Math.max(g.u1, p.u1);
+        g.va = Math.min(g.va, p.va); g.vb = Math.max(g.vb, p.vb);
+      }
+    }
+    if (g.u1 - g.u0 >= minSeg) out.push(g);
+  }
+  return out;
+}
+
+/**
  * Line styles that most likely draw walls: the heavier pens. Hairlines are
  * furniture, hatching, dimensions and overhead lines; pale fills are shading.
  */
@@ -320,7 +373,8 @@ export function suggestStyles(styleList) {
   const strokes = real.filter((s) => s.width > 0);
   const maxW = Math.max(0, ...strokes.map((s) => s.width));
   return real
-    .filter((s) => (s.width > 0 ? s.width >= maxW * 0.4 : lum(s.color) < 0.5))
+    // fills: dark ones, and the grey poché a CAD export puts in cut walls
+    .filter((s) => (s.width > 0 ? s.width >= maxW * 0.4 : lum(s.color) < 0.85))
     .map((s) => s.style);
 }
 
@@ -361,27 +415,61 @@ function openingEvidence(buckets, all, bands, band, g0, g1, v, t, inPt) {
   return null;
 }
 
-/** Remove walls lying inside a thicker/longer parallel wall (double-drawn bands). */
+/**
+ * Remove walls lying inside a longer parallel wall (double-drawn bands, one
+ * layer of a wall's poché). Of two bands of about one length the thicker one
+ * stays: it is the whole wall.
+ */
 function dropContained(walls, k) {
   const keep = [];
   const sorted = walls.slice().sort((a, b) => b.lengthFt - a.lengthFt);
-  for (const w of sorted) {
-    const inside = keep.some((o) => {
-      if (Math.abs(angleOf(o) - angleOf(w)) > 0.02) return false;
-      const d = [Math.cos(angleOf(o)), Math.sin(angleOf(o))];
-      const n = [-d[1], d[0]];
-      const v = (p) => p[0] * n[0] + p[1] * n[1];
-      const u = (p) => p[0] * d[0] + p[1] * d[1];
-      const half = ((o.thickIn / 12) * k) / 2 + 0.5;
-      if (Math.abs(v([w.x1, w.y1]) - v([o.x1, o.y1])) > half) return false;
-      const a0 = Math.min(u([o.x1, o.y1]), u([o.x2, o.y2])), a1 = Math.max(u([o.x1, o.y1]), u([o.x2, o.y2]));
-      const b0 = Math.min(u([w.x1, w.y1]), u([w.x2, w.y2])), b1 = Math.max(u([w.x1, w.y1]), u([w.x2, w.y2]));
-      return b0 >= a0 - 0.5 && b1 <= a1 + 0.5;
-    });
-    if (!inside) keep.push(w);
+  const frame = (o) => {
+    const d = [Math.cos(angleOf(o)), Math.sin(angleOf(o))];
+    const n = [-d[1], d[0]];
+    return { v: (p) => p[0] * n[0] + p[1] * n[1], u: (p) => p[0] * d[0] + p[1] * d[1] };
+  };
+  const span = (w, u) => { const a = u([w.x1, w.y1]), b = u([w.x2, w.y2]); return [Math.min(a, b), Math.max(a, b)]; };
+  for (let w of sorted) {
+    let drop = false;
+    for (let i = 0; i < keep.length && !drop; i++) {
+      const o = keep[i];
+      if (Math.abs(angleOf(o) - angleOf(w)) > 0.02) continue;
+      const { v, u } = frame(o);
+      const half = ((Math.max(o.thickIn, w.thickIn) / 12) * k) / 2 + 0.5;
+      if (Math.abs(v([w.x1, w.y1]) - v([o.x1, o.y1])) > half) continue;
+      const [a0, a1] = span(o, u), [b0, b1] = span(w, u);
+      if (b0 >= a0 - 0.5 && b1 <= a1 + 0.5) {
+        if (w.thickIn > o.thickIn + 0.5 && w.lengthFt >= o.lengthFt - 0.5) keep[i] = w;
+        drop = true;
+      } else if (Math.min(a1, b1) - Math.max(a0, b0) > 0.5) {
+        // overlapping along part of its length (one wall drawn by two pens):
+        // keep only the part beyond the longer one
+        w = trimWall(w, u, b0 < a0 ? [b0, a0] : [a1, b1], k);
+        if (!w || w.lengthFt < 1.5) drop = true;
+      }
+    }
+    if (!drop) keep.push(w);
   }
   walls.length = 0; walls.push(...keep);
   return walls;
+}
+
+/** A wall cut to the part whose position along u lies in [lo, hi]. */
+function trimWall(w, u, [lo, hi], k) {
+  const ua = u([w.x1, w.y1]), ub = u([w.x2, w.y2]);
+  const L = ub - ua;
+  if (Math.abs(L) < 1e-9) return null;
+  const ta = Math.max(0, Math.min(1, ((L > 0 ? lo : hi) - ua) / L));
+  const tb = Math.max(0, Math.min(1, ((L > 0 ? hi : lo) - ua) / L));
+  const lenFt = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) / k;
+  const startFt = ta * lenFt, endFt = tb * lenFt;
+  return {
+    ...w,
+    x1: w.x1 + (w.x2 - w.x1) * ta, y1: w.y1 + (w.y2 - w.y1) * ta,
+    x2: w.x1 + (w.x2 - w.x1) * tb, y2: w.y1 + (w.y2 - w.y1) * tb,
+    lengthFt: +(endFt - startFt).toFixed(2),
+    openings: (w.openings || []).filter((o) => o.atFt >= startFt && o.atFt + o.widthFt <= endFt).map((o) => ({ ...o, atFt: +(o.atFt - startFt).toFixed(2) })),
+  };
 }
 
 const angleOf = (w) => { let a = Math.atan2(w.y2 - w.y1, w.x2 - w.x1); if (a < 0) a += Math.PI; if (a >= Math.PI - 1e-6) a -= Math.PI; return a; };
@@ -408,7 +496,20 @@ export function mainBuilding(walls, k) {
   }
   const sizes = new Map();
   walls.forEach((w, i) => { const r = find(i); sizes.set(r, (sizes.get(r) || 0) + 1); });
-  return walls.filter((_, i) => sizes.get(find(i)) >= walls.length * 0.1);
+  const big = (i) => sizes.get(find(i)) >= walls.length * 0.1;
+  // a smaller group inside or right next to the building stays too (a unit
+  // whose corridor wall was not found): within 15 ft of the main groups' box
+  const m = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  walls.forEach((_, i) => { if (big(i)) { m.x0 = Math.min(m.x0, box[i].x0); m.y0 = Math.min(m.y0, box[i].y0); m.x1 = Math.max(m.x1, box[i].x1); m.y1 = Math.max(m.y1, box[i].y1); } });
+  const pad = 15 * k;
+  const gbox = new Map();
+  walls.forEach((_, i) => {
+    const r = find(i); const g = gbox.get(r) || { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    g.x0 = Math.min(g.x0, box[i].x0); g.y0 = Math.min(g.y0, box[i].y0); g.x1 = Math.max(g.x1, box[i].x1); g.y1 = Math.max(g.y1, box[i].y1);
+    gbox.set(r, g);
+  });
+  const near = (g) => g.x0 >= m.x0 - pad && g.x1 <= m.x1 + pad && g.y0 >= m.y0 - pad && g.y1 <= m.y1 + pad;
+  return walls.filter((_, i) => big(i) || (sizes.get(find(i)) >= 3 && near(gbox.get(find(i)))));
 }
 
 function segDist(a, b) {

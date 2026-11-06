@@ -29,10 +29,13 @@ import { hardwareCounts, newHardwareType } from '@/domain/plans/hardware';
 import { withPlanLoose, BLOCKING_KINDS } from '@/domain/plans/loose';
 import FloorPanel from '@/components/FloorPanel';
 import StructuralPanel from '@/components/StructuralPanel';
-import { alignSheets, readStructural, placeStructural, removeStructural, UNLABELED_POSTS, SHEAR_DEFAULTS } from '@/domain/plans/structural';
+import SheetPicker from '@/components/SheetPicker';
+import { extractSheet } from '@/lib/pdflib';
+import { alignSheets, readStructural, placeStructural, removeStructural, addStructWalls, UNLABELED_POSTS, SHEAR_DEFAULTS } from '@/domain/plans/structural';
 import { SHEAR_TYPES } from '@/domain/plans/hardware';
 import { onConcrete as isOnConcrete } from '@/domain/plans/loose';
-import { PLAN_KINDS, WALL_SIZES, KIND_LABEL, normWall, isDoubleWall, planGroups, groupKeysOf, wallLengthFt, storeWalls, mergeRedetect } from '@/domain/plans/sync';
+import { PLAN_KINDS, WALL_SIZES, KIND_LABEL, normWall, isDoubleWall, planGroups, groupKeysOf, wallLengthFt, storeWalls, mergeRedetect, planJunctions } from '@/domain/plans/sync';
+import { JUNCTION_DEFAULTS } from '@/domain/plans/junctions';
 
 const COMMON_SCALES = [`1/16" = 1'-0"`, `3/32" = 1'-0"`, `1/8" = 1'-0"`, `3/16" = 1'-0"`, `1/4" = 1'-0"`, `3/8" = 1'-0"`, `1/2" = 1'-0"`, `3/4" = 1'-0"`, `1" = 1'-0"`];
 const DEFAULT_THICK = { '2x4': 4.75, '2x6': 6.75, '2x8': 8.5, '2x10': 10.5 };
@@ -60,7 +63,7 @@ const fmtLF = (v) => Math.round(Number(v) || 0).toLocaleString('en-US');
 
 /* ───────────────────────── drawing ───────────────────────── */
 
-function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall, onAddOpening, onAddPost, onAddHardware, onAddFloorHole, onAddBlocking, onCalibrate, onDeleteSelected }) {
+function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd, onAddGap, onAddWall, onAddOpening, onAddPost, onAddHardware, onAddFloorHole, onAddBlocking, onCalibrate, onDeleteSelected }) {
   const W = plan.w || 2592;
   const H = plan.h || 1728;
   const k = plan.ptPerFt || 0;
@@ -69,6 +72,9 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall
   const [draft, setDraft] = useState(null); // { a:[x,y], b:[x,y] }
   const [hover, setHover] = useState(null);
   const drag = useRef(null);
+  const endDrag = useRef(null);
+  const [endPt, setEndPt] = useState(null);
+  const junctions = useMemo(() => (k ? planJunctions(plan) : []), [plan, k]);
 
   useEffect(() => { setView({ x: 0, y: 0, w: W, h: H }); }, [W, H]);
   useEffect(() => { setDraft(null); }, [tool]);
@@ -86,23 +92,45 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall
   }, [view]);
 
   // snap: wall end points within 10 px, then square to the axes within 6°
-  const snap = useCallback((pt, from) => {
+  const snap = useCallback((pt, from, exclude) => {
     const tol = 10 * pxToPt();
     let best = null;
     for (const w of plan.walls || []) {
+      if (exclude && w.id === exclude) continue;
       for (const q of [[w.x1, w.y1], [w.x2, w.y2]]) {
         const d = Math.hypot(q[0] - pt[0], q[1] - pt[1]);
         if (d < tol && (!best || d < best.d)) best = { d, q };
       }
     }
     if (best) return best.q;
+    // onto another wall's centre line: a T
+    let line = null;
+    for (const w of plan.walls || []) {
+      if (exclude && w.id === exclude) continue;
+      const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+      if (!L) continue;
+      const ux = (w.x2 - w.x1) / L, uy = (w.y2 - w.y1) / L;
+      const u = (pt[0] - w.x1) * ux + (pt[1] - w.y1) * uy;
+      const off = Math.abs((pt[0] - w.x1) * -uy + (pt[1] - w.y1) * ux);
+      const lim = tol + ((Number(w.t) || 5) / 24) * k;
+      if (u > 0 && u < L && off < lim && (!line || off < line.off)) line = { off, q: [w.x1 + ux * u, w.y1 + uy * u], ux, uy };
+    }
+    if (line) {
+      // square to the wall it meets when drawing from a point
+      if (from) {
+        const t = (line.q[0] - from[0]) * -line.uy + (line.q[1] - from[1]) * line.ux;
+        const sq = [from[0] + -line.uy * t, from[1] + line.ux * t];
+        if (Math.hypot(sq[0] - line.q[0], sq[1] - line.q[1]) < tol) return sq;
+      }
+      return line.q;
+    }
     if (from) {
       const dx = pt[0] - from[0], dy = pt[1] - from[1];
       const ang = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI) % 90;
       if (ang < 6 || ang > 84) return Math.abs(dx) > Math.abs(dy) ? [pt[0], from[1]] : [from[0], pt[1]];
     }
     return pt;
-  }, [plan.walls, pxToPt]);
+  }, [plan.walls, pxToPt, k]);
 
   const zoomAt = useCallback((factor, cx, cy) => {
     setView((v) => {
@@ -150,6 +178,19 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall
   };
 
   const onPointerDown = (e) => {
+    // dragging an end of the selected wall (the magnet snaps it to other walls)
+    const handle = e.target.closest?.('[data-end]');
+    if (handle && tool === 'select' && e.button === 0) {
+      const [id, end] = handle.getAttribute('data-end').split(':');
+      const w = (plan.walls || []).find((x) => x.id === id);
+      if (w) {
+        endDrag.current = { id, end, other: end === '1' ? [w.x2, w.y2] : [w.x1, w.y1] };
+        setEndPt(end === '1' ? [w.x1, w.y1] : [w.x2, w.y2]);
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        e.stopPropagation();
+        return;
+      }
+    }
     if ((tool === 'post' || tool === 'hardware') && e.button === 0) {
       const hit = wallNear(toPt(e));
       if (hit) (tool === 'post' ? onAddPost : onAddHardware)(hit.w.id, hit.u / k);
@@ -189,6 +230,7 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall
     setDraft(null);
   };
   const onPointerMove = (e) => {
+    if (endDrag.current) { setEndPt(snap(toPt(e), endDrag.current.other, endDrag.current.id)); return; }
     const d = drag.current;
     if (d) {
       const r = svgRef.current.getBoundingClientRect();
@@ -206,6 +248,13 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall
     if (draft) setDraft((dr) => ({ ...dr, b: tool === 'floorhole' ? toPt(e) : snap(toPt(e), dr.a) }));
   };
   const onPointerUp = () => {
+    if (endDrag.current) {
+      const ed = endDrag.current;
+      endDrag.current = null;
+      if (endPt) onMoveEnd(ed.id, ed.end, endPt);
+      setEndPt(null);
+      return;
+    }
     const d = drag.current;
     drag.current = null;
     if (d && !d.moved && tool === 'select' && !d.additive) onSelect([], false);
@@ -222,7 +271,9 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall
   const hoverWall = hover ? walls.find((w) => w.id === hover) : null;
   const draftFt = draft && k ? (tool === 'opening' ? Math.abs(draft.u1 - draft.u0) : Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1])) / k : 0;
   const draftWall = draft && tool === 'opening' ? walls.find((w) => w.id === draft.wallId) : null;
-  const readout = draft
+  const readout = endPt && endDrag.current
+    ? `${ftIn(Math.hypot(endPt[0] - endDrag.current.other[0], endPt[1] - endDrag.current.other[1]) / (k || 1))}`
+    : draft
     ? (tool === 'opening' ? `Opening ${ftIn(draftFt)} wide` : tool === 'calibrate' ? `Distance on sheet: ${Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1]).toFixed(1)} pt` : `${ftIn(draftFt)}`)
     : hoverWall ? `${wallTitle(hoverWall)} · ${ftIn(wallLengthFt(hoverWall, k))}${hoverWall.openings?.length ? ` · ${hoverWall.openings.length} opening${hoverWall.openings.length > 1 ? 's' : ''}` : ''}` : '';
   const hint = tool === 'add' ? 'Click the start and the end of the wall · Esc cancels'
@@ -335,8 +386,47 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall
             );
           })}
         </g>
+        {hidden.junction ? null : junctions.map((j, i) => {
+          const r = Math.max(1.5, k * 0.35);
+          return j.type === 'corner'
+            ? <rect key={`jn${i}`} x={j.x - r} y={j.y - r} width={r * 2} height={r * 2} fill="none" stroke={colors.junction} strokeWidth={1.5} vectorEffect="non-scaling-stroke" pointerEvents="none"><title>Corner: extra studs on this wall</title></rect>
+            : <circle key={`jn${i}`} cx={j.x} cy={j.y} r={r} fill="none" stroke={colors.junction} strokeWidth={1.5} vectorEffect="non-scaling-stroke" pointerEvents="none"><title>T: backing studs in the wall it meets</title></circle>;
+        })}
+        {tool === 'select' && selected.size === 1 ? (() => {
+          const w = walls.find((x) => selected.has(x.id));
+          if (!w) return null;
+          const r = Math.max(2.5, 7 * pxToPt());
+          const drg = endDrag.current;
+          const p1 = drg && drg.id === w.id && drg.end === '1' && endPt ? endPt : [w.x1, w.y1];
+          const p2 = drg && drg.id === w.id && drg.end === '2' && endPt ? endPt : [w.x2, w.y2];
+          return (
+            <g>
+              {endPt ? <line x1={p1[0]} y1={p1[1]} x2={p2[0]} y2={p2[1]} stroke="#ff7a00" strokeWidth={Math.max(1, ((Number(w.t) || 5) / 12) * k)} strokeOpacity={0.5} pointerEvents="none" /> : null}
+              {[['1', p1], ['2', p2]].map(([end, p]) => (
+                <circle key={end} data-end={`${w.id}:${end}`} cx={p[0]} cy={p[1]} r={r} className="pt-end" fill="#fff" stroke="#ff7a00" strokeWidth={2} vectorEffect="non-scaling-stroke">
+                  <title>Drag to move this end: it snaps to wall ends and to the side of other walls</title>
+                </circle>
+              ))}
+            </g>
+          );
+        })() : null}
         {hidden.blocking ? null : (plan.blocking || []).map((b, i) => (
           <line key={`bk${i}`} x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke={colors.blocking} strokeWidth={4} strokeDasharray="6 3" vectorEffect="non-scaling-stroke" pointerEvents="none" />
+        ))}
+        {hidden.beam ? null : (plan.beams || []).filter((b) => b.x1 !== undefined).map((b) => (
+          <g key={`bm${b.id}`} pointerEvents="none">
+            <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke={colors.beam} strokeWidth={3} strokeDasharray="10 4" vectorEffect="non-scaling-stroke" />
+            <text x={(b.x1 + b.x2) / 2} y={(b.y1 + b.y2) / 2 - Math.max(2, k * 0.3)} className="pt-shtag" fill={colors.beam} fontSize={Math.max(4, k * 0.8)} textAnchor="middle">{b.mark}{b.note ? ` ${b.note}` : ''}</text>
+          </g>
+        ))}
+        {hidden.structwall ? null : (plan.structural?.gaps || []).map((g, i) => (
+          <line
+            key={`sg${i}`} x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} className="pt-gap"
+            stroke={colors.structwall} strokeWidth={5} strokeDasharray="8 5" strokeOpacity={0.85} vectorEffect="non-scaling-stroke"
+            onPointerDown={(e) => { if (tool !== 'select') return; e.stopPropagation(); onAddGap(i); }}
+          >
+            <title>{`Only on the structural plan: ${Math.round(g.lengthFt * 10) / 10}' wall. Click to add it as a bearing wall.`}</title>
+          </line>
         ))}
         {hidden.missed ? null : (plan.structural?.missed || []).map((m, i) => {
           const r = Math.max(3, k * 0.6);
@@ -368,12 +458,17 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onAddWall
 
 /** Options of the structural import, as placeStructural() takes them. */
 const structOpts = (o = {}) => ({
-  posts: o.posts !== false, rods: o.rods !== false, callouts: o.callouts !== false, shear: o.shear !== false,
+  posts: o.posts !== false, rods: o.rods !== false, callouts: o.callouts !== false, shear: o.shear !== false, bearing: o.bearing !== false, beams: o.beams !== false,
   unlabeled: o.unlabeled || UNLABELED_POSTS,
 });
 const placeFrom = (p, st) => {
   const r = placeStructural(p, st.found || {}, structOpts(st.opts));
-  return { ...r.plan, structural: { ...st, placed: r.placed, missed: r.missed } };
+  return { ...r.plan, structural: { ...st, placed: r.placed, missed: r.missed, gaps: r.gaps, confirmed: r.confirmed } };
+};
+/** Walls the structural sheet draws, in its own points (the same detection as the plan). */
+const structWalls = (sp, k) => {
+  const first = detectWalls(sp, { ptPerFt: k });
+  return (first.suggested.length ? detectWalls(sp, { ptPerFt: k, styles: first.suggested }) : first).walls;
 };
 
 
@@ -509,15 +604,48 @@ export default function PlanTakeoffView() {
       removed: merge ? p.removed : [],
       detectedAt: new Date().toISOString(),
     }));
+    // what the structural sheet put on the walls goes onto the walls found now
+    if (merge) setPlan((p) => (p.structural?.found && p.structural.placed ? placeFrom(p, p.structural) : p));
     setSelected(new Set());
     setBusy('');
   }, [extracted, setPlan]);
 
-  const onFile = useCallback(async (file) => {
-    if (!file || !level) return;
+  /* ── one sheet out of a drawing set ── */
+  const [sheetReq, setSheetReq] = useState(null);
+  /** The file itself when it has one page; else the sheet picked from it, cut out as a PDF of its own (null: cancelled). */
+  const chooseSheet = useCallback(async (file, purpose) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const pdfjs = await loadPdfjs();
+    const task = pdfjs.getDocument({ data: bytes.slice() });
+    const doc = await task.promise;
+    const done = () => { try { task.destroy(); } catch { /* already gone */ } };
+    if (doc.numPages <= 1) { done(); return file; }
+    setBusy('');
+    const pick = await new Promise((resolve) => setSheetReq({ doc, fileName: file.name, purpose, bytes, resolve }));
+    setSheetReq(null);
+    done();
+    if (!pick) return null;
+    setBusy('Cutting the sheet out…');
+    const out = await extractSheet(bytes, pick.pageNo);
+    const base = file.name.replace(/\.pdf$/i, '');
+    return new File([out], `${base} - ${pick.number || `page ${pick.pageNo}`}.pdf`, { type: 'application/pdf' });
+  }, []);
+  const downloadSheet = useCallback(async (bytes, fileName, pageNo, number) => {
+    const out = await extractSheet(bytes, pageNo);
+    const url = URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `${fileName.replace(/\.pdf$/i, '')} - ${number || `page ${pageNo}`}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }, []);
+
+  const onFile = useCallback(async (picked) => {
+    if (!picked || !level) return;
     setError('');
     try {
       setBusy('Opening the PDF…');
+      const file = await chooseSheet(picked, 'floor plan');
+      if (!file) { setBusy(''); return; }
       const key = `${projectId || 'project'}:${level.id}`;
       await savePlanFile(key, file);
       pageCache.current.clear();
@@ -529,7 +657,7 @@ export default function PlanTakeoffView() {
       setBusy('');
       setError(`Could not read the PDF: ${err.message || err}`);
     }
-  }, [level, projectId, setPlan, runDetect, plan?.linked]);
+  }, [level, projectId, setPlan, runDetect, plan?.linked, chooseSheet]);
 
   const reattach = useCallback(async (file) => {
     if (!file || !plan?.fileKey) return;
@@ -549,7 +677,7 @@ export default function PlanTakeoffView() {
       const ap = await extracted(plan.fileKey, plan.page || 1);
       const sk = detectScale(sp.texts)?.ptPerFt || plan.ptPerFt;
       const align = alignSheets(ap.texts, sp.texts, plan.ptPerFt / sk);
-      const found = align ? readStructural(sp, { ptPerFt: sk, align }) : null;
+      const found = align ? readStructural(sp, { ptPerFt: sk, align, walls: structWalls(sp, sk) }) : null;
       setPlan((p) => {
         const st = { fileName, fileKey: key, page: pageNo, pageCount, ptPerFt: sk, align, found, opts: p.structural?.opts || {} };
         return found ? placeFrom(removeStructural(p), st) : { ...removeStructural(p), structural: st };
@@ -557,9 +685,12 @@ export default function PlanTakeoffView() {
       setBusy('');
     } catch (err) { setBusy(''); setError(`Could not read the structural plan: ${err.message || err}`); }
   }, [extracted, plan?.fileKey, plan?.page, plan?.ptPerFt, setPlan]);
-  const onStructFile = useCallback(async (file) => {
-    if (!file || !level || !plan?.fileKey) return;
+  const onStructFile = useCallback(async (picked) => {
+    if (!picked || !level || !plan?.fileKey) return;
     try {
+      setBusy('Opening the PDF…');
+      const file = await chooseSheet(picked, 'structural framing plan');
+      if (!file) { setBusy(''); return; }
       const key = `${projectId || 'project'}:${level.id}:struct`;
       await savePlanFile(key, file);
       for (const ck of [...pageCache.current.keys()]) if (ck.startsWith(`${key}|`)) pageCache.current.delete(ck);
@@ -567,7 +698,7 @@ export default function PlanTakeoffView() {
       const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
       await readStruct({ key, pageNo: 1, fileName: file.name, pageCount: doc.numPages });
     } catch (err) { setBusy(''); setError(`Could not read the PDF: ${err.message || err}`); }
-  }, [level, plan?.fileKey, projectId, readStruct]);
+  }, [level, plan?.fileKey, projectId, readStruct, chooseSheet]);
 
   const detectAgain = useCallback(async (opts = {}) => {
     if (!plan?.fileKey) return;
@@ -589,6 +720,22 @@ export default function PlanTakeoffView() {
         const next = { ...cur, ...(typeof patch === 'function' ? patch(cur) : patch), auto: false };
         if (!next.double) { delete next.kind2; delete next.size2; }
         return next;
+      }),
+    }));
+  }, [setPlan]);
+  /** Move one end of a wall (dragged on the drawing, or a typed length): openings past the new end go. */
+  const moveEnd = useCallback((id, end, pt) => {
+    setPlan((p) => ({
+      ...p,
+      walls: (p.walls || []).map((w) => {
+        if (w.id !== id) return w;
+        const next = end === '1' ? { ...w, x1: pt[0], y1: pt[1] } : { ...w, x2: pt[0], y2: pt[1] };
+        const L = Math.hypot(next.x2 - next.x1, next.y2 - next.y1) / (p.ptPerFt || 1);
+        // openings are measured from the start: moving the start shifts them
+        const shift = end === '1' ? (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) / (p.ptPerFt || 1)) - L : 0;
+        const openings = (w.openings || []).map((o) => ({ ...o, atFt: Math.round((o.atFt - shift) * 100) / 100 })).filter((o) => o.atFt >= 0 && o.atFt + o.widthFt <= L + 0.01);
+        const { lenFt, ...rest } = next; // the drawing is the length now
+        return { ...rest, openings, auto: false, ...(openings.length !== (w.openings || []).length ? { openingsEdited: true } : {}) };
       }),
     }));
   }, [setPlan]);
@@ -750,6 +897,14 @@ export default function PlanTakeoffView() {
         title="Plan takeoff"
         meta={plan?.fileName ? `${plan.fileName}${plan.pageCount > 1 ? ` · sheet ${plan.page} of ${plan.pageCount}` : ''}` : 'Walls measured from the floor plan PDF'}
       />
+      {sheetReq ? (
+        <SheetPicker
+          doc={sheetReq.doc} fileName={sheetReq.fileName} purpose={sheetReq.purpose}
+          onPick={(pageNo, sh) => sheetReq.resolve({ pageNo, number: sh?.number })}
+          onDownload={(pageNo, sh) => downloadSheet(sheetReq.bytes, sheetReq.fileName, pageNo, sh?.number)}
+          onCancel={() => sheetReq.resolve(null)}
+        />
+      ) : null}
       <input
         ref={fileInput} type="file" accept="application/pdf,.pdf" hidden
         onChange={(e) => { const f = e.target.files?.[0]; const cb = fileInput.current.onpick; e.target.value = ''; if (f && cb) cb(f); }}
@@ -907,6 +1062,8 @@ export default function PlanTakeoffView() {
               selected={selected}
               tool={tool}
               onSelect={onSelect}
+              onMoveEnd={moveEnd}
+              onAddGap={(i) => setPlan((p) => placeFrom(addStructWalls(p, [p.structural?.gaps?.[i]].filter(Boolean), newId), p.structural))}
               onAddWall={addWall}
               onAddOpening={addOpening}
               onAddPost={addPost}
@@ -923,6 +1080,11 @@ export default function PlanTakeoffView() {
                 <SelectionPanel
                   walls={sel}
                   ptPerFt={plan.ptPerFt}
+                  onSetLength={(w, ft) => {
+                    const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
+                    const d = ft * (plan.ptPerFt || 1);
+                    moveEnd(w.id, '2', [w.x1 + ((w.x2 - w.x1) / L) * d, w.y1 + ((w.y2 - w.y1) / L) * d]);
+                  }}
                   onPatch={(patch) => {
                     lastProps.current = { ...lastProps.current, ...patch };
                     // turning a wall double: the 2nd wall starts as a partition with the same studs
@@ -962,18 +1124,42 @@ export default function PlanTakeoffView() {
                     <span><strong>{totals.doors}</strong> doors</span>
                   </div>
                   <table className="tbl pt-groups">
-                    <thead><tr><th>Walls</th><th className="num">Count</th><th className="num">LF</th></tr></thead>
+                    <thead><tr><th>Walls</th><th className="num">Count</th><th className="num">LF</th><th className="num" title="Extra studs where walls meet (corners and T's), added to the studs of the section">+Studs</th></tr></thead>
                     <tbody>
                       {groups.map((g) => (
                         <tr key={g.key} className="pt-group" onClick={() => setSelected(new Set((plan.walls || []).filter((w) => groupKeysOf(w).includes(g.key)).map((w) => w.id)))} title="Select these walls">
                           <td><i className="pt-dot" style={{ background: display.colors[g.kind] }} />{g.label}</td>
                           <td className="num">{g.walls}</td>
                           <td className="num" style={{ fontWeight: 600 }}>{fmtLF(g.lengthFt)}</td>
+                          <td className="num">{g.junctionStuds || ''}</td>
                         </tr>
                       ))}
-                      {!groups.length ? <tr><td colSpan={3} className="ew-subtle">No walls yet.</td></tr> : null}
+                      {!groups.length ? <tr><td colSpan={4} className="ew-subtle">No walls yet.</td></tr> : null}
                     </tbody>
                   </table>
+                  {groups.length ? (() => {
+                    const jn = planJunctions(plan);
+                    const jc = { ...JUNCTION_DEFAULTS, ...(plan.junctions || {}) };
+                    const setJ = (patch) => setPlan((p) => ({ ...p, junctions: { ...(p.junctions || {}), ...patch } }));
+                    const corners = jn.filter((j) => j.type === 'corner').length, tees = jn.length - corners;
+                    return (
+                      <div className="pt-jn-box">
+                        <label className="pv-check">
+                          <input type="checkbox" checked={!plan.junctions?.off} onChange={(e) => setJ({ off: !e.target.checked })} />
+                          Studs where walls meet
+                        </label>
+                        {!plan.junctions?.off ? (
+                          <div className="pt-jn">
+                            <span>{corners} corners ▢</span>
+                            <label className="fld"><NumInput w={40} value={jc.corner} onCommit={(v) => setJ({ corner: Math.max(0, Math.round(v)) })} aria-label="Studs per corner" /> <span className="ew-subtle">studs each</span></label>
+                            <span>{tees} T&apos;s ○</span>
+                            <label className="fld"><NumInput w={40} value={jc.tee} onCommit={(v) => setJ({ tee: Math.max(0, Math.round(v)) })} aria-label="Studs per T" /> <span className="ew-subtle">studs each</span></label>
+                          </div>
+                        ) : null}
+                        <span className="ew-subtle">Added to the studs of the wall that runs through (after the waste). The studs waste % in Wall panels may already cover some of them: lower it if so.</span>
+                      </div>
+                    );
+                  })() : null}
                   <button type="button" className={`ew-btn${plan.linked ? '' : ' ew-btn--primary'}`} onClick={toggleLink} disabled={!groups.length && !plan.linked}>
                     {plan.linked ? <><Unlink size={14} /> Unlink from Wall panels</> : <><Link2 size={14} /> Use in Wall panels</>}
                   </button>
@@ -1043,8 +1229,13 @@ export default function PlanTakeoffView() {
             onConcrete={isOnConcrete(level, levels.findIndex((l) => l.id === level.id))}
             onUpload={() => { fileInput.current.onpick = onStructFile; fileInput.current.click(); }}
             onPage={(pageNo) => readStruct({ key: plan.structural.fileKey, pageNo, fileName: plan.structural.fileName, pageCount: plan.structural.pageCount })}
-            onPlace={() => setPlan((p) => (p.structural?.found ? placeFrom(p, p.structural) : p))}
-            onRemove={() => setPlan((p) => ({ ...removeStructural(p), structural: { ...p.structural, placed: undefined, missed: [] } }))}
+            onPlace={() => (plan.structural?.found && !plan.structural.found.walls
+              // read before the structural walls were: read the sheet again
+              ? readStruct({ key: plan.structural.fileKey, pageNo: plan.structural.page || 1, fileName: plan.structural.fileName, pageCount: plan.structural.pageCount })
+              : setPlan((p) => (p.structural?.found ? placeFrom(p, p.structural) : p)))}
+            onRemove={() => setPlan((p) => ({ ...removeStructural(p), structural: { ...p.structural, placed: undefined, missed: [], gaps: [], confirmed: undefined } }))}
+            onAddGaps={() => setPlan((p) => placeFrom(addStructWalls(p, p.structural?.gaps, newId), p.structural))}
+            onBeams={(fn) => setPlan((p) => ({ ...p, beams: fn(p.beams || []) }))}
             onPatch={(patch) => setPlan((p) => ({ ...p, structural: { ...p.structural, ...patch } }))}
             onShearHardware={() => setPlan((p) => {
               const d = isOnConcrete(level, levels.findIndex((l) => l.id === level.id)) ? SHEAR_DEFAULTS.anchor : SHEAR_DEFAULTS.lag;
@@ -1086,7 +1277,7 @@ export default function PlanTakeoffView() {
   );
 }
 
-function SelectionPanel({ walls, ptPerFt, onPatch, onDelete, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
+function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
   const one = walls.length === 1 ? walls[0] : null;
   const isExterior = one ? normWall(one).kind === 'exterior' : false;
   const norm = walls.map(normWall);
@@ -1142,14 +1333,19 @@ function SelectionPanel({ walls, ptPerFt, onPatch, onDelete, onSimilar, onClear,
       )}
       {one ? (
         <>
-          <label className="fld" title="Leave empty to use the length measured on the sheet">
-            <span>Length (ft)</span>
-            <NumInput allowEmpty w={72} value={one.lenFt ?? ''} placeholder={(Math.hypot(one.x2 - one.x1, one.y2 - one.y1) / (ptPerFt || 1)).toFixed(2)} onCommit={(v) => onPatch({ lenFt: v === '' ? undefined : v })} />
-          </label>
+          <div className="pt-dims">
+            <label className="fld" title="Moves the end of the wall (the start stays); or drag the ends on the drawing">
+              <span>Length (ft)</span>
+              <NumInput w={72} step="0.01" value={Math.round(wallLengthFt(one, ptPerFt) * 100) / 100} onCommit={(v) => v > 0 && onSetLength(one, v)} />
+            </label>
+            <label className="fld" title="Thickness as drawn, studs and finishes; the studs picked above are what is counted">
+              <span>Thick (in)</span>
+              <NumInput w={56} step="0.25" value={Math.round((Number(one.t) || 0) * 100) / 100} onCommit={(v) => v > 0 && onPatch({ t: v })} />
+            </label>
+          </div>
           <div className="ew-subtle">
-            Measured {ftIn(Math.hypot(one.x2 - one.x1, one.y2 - one.y1) / (ptPerFt || 1))}
-            {one.t ? ` · drawn ${Number(one.t).toFixed(1)}" thick` : ''}
-            {one.lenFt ? ' · using the typed length' : ''}
+            {ftIn(wallLengthFt(one, ptPerFt))} along the centre line
+            {one.lenFt ? ` · typed length (drawn ${ftIn(Math.hypot(one.x2 - one.x1, one.y2 - one.y1) / (ptPerFt || 1))}): typing it again moves the end` : ' · drag its ends on the drawing to stretch it'}
           </div>
           <div className="pt-ops">
             <div className="pt-ops__head">

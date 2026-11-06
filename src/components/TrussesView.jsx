@@ -5,7 +5,7 @@ import { useCallback, useMemo } from 'react';
 import { GripVertical } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import { PageHeader, AddRowButton, RemoveIconButton, TextInput, NumInput, fmtMoney } from '@/components/ui/mat';
-import { trussesTotal } from '@/domain/aggregate/projectTotals';
+import { trussesOf } from '@/domain/estimate';
 import { DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -39,7 +39,10 @@ function TrussRow({ row, onPatch, onRemove }) {
 export default function TrussesView() {
   const { projectData, updateEstimateData, isLoaded } = useProject();
   const rows = useMemo(() => projectData?.estimateData?.trusses || [], [projectData]);
-  const total = trussesTotal(projectData?.estimateData || {});
+  const tr = trussesOf(projectData?.estimateData || {});
+  const total = tr.total;
+  const te = tr.estimate;
+  const setTE = useCallback((patch) => updateEstimateData((prev) => ({ ...prev, trussEstimate: { ...(prev.trussEstimate || {}), ...(typeof patch === 'function' ? patch(prev.trussEstimate || {}) : patch) } })), [updateEstimateData]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -86,9 +89,52 @@ export default function TrussesView() {
         <div className="truss-row" style={{ borderBottom: 0 }}>
           <span />
           <AddRowButton onClick={() => setRows((list) => [...list, { id: generateId('truss-'), label: '', amount: '' }])}>Truss item</AddRowButton>
-          <span className="r money-section">{fmtMoney(total)}</span>
+          <span className="r money-section">{fmtMoney(tr.quote)}</span>
           <span />
         </div>
+      </div>
+
+      <div className="ew-card tr-est" style={{ maxWidth: 820 }}>
+        <div className="tr-est__head">
+          <strong>Estimate per sq ft</strong>
+          <span className="ew-subtle">Until the truss maker quotes: roof trusses over the top level, floor trusses under every level above the first.</span>
+          <label className="fld">
+            <span>Counts</span>
+            <select className="ew-select" value={te.mode} onChange={(e) => setTE({ use: e.target.value })}>
+              <option value="auto">Until the quote is typed</option>
+              <option value="on">Always (with the quote)</option>
+              <option value="off">Never (reference only)</option>
+            </select>
+          </label>
+        </div>
+        <table className="tbl">
+          <thead><tr><th>Trusses</th><th className="num" title="From the floor drawn on the plan (openings in); type it if there is no plan">Area (sq ft)</th><th className="num">$ / sq ft</th><th className="num">Amount</th></tr></thead>
+          <tbody>
+            {te.lines.map((l) => (
+              <tr key={l.key}>
+                <td>{l.label}</td>
+                <td className="num">
+                  <NumInput w={84} allowEmpty value={l.typed ? l.areaSqFt : ''} placeholder={String(l.auto || 0)} aria-label={`${l.label} area`}
+                    onCommit={(v) => setTE((t) => { const areas = { ...(t.areas || {}) }; if (v === '') delete areas[l.key]; else areas[l.key] = Math.max(0, v); return { areas }; })} />
+                </td>
+                <td className="num">
+                  <NumInput w={64} step="0.01" value={l.key === 'roof' ? te.roofRate : te.floorRate} aria-label={`${l.label} price per sq ft`}
+                    onCommit={(v) => setTE(l.key === 'roof' ? { roofRate: Math.max(0, v) } : { floorRate: Math.max(0, v) })} />
+                </td>
+                <td className="num">{fmtMoney(l.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={3}>{te.used ? 'Counted in the trusses total' : tr.quote > 0 && te.mode === 'auto' ? 'Reference: the quote above counts' : 'Not counted'}</td>
+              <td className={`num${te.used ? ' money-section' : ' ew-subtle'}`}>{fmtMoney(te.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        {tr.quote > 0 && te.total > 0 ? (
+          <p className="ew-subtle">The quote is {Math.round(((tr.quote - te.total) / te.total) * 100)}% {tr.quote >= te.total ? 'above' : 'below'} the estimate.</p>
+        ) : null}
       </div>
     </div>
   );

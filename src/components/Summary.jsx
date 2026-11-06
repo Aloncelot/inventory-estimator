@@ -8,7 +8,9 @@ import { PageHeader, NumInput, TextInput, fmtMoney } from '@/components/ui/mat';
 import { projectTotals } from '@/domain/aggregate/projectTotals';
 import { useConfirm } from '@/components/ui/confirm';
 
-import { TAX_RATES, parseStateFromAddress } from '@/domain/lib/tax';
+import { US_STATES, CA_PROVINCES, NO_TAX, SOURCES, regionOf, taxFor } from '@/domain/lib/tax';
+import { CURRENCIES, currencyOf } from '@/domain/lib/currency';
+import { SCOPE_PARTS, scopeOf } from '@/domain/scope';
 
 export default function Summary() {
   const { projectData, updateProject, refreshProjectPrices, isSaving } = useProject();
@@ -39,9 +41,13 @@ export default function Summary() {
   }, [projectData, info.estimateDate, info.projectName, updateProject]);
 
   const totals = projectTotals(est);
-  const state = info.taxState || parseStateFromAddress(info.address) || 'NO TAX';
-  const taxRate = info.isTaxExempt ? 0 : (TAX_RATES[state] || 0);
-  const tax = totals.subtotal * (taxRate / 100);
+  const taxInfo = taxFor(info);
+  const state = taxInfo.state;
+  const region = regionOf(state);
+  const taxRate = taxInfo.rate;
+  // sales tax on the materials; on labor too when the state taxes it
+  const taxBase = info.taxLabor ? totals.subtotal : totals.materials;
+  const tax = taxBase * (taxRate / 100);
   const shipping = Number(info.shipping) || 0;
   const grand = totals.subtotal + tax + shipping;
 
@@ -51,7 +57,7 @@ export default function Summary() {
     updateProject((prev) => ({
       ...prev,
       snapshotTotals: {
-        wallPanelsTotal: totals.wallPanels, trussTotal: totals.trusses, looseTotal: totals.loose,
+        wallPanelsTotal: totals.wallPanels, trussTotal: totals.trusses, looseTotal: totals.loose, laborTotal: totals.labor,
         subtotal: totals.subtotal, taxAmount: tax, shippingAmount: shipping, grandTotal: grand,
         lockedAt: new Date().toISOString(),
       },
@@ -73,10 +79,14 @@ export default function Summary() {
     );
   }
 
+  const sc = scopeOf(est);
+  const setScope = (key, v) => updateProject((prev) => ({ ...prev, scope: { ...(prev.scope || {}), [key]: v } }));
+  const wpLabel = sc.structural && sc.partitions ? 'Wall panels' : sc.structural ? 'Wall panels · structural' : sc.partitions ? 'Wall panels · partitions' : 'Wall panels';
   const lines = [
-    ['Wall panels', totals.wallPanels, snapshot?.wallPanelsTotal],
-    ['Loose material', totals.loose, snapshot?.looseTotal],
-    ['Trusses', totals.trusses, snapshot?.trussTotal],
+    [wpLabel, totals.wallPanels, snapshot?.wallPanelsTotal, sc.structural || sc.partitions],
+    ['Loose material', totals.loose, snapshot?.looseTotal, sc.loose],
+    ['Trusses', totals.trusses, snapshot?.trussTotal, sc.trusses],
+    [`Labor (${totals.laborBy === 'sqft' ? 'per sq ft' : `by time · ${Math.round(totals.laborHours).toLocaleString('en-US')} h`})`, totals.labor, snapshot?.laborTotal, sc.labor],
   ];
   const diffCell = (orig, cur) => {
     if (orig === undefined || orig === null) return <td className="num ew-subtle">—</td>;
@@ -113,7 +123,30 @@ export default function Summary() {
           <label className="fld" style={{ '--w': '300px' }}><span>Address</span><TextInput value={info.address || ''} onCommit={(v) => setInfo('address', v)} placeholder="Street, City, ST 00000" /></label>
           <label className="fld" style={{ '--w': '130px' }}><span>Drawings date</span><input className="ew-input" type="date" value={info.drawingsDate || ''} onChange={(e) => setInfo('drawingsDate', e.target.value)} /></label>
           <label className="fld" style={{ '--w': '130px' }}><span>Estimate date</span><input className="ew-input" type="date" value={info.estimateDate || ''} onChange={(e) => setInfo('estimateDate', e.target.value)} /></label>
+          <label className="fld" style={{ '--w': '170px' }} title="Which dollars the prices and totals are in. Prices are shown as entered in the price lists: no exchange conversion. Unset, a Canadian tax province makes it CAD.">
+            <span>Currency</span>
+            <select className="ew-select" value={info.currency || ''} onChange={(e) => setInfo('currency', e.target.value || null)}>
+              <option value="">{`Auto · ${currencyOf({ ...info, currency: null })}`}</option>
+              {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+            </select>
+          </label>
         </div>
+      </div>
+
+      <div className="ew-card sm-scope" style={{ maxWidth: 820 }}>
+        <strong>Scope</strong>
+        <div className="sm-scope__grp">
+          <span className="sm-scope__lbl">Wall panels</span>
+          {SCOPE_PARTS.filter((p) => p.group === 'wallPanels').map((p) => (
+            <label key={p.key} className="pv-check" title={p.hint}><input type="checkbox" checked={sc[p.key]} onChange={(e) => setScope(p.key, e.target.checked)} /> {p.label} <span className="ew-subtle">({p.hint.toLowerCase()})</span></label>
+          ))}
+        </div>
+        <div className="sm-scope__grp">
+          {SCOPE_PARTS.filter((p) => !p.group).map((p) => (
+            <label key={p.key} className="pv-check"><input type="checkbox" checked={sc[p.key]} onChange={(e) => setScope(p.key, e.target.checked)} /> {p.label}</label>
+          ))}
+        </div>
+        <span className="ew-subtle">What the price covers: Summary, Labor, the Takeoff list and the Quote leave out the rest.</span>
       </div>
 
       <div className="ew-card" style={{ maxWidth: 820 }}>
@@ -128,9 +161,9 @@ export default function Summary() {
             </tr>
           </thead>
           <tbody>
-            {lines.map(([label, cur, orig]) => (
-              <tr key={label}>
-                <td>{label}</td>
+            {lines.map(([label, cur, orig, on]) => (
+              <tr key={label} className={on ? '' : 'sm-out'}>
+                <td>{label}{on ? null : <span className="ew-subtle"> · not in scope</span>}</td>
                 <td className="num">{fmtMoney(cur)}</td>
                 {snapshot ? <td className="num ew-subtle">{orig !== undefined ? fmtMoney(orig) : '—'}</td> : null}
                 {snapshot ? diffCell(orig, cur) : null}
@@ -147,12 +180,30 @@ export default function Summary() {
                 <div className="ew-inline">
                   <span>Tax</span>
                   <label className="fld"><input type="checkbox" checked={!!info.isTaxExempt} onChange={(e) => setInfo('isTaxExempt', e.target.checked)} /><span>Exempt</span></label>
+                  {!info.isTaxExempt ? <label className="fld" title="Sales tax goes on the materials; tick it where the state taxes labor too"><input type="checkbox" checked={!!info.taxLabor} onChange={(e) => setInfo('taxLabor', e.target.checked)} /><span>On labor too</span></label> : null}
                   {!info.isTaxExempt ? (
-                    <select className="ew-select" style={{ width: 90 }} value={state} onChange={(e) => setInfo('taxState', e.target.value)} title="Detected from the address; change if needed">
-                      {Object.keys(TAX_RATES).map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    <>
+                      <select className="ew-select tx-select" value={state} onChange={(e) => setInfo('taxState', e.target.value)} title="State or province of the job site, detected from the address; change if needed">
+                        <option value={NO_TAX}>No tax</option>
+                        <optgroup label="United States">
+                          {US_STATES.map((r) => <option key={r.code} value={r.code}>{r.code} · {r.name}</option>)}
+                        </optgroup>
+                        <optgroup label="Canada">
+                          {CA_PROVINCES.map((r) => <option key={r.code} value={r.code}>{r.code} · {r.name}</option>)}
+                        </optgroup>
+                      </select>
+                      {region?.country === 'US' ? (
+                        <label className="fld tx-local" title={`City, county and district rate of the job site. ${region.name} average: ${region.avgLocal}%`}>
+                          <span>+ local</span>
+                          <NumInput w={56} step="0.001" value={info.taxLocal ?? 0} onCommit={(v) => setInfo('taxLocal', Math.max(0, v))} aria-label="Local tax rate" />
+                          <span className="ew-subtle">% (avg {region.avgLocal}%)</span>
+                        </label>
+                      ) : null}
+                    </>
                   ) : null}
-                  <span className="ew-subtle">{taxRate.toFixed(2)}%</span>
+                  <span className="ew-subtle" title={region ? SOURCES[region.country] : ''}>
+                    {info.isTaxExempt || !region ? `${taxRate.toFixed(2)}%` : region.country === 'CA' ? taxInfo.label.replace(`${region.code} `, '') + ` = ${+taxRate.toFixed(3)}%` : `${+taxRate.toFixed(3)}%`}
+                  </span>
                 </div>
               </td>
               <td className="num">{fmtMoney(tax)}</td>

@@ -19,6 +19,8 @@ import { isLVL, isVersaColumn, isInfillFamily } from '../lib/families';
 import { getItem, getUnit, getSize, getFamily, isPTFamily, priceDateOf } from '../lib/selection';
 import { IRC, BLOCK_NAILS, nailsPerSheet, alongRun, nailsPerDoubledStud, perBoxFromSize, rollLengthFromSize } from '../lib/fastening';
 import { headerOpenings, defaultPlies, studDepthIn } from './openings';
+import { trussEstimate } from './trusses';
+import { windowFlashing } from '../plans/loose';
 
 const n = (v) => Number(v) || 0;
 const round2 = (v) => Number((Number(v) || 0).toFixed(2));
@@ -47,6 +49,8 @@ export function computeWallSection(section = {}, variant = 'exterior') {
   const showBlocking = variant === 'exterior' || kind === 'bearing';
   const showSheathing = variant === 'exterior' || kind === 'shear';
   const blockingRows = Math.max(0, Math.ceil(n(heightFt) / 4) - 1);
+  // corner and T studs counted on the plan (plan-linked sections that take the plan length)
+  const cornerStuds = section.planKey && !section.planManual ? Math.max(0, Math.round(n(section.planJunctionStuds))) : 0;
 
   const bottomFt = pieceLength(sel.bottomPlate);
   const topFt = pieceLength(sel.topPlate);
@@ -58,7 +62,8 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     { key: 'topPlate', label: 'Top plate', wastePct: waste.topPlate ?? 10, piece: piece(sel.topPlate, lengthLF),
       ...calcPlates({ lengthLF, boardLenFt: topFt, wastePct: waste.topPlate ?? 10, item: getItem(sel.topPlate), unit: getUnit(sel.topPlate) }) },
     { key: 'studs', label: 'Studs', wastePct: waste.studs ?? 60,
-      ...calcStuds({ lengthLF, spacingIn: studSpacingIn, multiplier: studMultiplier, wastePct: waste.studs ?? 60, item: getItem(sel.studs), unit: getUnit(sel.studs) }) },
+      ...(cornerStuds ? { tag: { text: `+${cornerStuds}`, title: `${cornerStuds} corner and T studs from the plan (the walls of this section where other walls meet them), added after the waste` } } : {}),
+      ...calcStuds({ lengthLF, spacingIn: studSpacingIn, multiplier: studMultiplier, wastePct: waste.studs ?? 60, item: getItem(sel.studs), unit: getUnit(sel.studs), extra: cornerStuds }) },
   ];
   if (showBlocking) base.push({ key: 'blocking', label: 'Blocking', wastePct: waste.blocking ?? 10, piece: piece(sel.blocking, n(lengthLF) * blockingRows),
     ...calcBlocking({ lengthLF, heightFt, boardLenFt: blockFt, wastePct: waste.blocking ?? 10, item: getItem(sel.blocking), unit: getUnit(sel.blocking) }) });
@@ -234,7 +239,7 @@ export function computeWallSection(section = {}, variant = 'exterior') {
 export const PANEL_NAIL_ROWS = [
   { key: 'drivePins', selKey: 'drivePins', group: 'concrete', label: 'Drive pins (PT plates to concrete)', unit: 'box', perBox: 100, waste: 40 },
   { key: 'epoxy', selKey: 'epoxy', group: 'concrete', label: 'Epoxy (anchor bolts)', unit: 'tube', waste: 10 },
-  { key: 'foamSill', selKey: 'foamSill', group: 'concrete', label: 'Foam sill sealer', unit: 'roll', waste: 5 },
+  // foam sill sealer: loose material (Foundation in Loose material), installed on site
   { key: 'sheath', selKey: 'nailsSheath', group: 'sheathing', label: 'Sheathing nails — panels', unit: 'box', perBox: 2700, waste: 40 },
   { key: 'sheathLoose', selKey: 'nailsSheathLoose', group: 'sheathing', label: 'Sheathing nails — loose sheets', unit: 'box', perBox: 2700, waste: 40 },
   { key: 'framing', selKey: 'nailsFrame12d', group: 'framing', label: 'Framing nails — plates, headers, blocking', unit: 'box', perBox: 2500, waste: 40 },
@@ -402,14 +407,14 @@ function trussBracing(inputs, roofAreaSqFt) {
 
 export const LOOSE_PANEL_WASTE = {
   extBottomPT: 10, extTopPlate: 10, panelBandSheathing: 20, extraSheathing: 10, zipTape: 0,
-  openingsBlocking: 10, secondBottom: 10, int2x6PT: 5, int2x6Plate: 5, int2x4PT: 5, int2x4Plate: 5, intCabinetBlocking: 10,
+  openingsBlocking: 10, windowTape: 10, secondBottom: 10, int2x6PT: 5, int2x6Plate: 5, int2x4PT: 5, int2x4Plate: 5, intCabinetBlocking: 10,
 };
 
 // loose top plates lap over panel joints, so they must be longer than a panel
 export const LOOSE_TOP_PLATE_KEYS = ['extTopPlate', 'int2x6Plate', 'int2x4Plate'];
 const LOOSE_PT_KEYS = ['extBottomPT', 'int2x6PT', 'int2x4PT'];
 
-export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, int2x4LF = 0, extZipSheets = 0, panelLenFt = 8 } = {}) {
+export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, int2x4LF = 0, extZipSheets = 0, panelLenFt = 8, windows = null } = {}) {
   const sel = data.sel || {};
   const include = data.include || {};
   const extInputs = data.extInputs || {};
@@ -419,7 +424,10 @@ export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, in
   const i6 = n(int2x6LF);
   const i4 = n(int2x4LF);
   const bandLF = data.panelBandEdited ? n(extInputs.panelBandLF) : extLF;
-  const openLF = n(extInputs.openingsBlockingLF);
+  // blocking around the windows and their flashing tape: from the plan's windows unless typed
+  const win = windows && windows.count ? windows : null;
+  const openLF = !extInputs.openingsBlockingEdited && win ? n(win.blockingLF) : n(extInputs.openingsBlockingLF);
+  const tapeLF = !extInputs.windowTapeEdited && win ? n(win.tapeLF) : n(extInputs.windowTapeLF);
   const cabLF = n(intInputs.blockingLF);
   const L = (key) => ({ boardLenFt: pieceLength(sel[key]), item: getItem(sel[key]), unit: getUnit(sel[key]), wastePct: waste[key] });
 
@@ -437,7 +445,15 @@ export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, in
     const up = unitPriceFrom(getItem(sel.zipTape));
     ext.push({ key: 'zipTape', label: 'ZIP system tape', noWaste: true, unit: 'roll', qtyRaw: totalSheets / 6, qtyFinal, unitPrice: up, subtotal: qtyFinal * (up || 0) });
   }
-  ext.push({ key: 'openingsBlocking', label: 'Blocking at openings', piece: piece(sel.openingsBlocking, openLF), ...looseOpeningsBlocking({ openingsLF: openLF, ...L('openingsBlocking') }) });
+  ext.push({ key: 'openingsBlocking', label: 'Window blocking (all around)', hint: win && !extInputs.openingsBlockingEdited ? `${win.count} windows · ${openLF} LF of rough opening perimeter` : '', piece: piece(sel.openingsBlocking, openLF), ...looseOpeningsBlocking({ openingsLF: openLF, ...L('openingsBlocking') }) });
+  {
+    const rollFt = tapeRollFt(getSize(sel.windowTape));
+    const qtyRaw = tapeLF / rollFt;
+    const w = n(waste.windowTape);
+    const qtyFinal = Math.ceil(qtyRaw * (1 + w / 100));
+    const up = unitPriceFrom(getItem(sel.windowTape));
+    ext.push({ key: 'windowTape', label: 'Window flashing tape', hint: tapeLF ? `${tapeLF} LF (6" past each corner) ÷ ${rollFt}' rolls` : '', unit: getUnit(sel.windowTape, 'roll'), qtyRaw, qtyFinal, unitPrice: up, subtotal: qtyFinal * (up || 0) });
+  }
   ext.push({ key: 'secondBottom', label: 'Second bottom plate', optional: true, piece: piece(sel.secondBottom, extLF), ...looseSecondBottomPlate({ lengthLF: extLF, ...L('secondBottom') }) });
 
   const int = [
@@ -486,7 +502,7 @@ export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, in
     looseSheets: Math.ceil(n(rowsByKey.panelBandSheathing?.qtyRaw)) + (include.extraSheathing ? Math.ceil(n(rowsByKey.extraSheathing?.qtyRaw)) : 0),
   };
 
-  return { exteriorRows, interiorRows, bandLF, extLF, int2x6LF: i6, int2x4LF: i4, subtotal: round2(sum(exteriorRows) + sum(interiorRows)), stats, plates };
+  return { exteriorRows, interiorRows, bandLF, extLF, int2x6LF: i6, int2x4LF: i4, openLF, tapeLF, windows: win, subtotal: round2(sum(exteriorRows) + sum(interiorRows)), stats, plates };
 }
 
 /* ───────────────────────── Level ───────────────────────── */
@@ -517,6 +533,7 @@ export function computeLevel(level = {}, { isGround = false, panelLenFt = 8 } = 
 
   const loose = computeLoosePanel(level.looseMaterials, {
     extLengthLF: d.extLengthSum, int2x6LF: d.int2x6LF, int2x4LF: d.int2x4LF, extZipSheets: d.extZipSheetsFinal, panelLenFt,
+    windows: level.plan?.walls?.length ? windowFlashing(level.plan) : null,
   });
   const panelNails = computePanelNails(level.panelNails, {
     sections: [...exterior, ...interior].map((x) => x.nailing),
@@ -528,6 +545,12 @@ export function computeLevel(level = {}, { isGround = false, panelLenFt = 8 } = 
   const interiorTotal = sum(interior);
   const total = round2(exteriorTotal + interiorTotal + panelNails.total + loose.subtotal);
   return { id: level.id, exterior, interior, exteriorTotal, interiorTotal, derived: d, panelNails, loose, total };
+}
+
+/** Length of a tape roll from its size ("4in x 75ft", "6\" x 75'"), 75' when unknown. */
+export function tapeRollFt(size) {
+  const m = /x\s*(\d+(?:\.\d+)?)\s*(?:ft|'|’|feet)/i.exec(String(size || ''));
+  return m ? Number(m[1]) : 75;
 }
 
 /* ───────────────────────── Panels manufacture ───────────────────────── */
@@ -775,7 +798,12 @@ export function computeLoose(est = {}) {
 
 /* ───────────────────────── Trusses & project ───────────────────────── */
 
-export const computeTrusses = (est = {}) => ({ total: round2((est.trusses || []).reduce((s, r) => s + n(r.amount ?? r.subtotal), 0)) });
+/** Trusses: the truss maker's quote typed on the Trusses page, else the estimate per sq ft. */
+export function computeTrusses(est = {}) {
+  const quote = round2((est.trusses || []).reduce((s, r) => s + n(r.amount ?? r.subtotal), 0));
+  const estimate = trussEstimate(est, quote);
+  return { quote, estimate, total: round2(quote + (estimate.used ? estimate.total : 0)) };
+}
 
 export function computeProject(est = {}) {
   const wallPanels = computeWallPanels(est).total;
@@ -797,9 +825,10 @@ const memo = (fn) => {
 };
 export const wallPanelsOf = memo(computeWallPanels);
 export const looseOf = memo(computeLoose);
+export const trussesOf = memo(computeTrusses);
 export const projectOf = memo((est) => {
   const wallPanels = wallPanelsOf(est).total;
   const loose = looseOf(est).total;
-  const trusses = computeTrusses(est).total;
+  const trusses = trussesOf(est).total;
   return { wallPanels, loose, trusses, subtotal: round2(wallPanels + loose + trusses) };
 });

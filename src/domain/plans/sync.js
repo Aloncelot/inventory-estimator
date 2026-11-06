@@ -4,6 +4,8 @@
 // group feeds one wall section marked with planKey. Those sections take their
 // length from the plan; every other section stays manual (the fallback method).
 
+import { findJunctions, junctionStudsByWall, JUNCTION_DEFAULTS } from './junctions';
+
 export const WALL_SIZES = ['2x4', '2x6', '2x8', '2x10'];
 export const SIZE_LABEL = { '(2)2x4': '(2) 2x4', '(2)2x6': '(2) 2x6' };
 /** '(2)2x4' → { double: true, base: '2x4' } */
@@ -79,20 +81,31 @@ export function groupLabel(key) {
   return `${KIND_LABEL[kind] || kind} ${size}`;
 }
 
+/** Corners and T junctions of a plan (see junctions.js). */
+export const planJunctions = (plan) => findJunctions(plan?.walls, Number(plan?.ptPerFt) || 0, (w) => groupRank(groupKeyOf(w)));
+/** Extra corner / T studs of each wall (none when the plan turns them off). */
+export function planJunctionStuds(plan) {
+  if (!(Number(plan?.ptPerFt) > 0) || plan?.junctions?.off) return new Map();
+  return junctionStudsByWall(planJunctions(plan), { ...JUNCTION_DEFAULTS, ...(plan?.junctions || {}) });
+}
+
 /** Walls of a plan grouped for the estimate, longest first. */
 export function planGroups(plan) {
   const k = Number(plan?.ptPerFt) || 0;
   const map = new Map();
+  const extra = planJunctionStuds(plan);
   for (const w of plan?.walls || []) {
     const len = wallLengthFt(w, k);
-    for (const part of wallParts(w)) {
+    wallParts(w).forEach((part, i) => {
       const key = keyOf(part.kind, part.size);
-      const g = map.get(key) || { key, category: key.split('|')[0], kind: part.kind, size: part.size, walls: 0, lengthFt: 0, openings: 0 };
+      const g = map.get(key) || { key, category: key.split('|')[0], kind: part.kind, size: part.size, walls: 0, lengthFt: 0, openings: 0, junctionStuds: 0 };
       g.walls += 1;
       g.lengthFt += len;
       g.openings += (w.openings || []).length;
+      // corner and T studs go to the wall's first framed wall
+      if (i === 0) g.junctionStuds += extra.get(w.id) || 0;
       map.set(key, g);
-    }
+    });
   }
   return sortGroups([...map.values()].map((g) => ({ ...g, lengthFt: round1(g.lengthFt), label: groupLabel(g.key) })));
 }
@@ -116,7 +129,9 @@ export function syncPlanSections(level, makeSection) {
     const planSize = s.planKey.split('|')[2];
     // planManual: the user types the length in Wall panels; the plan length stays as a reference
     const lengthLF = s.planManual ? s.lengthLF : planLF;
-    return s.lengthLF === lengthLF && s.planLF === planLF && s.planSize === planSize ? s : { ...s, lengthLF, planLF, planSize };
+    const planJunctionStuds = g ? g.junctionStuds : 0;
+    return s.lengthLF === lengthLF && s.planLF === planLF && s.planSize === planSize && (s.planJunctionStuds || 0) === planJunctionStuds
+      ? s : { ...s, lengthLF, planLF, planSize, planJunctionStuds };
   });
   let ext = update(level.exteriorSections);
   let int = update(level.interiorSections);
@@ -130,6 +145,7 @@ export function syncPlanSections(level, makeSection) {
       planLF: Math.round(g.lengthFt),
       planKey: g.key,
       planSize: g.size,
+      planJunctionStuds: g.junctionStuds,
     });
     if (g.category === 'exterior') ext = [...ext, sec]; else int = [...int, sec];
     added = true;

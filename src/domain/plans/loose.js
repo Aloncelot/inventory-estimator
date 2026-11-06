@@ -13,6 +13,7 @@
 
 import { normWall, wallParts, wallLengthFt } from './sync';
 import { hardwareCounts, describeRule } from './hardware';
+import { beamGroups } from './beams';
 
 const n = (v) => Number(v) || 0;
 const CELL_FT = 0.25; // floor raster: 3" cells
@@ -31,7 +32,24 @@ const BLOCKING_LABEL = Object.fromEntries(BLOCKING_KINDS.map((b) => [b.value, b.
  * walls are fine): area to the outside face of the walls, perimeter, and the
  * part within bandFt of the perimeter. Openings are rectangles in sheet pt.
  */
+// the raster takes a few hundred ms on a big plan: keep each result for as long
+// as the walls (an immutable array: any wall edit makes a new one), the scale,
+// the floor openings and the band stay the same
+const floorCache = new WeakMap();
 export function floorOf(plan, { bandFt = 0 } = {}) {
+  const walls = plan?.walls;
+  if (!walls || typeof walls !== 'object') return floorOfNow(plan, { bandFt });
+  let list = floorCache.get(walls);
+  if (!list) { list = []; floorCache.set(walls, list); }
+  const hit = list.find((e) => e.k === plan.ptPerFt && e.openings === plan.floorOpenings && e.bandFt === bandFt);
+  if (hit) return hit.result;
+  const result = floorOfNow(plan, { bandFt });
+  list.push({ k: plan.ptPerFt, openings: plan.floorOpenings, bandFt, result });
+  if (list.length > 4) list.shift();
+  return result;
+}
+
+function floorOfNow(plan, { bandFt = 0 } = {}) {
   const k = n(plan?.ptPerFt);
   // every wall is a barrier: the outside stops at the outermost walls whatever their type
   const ext = (plan?.walls || []).filter((w) => normWall(w).kind === 'exterior');
@@ -45,36 +63,54 @@ export function floorOf(plan, { bandFt = 0 } = {}) {
   if (W * H > 6e6) return null;
   const wall = new Uint8Array(W * H);
   const gapPt = GAP_FT * k;
+  // each wall stamps a capsule (its centre line widened by half its thickness
+  // plus the gap): every cell of its box within reach of the segment
   for (const w of barrier) {
     const r = ((n(w.t) || 6) / 12) * k / 2 + gapPt;
-    const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
-    const steps = Math.max(1, Math.ceil(L / (cell / 2)));
-    const rc = Math.ceil(r / cell);
-    for (let i = 0; i <= steps; i += 1) {
-      const px = w.x1 + ((w.x2 - w.x1) * i) / steps, py = w.y1 + ((w.y2 - w.y1) * i) / steps;
-      const cx = Math.floor((px - x0) / cell), cy = Math.floor((py - y0) / cell);
-      for (let dy = -rc; dy <= rc; dy += 1) for (let dx = -rc; dx <= rc; dx += 1) {
-        if ((dx * dx + dy * dy) * cell * cell > r * r) continue;
-        const X = cx + dx, Y = cy + dy;
-        if (X >= 0 && Y >= 0 && X < W && Y < H) wall[Y * W + X] = 1;
+    const r2c = r * r;
+    const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+    const L2 = dx * dx + dy * dy;
+    const X0 = Math.max(0, Math.floor((Math.min(w.x1, w.x2) - r - x0) / cell));
+    const X1 = Math.min(W - 1, Math.floor((Math.max(w.x1, w.x2) + r - x0) / cell));
+    const Y0 = Math.max(0, Math.floor((Math.min(w.y1, w.y2) - r - y0) / cell));
+    const Y1 = Math.min(H - 1, Math.floor((Math.max(w.y1, w.y2) + r - y0) / cell));
+    for (let Y = Y0; Y <= Y1; Y += 1) {
+      const py = y0 + Y * cell;
+      for (let X = X0; X <= X1; X += 1) {
+        const px = x0 + X * cell;
+        let t = L2 ? ((px - w.x1) * dx + (py - w.y1) * dy) / L2 : 0;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const ex = px - (w.x1 + dx * t), ey = py - (w.y1 + dy * t);
+        if (ex * ex + ey * ey <= r2c) wall[Y * W + X] = 1;
       }
     }
   }
-  // distance (in cells) from the outside: flood the outside first, then step inward
-  const dist = new Int32Array(W * H).fill(-1);
-  let queue = [];
-  for (let X = 0; X < W; X += 1) for (const Y of [0, H - 1]) if (!wall[Y * W + X] && dist[Y * W + X] < 0) { dist[Y * W + X] = 0; queue.push(Y * W + X); }
-  for (let Y = 0; Y < H; Y += 1) for (const X of [0, W - 1]) if (!wall[Y * W + X] && dist[Y * W + X] < 0) { dist[Y * W + X] = 0; queue.push(Y * W + X); }
-  const nb = (i) => { const X = i % W, Y = (i / W) | 0; const out = []; if (X > 0) out.push(i - 1); if (X < W - 1) out.push(i + 1); if (Y > 0) out.push(i - W); if (Y < H - 1) out.push(i + W); return out; };
-  for (let q = 0; q < queue.length; q += 1) for (const j of nb(queue[q])) if (!wall[j] && dist[j] < 0) { dist[j] = 0; queue.push(j); }
+  // distance (in cells) from the outside: flood the outside first, then step
+  // inward (typed-array queues, neighbours inline: this runs over every cell)
+  const N = W * H;
+  const dist = new Int32Array(N).fill(-1);
+  const queue = new Int32Array(N);
+  let qEnd = 0;
+  const seed = (i) => { if (!wall[i] && dist[i] < 0) { dist[i] = 0; queue[qEnd++] = i; } };
+  for (let X = 0; X < W; X += 1) { seed(X); seed((H - 1) * W + X); }
+  for (let Y = 0; Y < H; Y += 1) { seed(Y * W); seed(Y * W + W - 1); }
+  for (let q = 0; q < qEnd; q += 1) {
+    const i = queue[q], X = i % W;
+    if (X > 0) seed(i - 1);
+    if (X < W - 1) seed(i + 1);
+    if (i >= W) seed(i - W);
+    if (i < N - W) seed(i + W);
+  }
   // everything else is building (walls + inside); give it its distance to the outside
-  let front = queue;
-  let d = 0;
-  while (front.length) {
-    d += 1;
-    const next = [];
-    for (const i of front) for (const j of nb(i)) if (dist[j] < 0) { dist[j] = d; next.push(j); }
-    front = next;
+  let head = 0;
+  let tail = qEnd;
+  const step = (j, d) => { if (dist[j] < 0) { dist[j] = d; queue[tail++] = j; } };
+  while (head < tail) {
+    const i = queue[head++], X = i % W, d = dist[i] + 1;
+    if (X > 0) step(i - 1, d);
+    if (X < W - 1) step(i + 1, d);
+    if (i >= W) step(i - W, d);
+    if (i < N - W) step(i + W, d);
   }
   // the outer GAP_FT of the building is the gap-closing pad, not floor
   const padCells = Math.round(GAP_FT / CELL_FT);
@@ -86,10 +122,13 @@ export function floorOf(plan, { bandFt = 0 } = {}) {
   const inHole = (X, Y) => holes.some((h) => X >= h.a && X < h.b && Y >= h.c && Y < h.e);
   let floor = 0, band = 0, edges = 0, openings = 0;
   const isFloor = (i) => dist[i] > padCells;
-  for (let i = 0; i < W * H; i += 1) {
+  for (let i = 0; i < N; i += 1) {
     if (!isFloor(i)) continue;
     const X = i % W, Y = (i / W) | 0;
-    for (const j of nb(i)) if (!isFloor(j)) edges += 1;
+    if (X > 0 && !isFloor(i - 1)) edges += 1;
+    if (X < W - 1 && !isFloor(i + 1)) edges += 1;
+    if (i >= W && !isFloor(i - W)) edges += 1;
+    if (i < N - W && !isFloor(i + W)) edges += 1;
     if (inHole(X, Y)) { openings += 1; continue; }
     floor += 1;
     if (bandFt > 0 && dist[i] <= bandCells) band += 1;
@@ -105,6 +144,29 @@ export function floorOf(plan, { bandFt = 0 } = {}) {
     openingsSqFt: Math.round(openings * a),
     perimeterLF: Math.round(perimeter - 4 * CELL_FT),
   };
+}
+
+/**
+ * Windows of a plan for their flashing: blocking all around each rough opening,
+ * and the flashing tape over it, lapping 6" past each corner on every side.
+ * Height: the window's own, else its type's (W1…), else 48".
+ */
+export function windowFlashing(plan) {
+  const types = new Map((plan?.openingTypes || []).map((t) => [t.id, t]));
+  let count = 0, blockingIn = 0, tapeIn = 0;
+  for (const w of plan?.walls || []) {
+    for (const o of w.openings || []) {
+      if (o.type === 'door') continue;
+      const t = types.get(o.typeId);
+      const wIn = n(o.widthFt) * 12;
+      const hIn = n(o.heightIn) || n(t?.heightIn) || 48;
+      if (!wIn) continue;
+      count += 1;
+      blockingIn += 2 * (wIn + hIn);
+      tapeIn += 2 * (wIn + 12) + 2 * (hIn + 12);
+    }
+  }
+  return { count, blockingLF: Math.round((blockingIn / 12) * 10) / 10, tapeLF: Math.round((tapeIn / 12) * 10) / 10 };
 }
 
 /** Blocking drawn on the plan, LF by kind. */
@@ -215,6 +277,16 @@ export function withPlanLoose(est) {
         const p0 = prevRows.get(key);
         rows.push(row(p0, { id: p0?.id || `hw-${level.id}-${t.id}`, type: `${t.id}${t.name ? ` · ${t.name}` : ''}`, planHw: t.id, qty: counts.get(t.id) || 0, wastePct: p0?.wastePct ?? 0, plan: describeRule(t) }));
       }
+    }
+    // beams of the structural sheet, one row per mark: the LF here, the material picked by hand
+    for (const g of beamGroups(plan?.beams || [])) {
+      const key = `beam:${g.key}`;
+      const p0 = prevRows.get(key);
+      rows.push(row(p0, {
+        id: p0?.id || `bm-${level.id}-${g.key.replace(/\W+/g, '-')}`, type: `Beams · ${g.key}`, planLoose: key, wastePct: p0?.wastePct ?? 5,
+        inputs: { lengthLF: Math.round(g.lengthFt * 100) / 100 }, defaultFamily: 'LVL',
+        plan: `${g.count} beam${g.count === 1 ? '' : 's'} · ${Math.round(g.lengthFt * 10) / 10} LF · longest ${Math.round(g.longestFt * 10) / 10}'${g.unmeasured ? ` · ${g.unmeasured} not measured` : ''}`,
+      }));
     }
     // a template row the plan took over and no longer fills goes back to manual
     const made = new Set(rows.map((r) => r.id));

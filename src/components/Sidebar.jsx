@@ -11,7 +11,7 @@ import { useAuth } from '@/AuthContext';
 import { useProject } from '@/context/ProjectContext';
 import {
   LogOut, FolderOpen, LayoutDashboard, PanelsTopLeft, Layers, HardHat, ClipboardList, Receipt,
-  Package, Download, Save, Sun, Moon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine,
+  Package, Save, Sun, Moon, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine,
 } from 'lucide-react';
 
 const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
@@ -35,10 +35,9 @@ const NAV = [
   { key: 'layout', label: 'Layout check', Icon: Ruler, needsProject: true },
   { key: 'items', label: 'Material list', Icon: Package },
   { sep: true },
-  { key: 'labor', label: 'Labor', Icon: HardHat, soon: true },
-  { key: 'takeoff', label: 'Takeoff list', Icon: ClipboardList, soon: true },
+  { key: 'labor', label: 'Labor', Icon: HardHat, needsProject: true },
+  { key: 'takeoff', label: 'Takeoff list', Icon: ClipboardList, needsProject: true },
   { key: 'quote', label: 'Quote', Icon: Receipt, needsProject: true },
-  { key: 'export', label: 'Export', Icon: Download, soon: true },
 ];
 
 function applyTheme(dark) {

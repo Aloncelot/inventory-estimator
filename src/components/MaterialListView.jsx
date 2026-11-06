@@ -14,9 +14,9 @@ import {
   getAllVendors    
 } from "@/lib/catalog"; 
 import PriceEditModal from "./PriceEditModal";
+import { formatMoney } from "@/domain/lib/currency";
 
-const moneyFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-const fmt = (n) => (Number.isFinite(Number(n)) ? moneyFmt.format(Number(n)) : "—");
+const fmt = (n) => (Number.isFinite(Number(n)) ? formatMoney(Number(n)) : "—");
 
 // ListColumn component using global classes
 function ListColumn({ title, items, selectedValue, onSelect, loading, headerAction }) {

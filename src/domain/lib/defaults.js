@@ -41,6 +41,7 @@ export const LOOSE_PANEL_DEFAULTS = {
   extraSheathing: d('CDX SE', `4x8'-1/2"`),
   zipTape: d('ZIP Flashing Tape', '3.75in x 75ft'),
   openingsBlocking: d('SPF#2', `2x6"-8'`),
+  windowTape: d('ZIP Flashing Tape', '6in x 75ft'),
   secondBottom: d('SPF#2', `2x6"-8'`),
   int2x6PT: d('PT', `2x6"-8'`),
   int2x6Plate: d('SPF#2', `2x6"-16'`),

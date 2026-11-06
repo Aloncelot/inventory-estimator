@@ -5,7 +5,10 @@
 //     next to it (6x6, 4x6, (2) 2x6…) or, unlabeled, by the footprint itself;
 //   - tie-down rods (ATS and similar): a filled dot between two posts;
 //   - hold-down callouts written as text: "(2) HDU5 W/ ROD …";
-//   - shear walls: the type letter (A, B, C…) and length in each shear tag.
+//   - shear walls: the type letter (A, B, C…) and length in each shear tag;
+//   - the walls the structural sheet draws (bearing and shear walls): arch walls
+//     it shows too are confirmed as bearing, the ones only it shows are offered
+//     to add (partitions are usually left off structural sheets).
 // The two sheets are lined up by the grid bubbles they share (2.A, 2.B, 2.1…):
 // same labels, same distances, so a scale and an offset map one onto the other.
 // Pure functions over extractPage() output; unit-tested.
@@ -14,6 +17,7 @@ import { newPostType } from './sync';
 import { newHardwareType } from './hardware';
 
 export { SHEAR_TYPES, shearLengths, shearCount } from './hardware';
+export { beamGroups } from './beams';
 
 const n = (v) => Number(v) || 0;
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -227,13 +231,14 @@ function labelPosts(posts, texts, ptPerFt) {
  * @param {object} structPage extractPage() of the structural sheet
  * @param {{ptPerFt:number}} opts structPtPerFt = its scale; align = alignSheets() result
  */
-export function readStructural(structPage, { ptPerFt, align }) {
+export function readStructural(structPage, { ptPerFt, align, walls = [] }) {
   const k = ptPerFt;
   const posts = findCrossedBoxes(structPage, k);
   const labels = labelPosts(posts, structPage.texts, k);
   const rods = findDots(structPage);
   const shear = findShearTags(structPage.texts, k);
   const callouts = findCallouts(structPage.texts);
+  const beams = findBeams(structPage, k);
   const s = align?.s || 1, dx = align?.dx || 0, dy = align?.dy || 0;
   const map = (o) => ({ ...o, x: r2(s * o.x + dx), y: r2(s * o.y + dy) });
   return {
@@ -241,8 +246,84 @@ export function readStructural(structPage, { ptPerFt, align }) {
     rods: rods.map(map),
     shear: shear.map(map),
     callouts: callouts.map(map),
+    beams: beams.map((b) => {
+      const c = map(b);
+      if (b.x1 === undefined) return c;
+      const a = map({ x: b.x1, y: b.y1 }), e = map({ x: b.x2, y: b.y2 });
+      return { ...c, x1: a.x, y1: a.y, x2: e.x, y2: e.y };
+    }),
+    walls: walls.map((w) => {
+      const a = map({ x: w.x1, y: w.y1 }), b = map({ x: w.x2, y: w.y2 });
+      return { x1: a.x, y1: a.y, x2: b.x, y2: b.y, thickIn: r2(n(w.thickIn)) };
+    }),
     labels,
   };
+}
+
+/* ───────────────────── beams ───────────────────── */
+
+// a beam mark: B2, B12 STRUT, B7 HDR, B3 @ LADDER (mark, then what it is)
+const BEAM_RE = /^(B\d{1,3}[A-Z]?)\b\s*(.*)$/;
+
+/**
+ * Beams of the structural sheet: every beam mark (B2, B12 STRUT…) and the
+ * heavy line it names, the nearest one running the same way as the text, from
+ * end to end (collinear pieces joined). Marks no line is found for come back
+ * with lengthFt 0, to be measured by hand. Sheet points.
+ */
+export function findBeams(page, ptPerFt, { minWidth = 1 } = {}) {
+  const k = ptPerFt;
+  const heavy = (page.segments || []).filter((sg) => !sg.fill && (n(sg.w) || n(String(sg.style).split('|')[0])) >= minWidth
+    && Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1) >= 0.75 * k);
+  const out = [];
+  for (const t of page.texts || []) {
+    const m = BEAM_RE.exec(String(t.str || '').trim());
+    if (!m) continue;
+    const mark = m[1];
+    const note = m[2].trim().replace(/^@\s*/, '@ ');
+    // text direction and the middle of the text
+    const ux = Math.cos(t.angle || 0), uy = Math.sin(t.angle || 0);
+    const half = (String(t.str).trim().length * n(t.size) * 0.55) / 2;
+    const cx = t.x + ux * half + uy * (n(t.size) * 0.35);
+    const cy = t.y + uy * half - ux * (n(t.size) * 0.35);
+    const reach = Math.max(2.5 * n(t.size), 0.9 * k);
+    let best = null;
+    for (const sg of heavy) {
+      const L = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1);
+      const dx = (sg.x2 - sg.x1) / L, dy = (sg.y2 - sg.y1) / L;
+      if (Math.abs(dx * ux + dy * uy) < 0.97) continue; // not the text's direction
+      const u = (cx - sg.x1) * dx + (cy - sg.y1) * dy;
+      const off = Math.abs((cx - sg.x1) * -dy + (cy - sg.y1) * dx);
+      if (off > reach || u < -0.25 * k || u > L + 0.25 * k) continue;
+      if (!best || off < best.off) best = { sg, off, dx, dy };
+    }
+    if (!best) { out.push({ mark, note, x: r2(cx), y: r2(cy), lengthFt: 0 }); continue; }
+    // join the collinear pieces of the same pen that touch it
+    const { sg, dx, dy } = best;
+    const along = (x, y) => (x - sg.x1) * dx + (y - sg.y1) * dy;
+    const offOf = (x, y) => Math.abs((x - sg.x1) * -dy + (y - sg.y1) * dx);
+    let lo = Math.min(0, along(sg.x2, sg.y2)), hi = Math.max(0, along(sg.x2, sg.y2));
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const o of heavy) {
+        if (o.style !== sg.style || offOf(o.x1, o.y1) > 0.6 || offOf(o.x2, o.y2) > 0.6) continue;
+        const a = along(o.x1, o.y1), b = along(o.x2, o.y2);
+        const p0 = Math.min(a, b), p1 = Math.max(a, b);
+        // dashed beams (a header over an opening) are pieces with gaps: bridge gaps up to 9"
+        if (p1 < lo - 0.75 * k || p0 > hi + 0.75 * k) continue;
+        if (p0 < lo - 0.01 || p1 > hi + 0.01) { lo = Math.min(lo, p0); hi = Math.max(hi, p1); grew = true; }
+      }
+    }
+    out.push({
+      mark, note, x: r2(cx), y: r2(cy),
+      x1: r2(sg.x1 + dx * lo), y1: r2(sg.y1 + dy * lo), x2: r2(sg.x1 + dx * hi), y2: r2(sg.y1 + dy * hi),
+      lengthFt: r2((hi - lo) / k),
+    });
+  }
+  // a column of marks without lines is a schedule or a legend, not beams on the plan
+  const listed = (b) => !b.lengthFt && out.filter((o) => o !== b && Math.abs(o.x - b.x) < 4 && Math.abs(o.y - b.y) < 40 * Math.max(1, n(page.texts?.[0]?.size) || 8)).length >= 2;
+  return out.filter((b) => !listed(b));
 }
 
 /* ───────────────────── putting it on the walls ───────────────────── */
@@ -289,10 +370,10 @@ const sameType = (t, want) => t.notes === want.notes && t.kind === want.kind && 
  * placed by hand stay. Shear tags take the wall the tag points at (same
  * direction as its text). Returns the new plan and what could not be placed.
  */
-export function placeStructural(plan, found, { unlabeled = UNLABELED_POSTS, posts = true, rods = true, callouts = true, shear = true, rodName = 'Tie-down rod (ATS)' } = {}) {
+export function placeStructural(plan, found, { unlabeled = UNLABELED_POSTS, posts = true, rods = true, callouts = true, shear = true, bearing = true, beams = true, rodName = 'Tie-down rod (ATS)' } = {}) {
   const k = n(plan.ptPerFt);
-  if (!k) return { plan, placed: {}, missed: [] };
-  const walls = (plan.walls || []).map((w) => ({
+  if (!k) return { plan, placed: {}, missed: [], gaps: [] };
+  const walls = (plan.walls || []).map(unBearing).map((w) => ({
     ...w,
     posts: (w.posts || []).filter((p) => !p.src),
     hardware: (w.hardware || []).filter((h) => !h.src),
@@ -301,8 +382,26 @@ export function placeStructural(plan, found, { unlabeled = UNLABELED_POSTS, post
   const byId = new Map(walls.map((w) => [w.id, w]));
   let postTypes = (plan.postTypes || []).slice();
   let hardwareTypes = (plan.hardwareTypes || []).slice();
-  const placed = { posts: 0, rods: 0, callouts: 0, shear: 0 };
+  const placed = { posts: 0, rods: 0, callouts: 0, shear: 0, bearing: 0, beams: 0 };
+  // beams: the ones read from the sheet are replaced; yours (added or changed) stay
+  let planBeams = (plan.beams || []).filter((b) => b.src !== 'sd');
+  if (beams) {
+    (found.beams || []).forEach((b, i) => {
+      planBeams.push({ id: `sb${i + 1}`, src: 'sd', mark: b.mark, note: b.note || '', lengthFt: n(b.lengthFt), x: b.x, y: b.y, ...(b.x1 !== undefined ? { x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 } : {}) });
+      placed.beams += 1;
+    });
+  }
   const missed = [];
+
+  // walls the structural sheet draws: detected partitions there are bearing
+  const sw = matchStructWalls(walls, found.walls || [], k);
+  if (bearing) {
+    for (const w of walls) {
+      if (!sw.confirmed.has(w.id) || w.auto === false || normKind(w) !== 'partition') continue;
+      w.sdKind = w.kind; w.kind = 'bearing';
+      placed.bearing += 1;
+    }
+  }
 
   if (posts) {
     for (const p of found.posts || []) {
@@ -380,11 +479,100 @@ export function placeStructural(plan, found, { unlabeled = UNLABELED_POSTS, post
   postTypes = postTypes.filter((t) => !t.src || used.has(t.id));
   const usedHw = new Set(walls.flatMap((w) => (w.hardware || []).map((h) => h.typeId)));
   hardwareTypes = hardwareTypes.filter((t) => !t.auto || (t.rule || 'each') !== 'each' || usedHw.has(t.id));
-  return { plan: { ...plan, walls, postTypes, hardwareTypes }, placed, missed };
+  return { plan: { ...plan, walls, postTypes, hardwareTypes, beams: planBeams }, placed, missed, gaps: sw.gaps, confirmed: sw.confirmed.size };
 }
 
-/** Take off everything placed from the structural sheet; your own posts, hardware and shear types stay. */
-export const removeStructural = (plan) => placeStructural(plan, {}, { posts: false, rods: false, callouts: false, shear: false }).plan;
+/**
+ * Take off everything placed from the structural sheet: walls added from it,
+ * bearing marks, posts, hardware and shear types.
+ * Your own posts, hardware and shear types stay.
+ */
+export function removeStructural(plan) {
+  const p = placeStructural(plan, {}, { posts: false, rods: false, callouts: false, shear: false, bearing: false, beams: false }).plan;
+  return { ...p, walls: (p.walls || []).filter((w) => !w.sdWall) };
+}
+
+/* ───────────────────── walls of the structural sheet ───────────────────── */
+
+const normKind = (w) => (w.kind === 'interior' ? 'partition' : w.kind || 'partition');
+/** A wall back to the kind detection gave it before the structural sheet marked it bearing. */
+function unBearing(w) {
+  if (!w.sdKind) return w;
+  const { sdKind, ...rest } = w;
+  // you changed it since: your kind stays
+  return w.auto === false ? rest : { ...rest, kind: sdKind };
+}
+
+/**
+ * Lay the structural sheet's walls (arch points) over the plan's walls.
+ * confirmed: ids of plan walls the structural sheet draws too (half their
+ * length, or 4 ft, along a structural wall); gaps: stretches of structural
+ * walls (3 ft or longer) where the plan has no wall.
+ */
+export function matchStructWalls(walls, structWalls, ptPerFt) {
+  const k = ptPerFt;
+  const confirmed = new Set();
+  const gaps = [];
+  for (const s of structWalls || []) {
+    const L = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+    if (L < k) continue;
+    const ux = (s.x2 - s.x1) / L, uy = (s.y2 - s.y1) / L;
+    const cover = [];
+    for (const w of walls || []) {
+      const wl = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+      if (!wl || Math.abs(((w.x2 - w.x1) / wl) * -uy + ((w.y2 - w.y1) / wl) * ux) > 0.05) continue; // not parallel
+      const off = (x, y) => Math.abs((x - s.x1) * -uy + (y - s.y1) * ux);
+      const lim = ((n(w.t) || n(w.thickIn) || 5) / 24 + n(s.thickIn) / 24 + 6 / 12) * k;
+      if (off(w.x1, w.y1) > lim || off(w.x2, w.y2) > lim) continue;
+      const a = (w.x1 - s.x1) * ux + (w.y1 - s.y1) * uy, b = (w.x2 - s.x1) * ux + (w.y2 - s.y1) * uy;
+      const lo = Math.max(0, Math.min(a, b)), hi = Math.min(L, Math.max(a, b));
+      if (hi - lo <= 0) continue;
+      cover.push([lo, hi]);
+      if (hi - lo >= Math.min(wl * 0.5, 4 * k)) confirmed.add(w.id);
+    }
+    cover.sort((p, q) => p[0] - q[0]);
+    let at = 0;
+    const open = [];
+    for (const [lo, hi] of cover) { if (lo > at) open.push([at, lo]); at = Math.max(at, hi); }
+    if (at < L) open.push([at, L]);
+    for (const [lo, hi] of open) {
+      if (hi - lo < 3 * k) continue;
+      // a missing stretch of wall runs between walls the plan has (a beam or
+      // strut line in the middle of a room does not)
+      const ends = [[s.x1 + ux * lo, s.y1 + uy * lo], [s.x1 + ux * hi, s.y1 + uy * hi]];
+      if (!ends.every(([x, y]) => (walls || []).some((w) => distTo(w, x, y) <= 1.5 * k))) continue;
+      gaps.push({
+        x1: r2(s.x1 + ux * lo), y1: r2(s.y1 + uy * lo), x2: r2(s.x1 + ux * hi), y2: r2(s.y1 + uy * hi),
+        thickIn: n(s.thickIn), lengthFt: r2((hi - lo) / k),
+      });
+    }
+  }
+  return { confirmed, gaps };
+}
+
+/** The structural walls the plan lacks, added as bearing walls (kept when the sheet is detected again). */
+export function addStructWalls(plan, gaps, newId) {
+  const add = (gaps || []).map((g) => {
+    const base = { id: newId(), x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2, auto: false, added: true, sdWall: true, openings: [] };
+    // a band this thick is two stud walls (demising / party wall): shear + bearing, as detection reads it
+    if (n(g.thickIn) >= 9) return { ...base, t: n(g.thickIn), kind: 'shear', size: '2x4', double: true, kind2: 'bearing', size2: '2x4' };
+    const size = structWallSize(g.thickIn);
+    return { ...base, t: size === '2x4' ? 4.75 : 6.75, kind: 'bearing', size };
+  });
+  return { ...plan, walls: [...(plan.walls || []), ...add] };
+}
+
+function distTo(w, x, y) {
+  const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+  const L2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((x - w.x1) * dx + (y - w.y1) * dy) / L2));
+  return Math.hypot(x - (w.x1 + dx * t), y - (w.y1 + dy * t));
+}
+
+/** Stud size of a wall the structural sheet draws: its thickness is the framing (no finishes). */
+export function structWallSize(thickIn) {
+  return n(thickIn) >= 4.5 ? '2x6' : '2x4';
+}
 
 /** Spacings (in) of the S-402 style shear wall schedule: anchor bolts on concrete, lag screws at upper sills. */
 export const SHEAR_DEFAULTS = {

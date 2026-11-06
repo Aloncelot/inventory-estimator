@@ -73,9 +73,19 @@ export default function LoosePanelMaterials({ title = 'Loose materials (wall pan
           </button>
         ) : null}
       </Fld>
-      <Fld label="Openings blocking LF" w={56}>
-        <NumInput value={extInputs.openingsBlockingLF ?? 0} onCommit={(v) => update((p) => ({ ...p, extInputs: { ...(p.extInputs || {}), openingsBlockingLF: v } }))} />
-      </Fld>
+      {[['openingsBlocking', 'Window blocking LF', calc.openLF], ['windowTape', 'Window tape LF', calc.tapeLF]].map(([k, label, v]) => {
+        const edited = Boolean(extInputs[`${k}Edited`]);
+        return (
+          <Fld key={k} label={label} w={56} title={calc.windows ? `From the plan: ${calc.windows.count} windows (rough openings: width from the plan, height from the window type)` : 'Type it: no windows on a plan for this level'}>
+            <NumInput value={v ?? 0} onCommit={(x) => update((p) => ({ ...p, extInputs: { ...(p.extInputs || {}), [`${k}LF`]: x, [`${k}Edited`]: true } }))} />
+            {edited && calc.windows ? (
+              <button type="button" className="row-action-btn" title="Back to the plan's windows" onClick={() => update((p) => ({ ...p, extInputs: { ...(p.extInputs || {}), [`${k}Edited`]: false } }))}>
+                <RotateCcw size={12} />
+              </button>
+            ) : null}
+          </Fld>
+        );
+      })}
       <Fld label="Int. 2×6 / 2×4 LF" title="From interior wall sections"><span className="strong">{i6LF.toLocaleString('en-US')} / {i4LF.toLocaleString('en-US')}</span></Fld>
       <Fld label="Cabinet blocking LF" w={56}>
         <NumInput value={intInputs.blockingLF ?? 0} onCommit={(v) => update((p) => ({ ...p, intInputs: { ...(p.intInputs || {}), blockingLF: v } }))} />

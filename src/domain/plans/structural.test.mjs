@@ -95,7 +95,7 @@ test('placed on the walls; placing again replaces, your own items stay', () => {
   const mine = { id: 'P1', kind: 'builtup', plies: 3 };
   const plan = { ptPerFt: K, walls: archWalls.map((w) => (w.id === 'a' ? { ...w, posts: [{ atFt: 2, typeId: 'P1' }] } : w)), postTypes: [mine] };
   const r = placeStructural(plan, found);
-  assert.deepEqual(r.placed, { posts: 3, rods: 1, callouts: 2, shear: 2 });
+  assert.deepEqual(r.placed, { posts: 3, rods: 1, callouts: 2, shear: 2, bearing: 0, beams: 0 });
   assert.deepEqual(r.missed.map((m) => m.kind), ['post']);
   const a = r.plan.walls.find((w) => w.id === 'a');
   const b = r.plan.walls.find((w) => w.id === 'b');
@@ -150,4 +150,62 @@ test('detecting the walls again keeps what was placed on auto walls', () => {
   assert.deepEqual(out[0].posts, [{ atFt: 10, typeId: 'P2', src: 'sd' }]);
   assert.deepEqual(out[0].shear, [{ type: 'E', lengthFt: 12 }]);
   assert.equal(out[0].auto, true, 'still a detected wall');
+});
+
+test('walls of the structural sheet: shared ones turn bearing, the ones only it draws are offered', async () => {
+  const { matchStructWalls, addStructWalls } = await import('./structural.js');
+  // plan: wall a (exterior), b (partition), c a partition across the room at x=100+30K
+  const walls = [
+    ...archWalls,
+    { id: 'c', x1: 100 + 30 * K, y1: 100, x2: 100 + 30 * K, y2: 100 + 20 * K, t: 4.75, kind: 'partition', size: '2x4', auto: true },
+  ];
+  // the structural sheet draws b and, at x = 100 + 15K, a wall the plan lacks (y 0–20 ft, between a and…)
+  const sw = [
+    { x1: 100, y1: 100, x2: 100, y2: 100 + 20 * K, thickIn: 3.5 },
+    { x1: 100 + 15 * K, y1: 100, x2: 100 + 15 * K, y2: 100 + 10 * K, thickIn: 5.5 }, // ends in the room: a beam
+    { x1: 100, y1: 100 + 20 * K, x2: 100 + 30 * K, y2: 100 + 20 * K, thickIn: 5.5 }, // between b and c: a missing wall
+  ];
+  const m = matchStructWalls(walls, sw, K);
+  assert.deepEqual([...m.confirmed], ['b']);
+  assert.equal(m.gaps.length, 1);
+  assert.equal(m.gaps[0].lengthFt, 30);
+  const r = placeStructural({ ptPerFt: K, walls }, { walls: sw });
+  assert.equal(r.placed.bearing, 1);
+  assert.equal(r.plan.walls.find((w) => w.id === 'b').kind, 'bearing');
+  assert.equal(r.plan.walls.find((w) => w.id === 'c').kind, 'partition');
+  // a wall you changed keeps your kind
+  const mine = placeStructural({ ptPerFt: K, walls: walls.map((w) => (w.id === 'b' ? { ...w, auto: false } : w)) }, { walls: sw });
+  assert.equal(mine.placed.bearing, 0);
+  // added: bearing 2x6, and the gap is gone
+  let i = 0;
+  const added = addStructWalls(r.plan, r.gaps, () => `n${i++}`);
+  const n0 = added.walls.find((w) => w.id === 'n0');
+  assert.deepEqual([n0.kind, n0.size, n0.sdWall], ['bearing', '2x6', true]);
+  assert.equal(placeStructural(added, { walls: sw }).gaps.length, 0);
+  // removed: partitions back, added walls gone
+  const gone = removeStructural(added);
+  assert.equal(gone.walls.find((w) => w.id === 'b').kind, 'partition');
+  assert.equal(gone.walls.some((w) => w.sdWall), false);
+});
+
+test('beams: the heavy line each mark names, dashed pieces joined, grouped by mark', async () => {
+  const { findBeams, beamGroups } = await import('./structural.js');
+  const H = (x1, y1, x2, y2) => ({ x1, y1, x2, y2, w: 1.44, style: '1.44|#0d0d0d' });
+  const page = {
+    segments: [
+      H(100, 100, 100 + 10 * K, 100), // B3 over it: 10 ft
+      H(300, 100, 300 + 2 * K, 100), H(300 + 2.5 * K, 100, 300 + 5 * K, 100), // dashed: 5 ft
+      { x1: 500, y1: 60, x2: 500, y2: 60 + 8 * K, w: 1.44, style: '1.44|#0d0d0d' }, // vertical, 8 ft
+    ],
+    texts: [
+      { str: 'B3', x: 100 + 4 * K, y: 97, size: 7, angle: 0 },
+      { str: 'B7 HDR', x: 300 + 1.5 * K, y: 97, size: 7, angle: 0 },
+      { str: 'B3', x: 497, y: 60 + 5 * K, size: 7, angle: -Math.PI / 2 },
+      // a schedule: marks in a column, no lines
+      { str: 'B1', x: 900, y: 100, size: 7, angle: 0 }, { str: 'B2', x: 900, y: 112, size: 7, angle: 0 }, { str: 'B3', x: 900, y: 124, size: 7, angle: 0 },
+    ],
+  };
+  const b = findBeams(page, K);
+  assert.deepEqual(b.map((x) => [x.mark, x.note, x.lengthFt]), [['B3', '', 10], ['B7', 'HDR', 5], ['B3', '', 8]]);
+  assert.deepEqual(beamGroups(b).map((g) => [g.key, g.count, g.lengthFt]), [['B3', 2, 18], ['B7 HDR', 1, 5]]);
 });

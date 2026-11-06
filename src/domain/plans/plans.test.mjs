@@ -136,3 +136,21 @@ test('each wall of a double wall keeps its own stud size', async () => {
   assert.deepEqual(normWall({ kind: 'shear', size: '(2)2x4', kind2: 'bearing' }), { double: true, kind: 'shear', size: '2x4', kind2: 'bearing', size2: '2x4' });
   assert.equal(normWall({ kind: 'partition', size: '2x6' }).double, false);
 });
+
+test('a wall chained to a counter line is split off when its poché backs it', () => {
+  const seg = (x1, y1, x2, y2, style = P, extra = {}) => ({ x1, y1, x2, y2, w: 1, style, ...extra });
+  const page = room();
+  const t = 8.25 * IN, y0 = 100 + t, y1 = 100 + 10 * K - t;
+  const px = 100 + 6 * K, pt = 4.75 * IN;
+  // the partition faces, and a counter edge 10" off its face (same pen)
+  page.segments.push(seg(px, y0, px, y1), seg(px + pt, y0, px + pt, y1), seg(px + pt + 10 * IN, y0 + K, px + pt + 10 * IN, y1 - K));
+  const at6 = (r) => r.walls.filter((w) => !w.exterior && Math.abs(w.x1 - (px + pt / 2)) < 2);
+  assert.equal(at6(detectWalls(page, { ptPerFt: K, styles: [S, P] })).length, 0, 'no poché: too thick, left out');
+  page.segments.push(seg(px, y0, px, y1, 'fill|#c0c0c0', { fill: true }), seg(px + pt, y0, px + pt, y1, 'fill|#c0c0c0', { fill: true }));
+  const r = detectWalls(page, { ptPerFt: K, styles: [S, P] });
+  const w = at6(r);
+  assert.equal(w.length, 1);
+  assert.equal(w[0].size, '2x4');
+  assert.equal(r.walls.filter((x) => !x.exterior).length, 2, 'the counter is not a wall');
+  assert.ok(suggestStyles([{ style: 'fill|#c0c0c0', width: 0, color: '#c0c0c0', lengthFt: 100 }]).includes('fill|#c0c0c0'), 'grey poché is suggested');
+});

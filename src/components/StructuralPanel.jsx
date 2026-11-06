@@ -5,7 +5,10 @@
 'use client';
 
 import { Upload, RefreshCw, Trash2, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { shearLengths, SHEAR_TYPES } from '@/domain/plans/hardware';
+import { beamGroups } from '@/domain/plans/beams';
+import { NumInput, TextInput } from '@/components/ui/mat';
 
 const fmt = (v) => Math.round(Number(v) || 0).toLocaleString('en-US');
 const UNLABELED_CHOICES = {
@@ -13,12 +16,56 @@ const UNLABELED_CHOICES = {
   '2x6': ['6x6', '4x6', '(2) 2x6', '(3) 2x6', ''],
 };
 
-export default function StructuralPanel({ plan, busy, onUpload, onPage, onPlace, onRemove, onPatch, onShearHardware, onConcrete }) {
+/** Beams by mark; each one's mark and length editable, removable; beams added by hand. */
+function BeamsBox({ plan, onBeams }) {
+  const beams = plan.beams || [];
+  const groups = beamGroups(beams);
+  const [open, setOpen] = useState(null);
+  const patch = (id, p) => onBeams((list) => list.map((b) => (b.id === id ? { ...b, ...p, src: 'manual' } : b)));
+  const parse = (v) => { const m = /^(B\d{1,3}[A-Z]?)\s*(.*)$/i.exec(String(v).trim()); return m ? { mark: m[1].toUpperCase(), note: m[2].trim() } : { mark: String(v).trim(), note: '' }; };
+  return (
+    <div className="fp-box sp-beams">
+      <strong>Beams</strong>
+      {groups.length ? (
+        <table className="tbl sp-btbl">
+          <thead><tr><th>Mark</th><th className="num">Beams</th><th className="num">LF</th><th className="num">Longest</th><th /></tr></thead>
+          {groups.map((g) => (
+            <tbody key={g.key}>
+              <tr className="sp-bgrp" onClick={() => setOpen(open === g.key ? null : g.key)} title="Show each beam">
+                <td><span className="sp-caret">{open === g.key ? '▾' : '▸'}</span> {g.key}</td>
+                <td className="num">{g.count}</td>
+                <td className="num">{Math.round(g.lengthFt * 10) / 10}</td>
+                <td className="num">{Math.round(g.longestFt * 10) / 10}'</td>
+                <td className="ew-subtle">{g.unmeasured ? `${g.unmeasured} to measure` : ''}</td>
+              </tr>
+              {open === g.key ? beams.filter((b) => `${b.mark}${b.note ? ` ${b.note}` : ''}` === g.key).map((b) => (
+                <tr key={b.id} className="sp-brow">
+                  <td><TextInput value={`${b.mark}${b.note ? ` ${b.note}` : ''}`} onCommit={(v) => patch(b.id, parse(v))} aria-label="Beam mark" /></td>
+                  <td colSpan={2} className="num"><NumInput w={64} step="0.01" value={b.lengthFt} onCommit={(v) => patch(b.id, { lengthFt: Math.max(0, v) })} aria-label="Beam length, ft" /> ft</td>
+                  <td className="ew-subtle">{b.src === 'sd' ? 'from the sheet' : 'yours'}</td>
+                  <td><button type="button" className="ew-icon-btn" onClick={() => onBeams((list) => list.filter((x) => x.id !== b.id))} aria-label="Remove beam" title="Remove this beam"><Trash2 size={12} /></button></td>
+                </tr>
+              )) : null}
+            </tbody>
+          ))}
+        </table>
+      ) : <span className="ew-subtle">No beam marks (B1, B2 STRUT…) found on the sheet.</span>}
+      <button type="button" className="ew-btn ew-btn--ghost" onClick={() => { const id = `mb${Date.now().toString(36)}`; onBeams((list) => [...list, { id, src: 'manual', mark: open ? open.split(' ')[0] : 'B1', note: open ? open.split(' ').slice(1).join(' ') : '', lengthFt: 0 }]); }}>
+        <Plus size={13} /> Beam{open ? ` ${open}` : ''}
+      </button>
+      <span className="ew-subtle">Beams with the same mark are one row of Loose material (their level) with the LF; pick the material there. Placing again keeps the beams you changed or added.</span>
+    </div>
+  );
+}
+
+export default function StructuralPanel({ plan, busy, onUpload, onPage, onPlace, onRemove, onPatch, onShearHardware, onAddGaps, onConcrete, onBeams }) {
   const st = plan.structural;
   const opts = st?.opts || {};
   const found = st?.found;
   const placed = st?.placed || {};
   const missed = st?.missed || [];
+  const gaps = st?.gaps || [];
+  const gapLF = gaps.reduce((s, g) => s + (Number(g.lengthFt) || 0), 0);
   const lens = shearLengths(plan);
   const setOpt = (patch) => onPatch({ opts: { ...opts, ...patch } });
   const unl = opts.unlabeled || { '2x4': '4x4', '2x6': '6x6' };
@@ -58,11 +105,12 @@ export default function StructuralPanel({ plan, busy, onUpload, onPage, onPlace,
               <span>{fmt(found.rods.length)} tie-down rods</span>
               <span>{found.callouts.length ? found.callouts.map((c) => `(${c.qty}) ${c.model}`).join(', ') : 'No hold-down callouts'}</span>
               <span>{fmt(found.shear.length)} shear wall tags</span>
+              {found.walls ? <span>{fmt(found.walls.length)} walls (bearing and shear)</span> : null}
               <span className="ew-subtle">Lined up by {st.align.labels.join(', ')}</span>
             </div>
             <div className="fp-box">
               <strong>Place on the walls</strong>
-              {[['posts', 'Posts', 'post'], ['rods', 'Tie-down rods', 'rod'], ['callouts', 'Hold-down callouts', 'callout'], ['shear', 'Shear wall types', 'shear']].map(([key, label, kind]) => (
+              {[['posts', 'Posts', 'post'], ['rods', 'Tie-down rods', 'rod'], ['callouts', 'Hold-down callouts', 'callout'], ['shear', 'Shear wall types', 'shear'], ['bearing', 'Partitions it draws → bearing', 'bearing'], ['beams', 'Beams (by mark)', 'beam']].map(([key, label, kind]) => (
                 <label key={key} className="pv-check">
                   <input type="checkbox" checked={opts[key] !== false} onChange={(e) => setOpt({ [key]: e.target.checked })} />
                   {label}{placed[key] !== undefined ? ` · ${placed[key]} placed${missedBy[kind] ? `, ${missedBy[kind]} off the walls` : ''}` : ''}
@@ -85,6 +133,22 @@ export default function StructuralPanel({ plan, busy, onUpload, onPage, onPlace,
               {missed.length ? <span className="ew-subtle">Marked ✕ on the drawing: items that fall where no wall was found. Add the wall, then place again.</span> : null}
             </div>
             <div className="fp-box">
+              <strong>Walls</strong>
+              {found.walls ? (
+                <>
+                  <span>{fmt(st.confirmed || 0)} walls of this plan are on the structural plan too</span>
+                  {gaps.length ? (
+                    <>
+                      <span>{fmt(gaps.length)} only on the structural plan · {fmt(gapLF)} LF</span>
+                      <span className="ew-subtle">Dashed orange on the drawing. They can be walls this plan missed, or beams and struts drawn like walls: click one to add it as a bearing wall, or add them all.</span>
+                      <button type="button" className="ew-btn ew-btn--ghost" onClick={onAddGaps} disabled={Boolean(busy)}><Plus size={13} /> Add all {gaps.length}</button>
+                    </>
+                  ) : <span className="ew-subtle">Every wall it draws is on this plan.</span>}
+                  <span className="ew-subtle">Partitions are usually left off structural sheets: the ones it does draw carry load.</span>
+                </>
+              ) : <span className="ew-subtle">Place on walls again to compare the walls of both sheets.</span>}
+            </div>
+            <div className="fp-box">
               <strong>Shear walls</strong>
               {lens.size ? (
                 <table className="tbl sp-shear">
@@ -102,6 +166,7 @@ export default function StructuralPanel({ plan, busy, onUpload, onPage, onPlace,
               <span className="ew-subtle">Each tag gives its type and length; select a wall to change them.</span>
             </div>
           </div>
+          <BeamsBox plan={plan} onBeams={onBeams} />
         </>
       )}
     </section>

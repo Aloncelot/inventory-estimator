@@ -9,13 +9,13 @@ import { displayOf, lighten } from '@/domain/plans/display';
 export const KIND_COLOR = { exterior: '#d9a29b', bearing: '#e2c08c', shear: '#c0a8cc', knee: '#9bcdc1', partition: '#a7c2db' };
 export const MEMBER_COLOR = {
   plate: '#d8c3a0', stud: '#e6d3b0', block: '#cdb58c', fire: '#c9573f', post: '#8d6e4c', loose: '#c4a46f',
-  king: '#b9cc93', jack: '#9fbb72', header: '#d89a4e', cripple: '#9cb8cf', sill: '#7fa3c0',
+  king: '#b9cc93', jack: '#9fbb72', header: '#d89a4e', cripple: '#9cb8cf', sill: '#7fa3c0', backer: '#5fb3ad',
   sheet: '#d2bf98',
 };
 export const PICKED_COLOR = '#f2c94c';
 export const HOVER_COLOR = '#ffe8a3';
 
-const MEMBER_LABEL = { plate: 'Plate', stud: 'Stud', king: 'King stud', jack: 'Jack stud', header: 'Header', cripple: 'Cripple', sill: 'Sill', block: 'Blocking', fire: 'Fireblocking', post: 'Post', loose: 'Loose top plate' };
+const MEMBER_LABEL = { plate: 'Plate', stud: 'Stud', king: 'King stud', jack: 'Jack stud', header: 'Header', cripple: 'Cripple', sill: 'Sill', block: 'Blocking', fire: 'Fireblocking', post: 'Post', loose: 'Loose top plate', backer: 'Corner / T stud' };
 
 const box = (part, a0, a1, c0, c1, z0, z1, extra) => ({
   o: part.origin, d: part.dir, n: part.nrm, a0, a1, c0, c1, z0, z1, ...extra,
@@ -55,7 +55,7 @@ export function sceneBoxes(model, { mode = 'walls', sheets = false, only = null,
     }
     const panelOf = (a) => f.panels.findIndex((p) => a >= p.start - 0.01 && a < p.start + p.length - 0.01) + 1;
     for (const m of f.members) {
-      const len = ['stud', 'king', 'jack', 'post'].includes(m.t) || (m.t === 'cripple' && m.z1 - m.z0 > m.a1 - m.a0) ? m.z1 - m.z0 : m.a1 - m.a0;
+      const len = ['stud', 'king', 'jack', 'post', 'backer'].includes(m.t) || (m.t === 'cripple' && m.z1 - m.z0 > m.a1 - m.a0) ? m.z1 - m.z0 : m.a1 - m.a0;
       out.push(box(part, m.a0, m.a1, -h2 + m.c0, -h2 + m.c1, m.z0, m.z1, {
         color: MEMBER_COLOR[m.t], pick: `${part.wallId}`, panel: `${part.id}|${panelOf((m.a0 + m.a1) / 2)}`,
         info: `${part.label} · panel ${panelOf((m.a0 + m.a1) / 2) || '–'} · ${MEMBER_LABEL[m.t]} ${feet(len)}`,

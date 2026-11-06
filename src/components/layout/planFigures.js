@@ -79,8 +79,8 @@ export function buildingFigure(model, { azimuth = 45 } = {}) {
 
 /* ───────────────────────── one wall, framed ───────────────────────── */
 
-const MEMBER_LABEL = { plate: 'Plate', stud: 'Stud', king: 'King stud', jack: 'Jack stud', header: 'Header', cripple: 'Cripple', sill: 'Sill', block: 'Blocking', fire: 'Fireblocking', post: 'Post', loose: 'Loose top plate' };
-const MEMBER_TONE = { plate: 'mid', stud: 'mid', king: 'mid', jack: 'mid', header: 'mid', cripple: 'mid', sill: 'mid', block: 'lo', fire: 'mid', post: 'hi', loose: 'hi' };
+const MEMBER_LABEL = { plate: 'Plate', stud: 'Stud', king: 'King stud', jack: 'Jack stud', header: 'Header', cripple: 'Cripple', sill: 'Sill', block: 'Blocking', fire: 'Fireblocking', post: 'Post', loose: 'Loose top plate', backer: 'Corner / T stud' };
+const MEMBER_TONE = { plate: 'mid', stud: 'mid', king: 'mid', jack: 'mid', header: 'mid', cripple: 'mid', sill: 'mid', block: 'lo', fire: 'mid', post: 'hi', loose: 'hi', backer: 'mid' };
 
 /**
  * parts: the model parts of one plan wall (2 for a double wall).
@@ -116,7 +116,7 @@ export function wallFrameFigure(parts, { azimuth = 75, sheets = 'auto', width = 
     for (const m of f.members) {
       const b = box(m.a0, m.a1, y0 + m.c0, y0 + m.c1);
       const c = [(m.a0 + m.a1) / 2, (b.y + b.y + b.d) / 2, (m.z0 + m.z1) / 2];
-      const len = m.t === 'stud' || m.t === 'king' || m.t === 'jack' || m.t === 'post' || (m.t === 'cripple' && m.z1 - m.z0 > m.a1 - m.a0) ? m.z1 - m.z0 : m.a1 - m.a0;
+      const len = m.t === 'stud' || m.t === 'king' || m.t === 'jack' || m.t === 'post' || m.t === 'backer' || (m.t === 'cripple' && m.z1 - m.z0 > m.a1 - m.a0) ? m.z1 - m.z0 : m.a1 - m.a0;
       const info = `${part.label}${parts.length > 1 ? ` (wall ${i + 1})` : ''} · panel ${panelOf((m.a0 + m.a1) / 2) || '–'} · ${MEMBER_LABEL[m.t]} ${feet(len)}`;
       const open = ['king', 'jack', 'header', 'cripple', 'sill'].includes(m.t);
       items.push({

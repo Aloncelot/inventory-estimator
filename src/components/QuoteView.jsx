@@ -1,17 +1,30 @@
 // src/components/QuoteView.jsx
-// Wall-panels-only quote for the client: per level and category, then bracing
-// and manufacture, with tax and shipping as in Summary. Printable to PDF.
+// The client quote: wall panels, loose material, trusses and labor (each can be
+// left out), in detail or one line each, with tax and shipping as in Summary.
+// Printable to PDF.
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Receipt, Printer } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import { PageHeader, TextInput, NumInput, fmtMoney } from '@/components/ui/mat';
-import { computeWallPanelsQuote } from '@/domain/estimate/quote';
+import { computeQuote } from '@/domain/estimate/quote';
+import { scopeOf } from '@/domain/scope';
+import { getCurrency } from '@/domain/lib/currency';
 
-const DEFAULT_SCOPE = 'Wall panel framing package: exterior and interior wall panels, panel nails and fasteners, '
-  + 'loose plates and blocking, temporary bracing and panel manufacture. Excludes trusses, floor and roof framing, '
-  + 'hardware not listed, delivery unless shown, and installation.';
+/** Scope and terms by what the quote includes. */
+function defaultScope(inc) {
+  const has = (k) => inc[k] !== false;
+  const parts = [];
+  if (has('wallPanels')) parts.push(`${inc.structural === false ? 'partition' : inc.partitions === false ? 'exterior, bearing and shear' : 'exterior and interior'} wall panels built in the shop (studs, plates, headers, kings and jacks, posts, sheathing as specified), panel nails and fasteners, loose plates and blocking, temporary bracing`);
+  if (has('loose')) parts.push('loose material: floor framing and subfloor, beams and posts, stairs, roof framing and sheathing, structural hardware and blocking as listed');
+  if (has('trusses')) parts.push('floor and roof trusses');
+  if (has('labor')) parts.push('installation labor: setting the panels, trusses and floor framing, exterior windows and doors, structural hardware, punch list');
+  const out = ['labor', 'trusses', 'loose'].filter((k) => !has(k)).map((k) => ({ labor: 'installation', trusses: 'trusses', loose: 'loose material not listed' }[k]));
+  return `Framing package: ${parts.join('; ')}.`
+    + ` Excludes${out.length ? ` ${out.join(', ')},` : ''} interior doors, finishes, permits, and delivery unless shown.`
+    + ' Quantities per the drawings listed; changes to the drawings are priced as a change order.';
+}
 const DATE_FMT = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const fmtDate = (iso) => {
   if (!iso) return '';
@@ -41,6 +54,22 @@ function QField({ value, onCommit, placeholder, className = '', multiline = fals
   );
 }
 
+/** One group of a part: an optional heading (a level), its lines, its subtotal when headed. */
+function QuoteGroup({ g, showTitle }) {
+  return (
+    <>
+      {showTitle ? <tr className="q-level"><td colSpan={3}>{g.title}</td></tr> : null}
+      {g.lines.map((l) => (
+        <tr key={l.key}>
+          <td className={showTitle ? 'q-indent2' : 'q-indent'}>{l.label}</td>
+          <td className="q-muted">{l.detail}</td>
+          <td className="num">{fmtMoney(l.amount)}</td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 export default function QuoteView() {
   const { projectData, projectId, updateProject, isLoaded } = useProject();
   const est = useMemo(() => projectData?.estimateData || {}, [projectData]);
@@ -59,7 +88,11 @@ export default function QuoteView() {
     setSavedFrom(next);
   };
 
-  const q = useMemo(() => computeWallPanelsQuote(est, { shipping: quote.shipping }), [est, quote.shipping]);
+  const detail = quote.detail || 'detail';
+  const q = useMemo(() => computeQuote(est, { shipping: quote.shipping, detail }), [est, quote.shipping, detail]);
+  const sc = scopeOf(est);
+  const include = { wallPanels: sc.structural || sc.partitions, structural: sc.structural, partitions: sc.partitions, loose: sc.loose, trusses: sc.trusses, labor: sc.labor };
+  const only = q.blocks.length === 1 && q.blocks[0].key === 'wallPanels';
 
   if (!isLoaded || !projectData) {
     return (
@@ -79,7 +112,7 @@ export default function QuoteView() {
       <PageHeader
         icon={Receipt}
         title="Quote"
-        meta="Wall panels only"
+        meta={q.blocks.map((b) => b.title).join(' · ') || 'Nothing included'}
         totalLabel="Quote total"
         total={q.total}
         actions={(
@@ -89,7 +122,19 @@ export default function QuoteView() {
         )}
       />
 
-      <article className="quote-doc" aria-label="Wall panels quote">
+      <div className="ew-card q-opts no-print">
+        <span className="q-opts__lbl">Scope</span>
+        <span className="ew-subtle">{q.blocks.map((b) => b.title).join(' · ') || 'Nothing in scope'} · set in Summary</span>
+        <label className="fld">
+          <span>Show</span>
+          <select className="ew-select" value={detail} onChange={(e) => setQuote({ detail: e.target.value })}>
+            <option value="detail">Each part in detail</option>
+            <option value="summary">One line per part</option>
+          </select>
+        </label>
+      </div>
+
+      <article className="quote-doc" aria-label="Quote">
         <header className="q-head">
           <div className="q-from">
             <QField className="q-company" value={from.company} placeholder="Company name" onCommit={(v) => setFrom('company', v)} />
@@ -97,7 +142,7 @@ export default function QuoteView() {
             <QField value={from.contact} placeholder="Phone · email" onCommit={(v) => setFrom('contact', v)} />
           </div>
           <div className="q-title">
-            <h2>Wall Panels Quote</h2>
+            <h2>{only ? 'Wall Panels Quote' : 'Framing Quote'}</h2>
             <dl>
               <dt>Quote #</dt><dd><QField value={quoteNo} onCommit={(v) => setQuote({ quoteNo: v })} /></dd>
               <dt>Date</dt><dd>{fmtDate(quoteDate)}</dd>
@@ -129,35 +174,19 @@ export default function QuoteView() {
           <thead>
             <tr><th>Description</th><th>Detail</th><th className="num">Amount</th></tr>
           </thead>
-          {q.groups.map((g) => (
-            <tbody key={g.id}>
-              <tr className="q-group"><th colSpan={3}>{g.title}</th></tr>
-              {g.lines.map((l) => (
-                <tr key={l.key}>
-                  <td className="q-indent">{l.label}</td>
-                  <td className="q-muted">{l.detail}</td>
-                  <td className="num">{fmtMoney(l.amount)}</td>
-                </tr>
+          {q.blocks.map((b) => (
+            <tbody key={b.key}>
+              {detail === 'detail' ? <tr className="q-group"><th colSpan={3}>{b.title}{b.note ? <span className="q-note"> · {b.note}</span> : null}</th></tr> : null}
+              {b.groups.map((g) => (
+                <QuoteGroup key={g.id} g={g} showTitle={Boolean(g.title) && detail === 'detail'} />
               ))}
-              <tr className="q-sub"><td colSpan={2}>{g.title} subtotal</td><td className="num">{fmtMoney(g.subtotal)}</td></tr>
+              {detail === 'detail' ? <tr className="q-sub"><td colSpan={2}>{b.title} subtotal</td><td className="num">{fmtMoney(b.total)}</td></tr> : null}
             </tbody>
           ))}
-          {q.general.length ? (
-            <tbody>
-              <tr className="q-group"><th colSpan={3}>All levels</th></tr>
-              {q.general.map((l) => (
-                <tr key={l.key}>
-                  <td className="q-indent">{l.label}</td>
-                  <td className="q-muted">{l.detail}</td>
-                  <td className="num">{fmtMoney(l.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          ) : null}
           <tfoot>
             <tr><td colSpan={2}>Subtotal</td><td className="num">{fmtMoney(q.subtotal)}</td></tr>
             <tr>
-              <td colSpan={2}>{q.taxExempt ? 'Sales tax (exempt)' : `Sales tax ${q.taxState} ${q.taxRate}%`}</td>
+              <td colSpan={2}>{q.taxExempt ? 'Sales tax (exempt)' : q.taxCountry ? `Sales tax ${q.taxLabel}${q.labor && !q.taxOnLabor ? ' on materials' : ''}` : 'Sales tax (none)'}</td>
               <td className="num">{fmtMoney(q.tax)}</td>
             </tr>
             <tr>
@@ -167,17 +196,18 @@ export default function QuoteView() {
                 <span className="print-only">{fmtMoney(q.shipping)}</span>
               </td>
             </tr>
-            <tr className="q-total"><td colSpan={2}>Total</td><td className="num">{fmtMoney(q.total)}</td></tr>
+            <tr className="q-total"><td colSpan={2}>Total <span className="q-cur">{getCurrency()}</span></td><td className="num">{fmtMoney(q.total)}</td></tr>
           </tfoot>
         </table>
 
-        {q.groups.length === 0 && q.general.length === 0 ? (
-          <p className="q-muted no-print">No wall panel amounts yet — fill the Wall panels page first.</p>
+        {q.blocks.length === 0 ? (
+          <p className="q-muted no-print">Nothing to quote yet: fill Wall panels, Loose material, Trusses or Labor, and include them above.</p>
         ) : null}
 
         <section className="q-scope">
           <div className="q-lbl">Scope &amp; terms</div>
-          <QField multiline value={quote.scope ?? DEFAULT_SCOPE} onCommit={(v) => setQuote({ scope: v })} />
+          <QField multiline value={quote.scope ?? defaultScope(include)} onCommit={(v) => setQuote({ scope: v })} />
+          {quote.scope !== undefined ? <button type="button" className="ew-btn ew-btn--ghost no-print q-reset" onClick={() => updateProject((prev) => { const { scope, ...rest } = prev.quote || {}; return { ...prev, quote: rest }; })} title="Back to the text that follows what the quote includes">Default text</button> : null}
         </section>
       </article>
     </div>
