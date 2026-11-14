@@ -4,8 +4,8 @@
 // issue, transfer, count). Whole pieces only.
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Warehouse, Plus, RefreshCw, Sparkles, Trash2, X, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, ClipboardCheck } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Warehouse, Plus, RefreshCw, Sparkles, Trash2, X, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, ClipboardCheck, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/AuthContext';
 import { useCompany } from '@/context/CompanyContext';
 import { useProject } from '@/context/ProjectContext';
@@ -14,13 +14,16 @@ import { useConfirm } from '@/components/ui/confirm';
 import { getItemPrices } from '@/lib/catalog';
 import { goTo, takeFocus } from '@/lib/nav';
 import {
-  listStock, listMovements, recordMovement, loadCatalogItems, seedSampleStock, clearSampleStock, setMinQty,
+  listStock, listMovements, recordMovement, loadCatalogItems, seedSampleStock, clearSampleStock, setMinQty, listReservations, listOrders, syncBelowMin,
 } from '@/lib/inventory';
+import { allocate } from '@/domain/reserve';
+import ReservationsTab from '@/components/inventory/ReservationsTab';
+import OrdersTab from '@/components/inventory/OrdersTab';
 import {
   BUY_UNITS, boardFeetOf, receiptPieces, costPerPiece, priceVariance, isFlagged,
 } from '@/domain/purchase';
 import {
-  MOVE_TYPES, moveLabel, matchesSearch, onHand, stockStatus, stockValue, stockRows, inventoryTotals, validateMovement,
+  MOVE_TYPES, moveLabel, matchesSearch, onHand, stockStatus, stockValue, stockRows, inventoryTotals, validateMovement, needsReorder,
 } from '@/domain/inventory';
 
 const MOVE_ICONS = { in: ArrowDownToLine, out: ArrowUpFromLine, transfer: ArrowLeftRight, adjust: ClipboardCheck };
@@ -268,25 +271,47 @@ export default function InventoryView() {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState('');
   const [itemLog, setItemLog] = useState(null);   // { stock, rows }
+  const [reservations, setReservations] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [catalog, setCatalog] = useState(() => new Map());
 
   const warehouses = useMemo(() => company?.warehouses || [], [company]);
   const whName = useCallback((id) => warehouses.find((w) => w.id === id)?.name || id || '—', [warehouses]);
   const canEdit = perms.canEditInventory;
+  const canPlan = Boolean(perms.canEditEstimate || perms.isAdmin);   // reserve and order
 
+  const canEditRef = useRef(canEdit); canEditRef.current = canEdit;
+  const userRef = useRef(user); userRef.current = user;
   const load = useCallback(async () => {
     if (!companyId || !company?.inventoryEnabled) return;
     try {
-      const [s, m] = await Promise.all([listStock(companyId), listMovements(companyId)]);
-      setStocks(s); setMoves(m);
+      const [s, m, r, o] = await Promise.all([
+        listStock(companyId), listMovements(companyId),
+        listReservations(companyId).catch(() => []), listOrders(companyId).catch(() => []),
+      ]);
+      setStocks(s); setMoves(m); setReservations(r); setOrders(o);
+      if (canEditRef.current) syncBelowMin(companyId, s, userRef.current).catch(() => {});
     } catch (e) { setMsg(`The inventory could not be read: ${e.message || e}`); setStocks([]); setMoves([]); }
   }, [companyId, company?.inventoryEnabled]);
   useEffect(() => { load(); }, [load]);
+  // names, units and suppliers of the price list, for reservations and orders
+  useEffect(() => {
+    if (tab !== 'reserve' && tab !== 'orders') return;
+    if (catalog.size) return;
+    loadCatalogItems().then((list) => setCatalog(new Map(list.map((c) => [c.itemKey, c])))).catch((e) => setMsg(`The price list could not be read: ${e.message || e}`));
+  }, [tab, catalog.size]);
+  // reservations take their project's Job starts date: the job that starts first is served first
+  const startOf = useMemo(() => new Map((projectsList || []).map((p) => [p.id, p.meta?.startDate || null])), [projectsList]);
+  const resDated = useMemo(() => reservations.map((r) => ({ ...r, startDate: startOf.get(r.projectId) || null })), [reservations, startOf]);
+  const alloc = useMemo(() => allocate(stocks || [], resDated), [stocks, resDated]);
+  const reorder = useMemo(() => (stocks || []).filter(needsReorder), [stocks]);
 
   // opened from the price list: show that material
   useEffect(() => {
     if (!stocks) return;
     const f = takeFocus('inventory');
     if (!f) return;
+    if (f.tab) { setTab(f.tab); return; }   // e.g. Reservations, from the Takeoff list
     const s = stocks.find((x) => x.itemKey === f.itemKey);
     if (s) { setTab('stock'); setSearch(`${s.family} ${s.size}`); openLog(s); }
     else setMsg('That material is not in the inventory yet. Record a receipt to add it.');
@@ -334,6 +359,7 @@ export default function InventoryView() {
   };
   const hasSample = (stocks || []).some((s) => s.sample);
   const showCols = !wh && warehouses.length > 1;
+  const showRes = !wh && reservations.length > 0;   // reservations are company-wide
 
   return (
     <div className="app-content">
@@ -372,12 +398,16 @@ export default function InventoryView() {
       <div className="inv-bar">
         <div className="inv-tabs" role="tablist">
           <button type="button" role="tab" aria-selected={tab === 'stock'} className={tab === 'stock' ? 'is-on' : ''} onClick={() => setTab('stock')}>Stock</button>
+          <button type="button" role="tab" aria-selected={tab === 'reserve'} className={tab === 'reserve' ? 'is-on' : ''} onClick={() => setTab('reserve')}>Reservations{reservations.length ? ` · ${reservations.length}` : ''}</button>
+          <button type="button" role="tab" aria-selected={tab === 'orders'} className={tab === 'orders' ? 'is-on' : ''} onClick={() => setTab('orders')}>Purchase orders</button>
           <button type="button" role="tab" aria-selected={tab === 'moves'} className={tab === 'moves' ? 'is-on' : ''} onClick={() => setTab('moves')}>Movements</button>
         </div>
-        <select className="ew-select" value={wh} onChange={(e) => setWh(e.target.value)} aria-label="Warehouse">
-          <option value="">All warehouses</option>
-          {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
+        {tab === 'stock' || tab === 'moves' ? (
+          <select className="ew-select" value={wh} onChange={(e) => setWh(e.target.value)} aria-label="Warehouse">
+            <option value="">All warehouses</option>
+            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        ) : null}
         {tab === 'stock' ? (
           <>
             <input className="ew-input" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search material" aria-label="Search material" style={{ width: 220 }} />
@@ -387,8 +417,29 @@ export default function InventoryView() {
         ) : null}
       </div>
 
-      {stocks === null ? <div className="empty-state">Loading…</div> : tab === 'stock' ? (
-        stocks.length === 0 ? (
+      {stocks === null ? <div className="empty-state">Loading…</div> : tab === 'reserve' ? (
+        <ReservationsTab
+          cid={companyId} user={user} canReserve={canPlan} projects={projectsList || []}
+          reservations={resDated} stocks={stocks} alloc={alloc} catalog={catalog}
+          onChanged={(m) => { setMsg(m); load(); }}
+        />
+      ) : tab === 'orders' ? (
+        <OrdersTab
+          cid={companyId} user={user} company={company} canOrder={canPlan} canReceive={canEdit}
+          orders={orders} alloc={alloc} catalog={catalog} warehouses={warehouses} whName={whName} stocks={stocks}
+          onChanged={(m) => { if (m) setMsg(m); load(); }}
+        />
+      ) : tab === 'stock' ? (
+        <>
+        {reorder.length ? (
+          <div className="inv-alert no-print">
+            <AlertTriangle size={14} />
+            <span><strong>{reorder.length} material{reorder.length === 1 ? '' : 's'}</strong> at or under {reorder.length === 1 ? 'its' : 'their'} minimum: {reorder.slice(0, 3).map((x) => `${x.family} ${x.size}`).join(', ')}{reorder.length > 3 ? '…' : ''}</span>
+            {!lowOnly ? <button type="button" className="ew-btn ew-btn--ghost ro-ok" onClick={() => setLowOnly(true)}>Show them</button> : null}
+            <button type="button" className="ew-btn ro-ok" onClick={() => setTab('orders')}>To order</button>
+          </div>
+        ) : null}
+        {stocks.length === 0 ? (
           <div className="ew-card inv-empty">
             <p>No stock yet. Record a receipt to start{canEdit ? ', or fill the inventory with sample quantities to try it' : ''}.</p>
             {canEdit ? <button type="button" className="ew-btn" onClick={seed} disabled={!!busy}><Sparkles size={13} /> Generate sample stock</button> : null}
@@ -402,6 +453,8 @@ export default function InventoryView() {
                   <th className="inv-c-size">Size</th>
                   {showCols ? warehouses.map((w) => <th key={w.id} className="num inv-c-q">{w.name}</th>) : null}
                   <th className="num inv-c-q">{wh ? 'On hand' : 'Total'}</th>
+                  {showRes ? <th className="num inv-c-q" title="Held for projects (oldest reservation first)">Reserved</th> : null}
+                  {showRes ? <th className="num inv-c-q" title="On hand and not reserved">Available</th> : null}
                   <th className="inv-c-u">Unit</th>
                   <th className="num inv-c-min" title="Minimum to keep; at or under it the item shows as low">Min</th>
                   <th className="num inv-c-p">Avg cost</th>
@@ -419,6 +472,8 @@ export default function InventoryView() {
                       <td>{s.size}</td>
                       {showCols ? warehouses.map((w) => <td key={w.id} className="num">{qtyFmt(onHand(s, w.id))}</td>) : null}
                       <td className="num"><strong>{qtyFmt(onHand(s, wh))}</strong></td>
+                      {showRes ? <td className="num">{alloc.byItem[s.itemKey]?.reserved ? qtyFmt(alloc.byItem[s.itemKey].reserved) : ''}</td> : null}
+                      {showRes ? <td className="num">{qtyFmt(alloc.byItem[s.itemKey]?.available ?? onHand(s))}{alloc.byItem[s.itemKey]?.short ? <div className="inv-short">{qtyFmt(alloc.byItem[s.itemKey].short)} short</div> : null}</td> : null}
                       <td className="ew-subtle">{s.unit}</td>
                       <td className="num">
                         {canEdit ? (
@@ -445,7 +500,8 @@ export default function InventoryView() {
               <div className="inv-sample"><span className="ew-subtle">Includes sample (fictitious) stock.</span> <button type="button" className="ew-btn ew-btn--ghost" onClick={clearSample} disabled={!!busy}><Trash2 size={12} /> Remove sample stock</button></div>
             ) : null}
           </div>
-        )
+        )}
+        </>
       ) : (
         <MovesTable rows={(moves || []).filter((m) => !wh || m.warehouseId === wh || m.toWarehouseId === wh)} whName={whName} />
       )}

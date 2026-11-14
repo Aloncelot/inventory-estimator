@@ -143,12 +143,29 @@ export async function listInvites(cid) {
   return snap.docs.map((d) => d.data()).sort((a, b) => a.email.localeCompare(b.email));
 }
 
-export async function inviteMember(cid, companyName, email, roles, user) {
+/**
+ * Invite someone. With `mail`, the invitation is also emailed: a document in
+ * the top-level `mail` collection, which Firebase's "Trigger Email from
+ * Firestore" extension sends (it must be installed, on the Blaze plan).
+ * Returns whether the email was queued; the invitation stands either way.
+ */
+export async function inviteMember(cid, companyName, email, roles, user, mail = null) {
   const e = normEmail(email);
   await setDoc(doc(db, `companies/${cid}/invites/${e}`), {
     email: e, companyId: cid, companyName: companyName || '', roles: normalizeRoles(roles),
     invitedBy: actorOf(user), invitedAt: Timestamp.now(),
   });
+  if (!mail) return false;
+  try {
+    await addDoc(collection(db, 'mail'), {
+      to: [e], companyId: cid, kind: 'invite', sentBy: actorOf(user), createdAt: Timestamp.now(),
+      message: { subject: mail.subject, text: mail.text, html: mail.html },
+    });
+    return true;
+  } catch (err) {
+    console.warn('Invitation email not queued:', err?.code || err);
+    return false;
+  }
 }
 
 export const cancelInvite = (cid, email) => deleteDoc(doc(db, `companies/${cid}/invites/${normEmail(email)}`));

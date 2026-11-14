@@ -1,18 +1,21 @@
 // src/components/WallPanelsView.jsx
 'use client';
 
+import BufferBar from '@/components/BufferBar';
+import { bufferPctOf } from '@/domain/markup';
 import { useCallback, useMemo } from 'react';
 import { PanelsTopLeft } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import Level from '@/components/Level';
 import PanelsManufactureEstimate from '@/components/PanelsManufactureEstimate';
 import Bracing from '@/components/Bracing';
+import PanelTrucking from '@/components/PanelTrucking';
 import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader, AddRowButton, SortableList, SortableBlock, reorderById } from '@/components/ui/mat';
 import { wallPanelsOf } from '@/domain/estimate';
 
 export default function WallPanelsView() {
-  const { projectData, updateProject, blankLevel, isLoaded } = useProject();
+  const { projectData, updateProject, blankLevel, isLoaded, readOnly } = useProject();
 
   const estimateData = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const levels = useMemo(() => (estimateData.levels || []).filter(Boolean), [estimateData.levels]);
@@ -62,6 +65,7 @@ export default function WallPanelsView() {
   })), [updateProject]);
   const handleManufactureChange = useMemo(() => patchKey('manufactureEstimate'), [patchKey]);
   const handleBracingChange = useMemo(() => patchKey('bracing'), [patchKey]);
+  const handleTruckingChange = useMemo(() => patchKey('trucking'), [patchKey]);
 
   // one pure calculation for the whole page (levels, nails & bracing, manufacture)
   const calc = useMemo(() => wallPanelsOf(estimateData), [estimateData]);
@@ -83,8 +87,8 @@ export default function WallPanelsView() {
         icon={PanelsTopLeft}
         title="Wall panels"
         meta={`${projectData.name || 'Untitled'} · ${levels.length} level${levels.length === 1 ? '' : 's'}`}
-        totalLabel="Wall panels total"
-        total={grandTotal}
+        totalLabel="Wall panels total (with buffer)"
+        total={grandTotal + Math.round((calc.total - calc.manufacture.total - calc.trucking.total) * bufferPctOf(estimateData, 'wallPanels')) / 100}
         actions={(
           <>
             <AddRowButton onClick={() => addLevel('top')} title="Add a floor above the last level">Add level</AddRowButton>
@@ -92,6 +96,8 @@ export default function WallPanelsView() {
           </>
         )}
       />
+
+      <BufferBar est={estimateData} part="wallPanels" base={calc.total - calc.manufacture.total - calc.trucking.total} updateProject={updateProject} readOnly={readOnly} note="(not on manufacture or trucking)" />
 
       <SortableList ids={levels.map((l) => l.id)} onMove={moveLevel}>
         {levels.map((lvl, i) => (
@@ -121,6 +127,8 @@ export default function WallPanelsView() {
       <Bracing data={bracing} calc={calc.bracing} onChange={handleBracingChange} />
 
       <PanelsManufactureEstimate data={manufactureEstimate} calc={calc.manufacture} onChange={handleManufactureChange} />
+
+      <PanelTrucking data={estimateData.trucking} calc={calc.trucking} onChange={handleTruckingChange} />
     </div>
   );
 }

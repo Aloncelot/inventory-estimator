@@ -32,3 +32,16 @@ export const isInfillFamily = (f = "") => {
 
   );
 };
+
+/**
+ * Bought by the linear foot rather than by the board: engineered lumber
+ * (LVL, LSL, PSL, rim board) and anything the price list sells per LF.
+ * @param item the price-list item ({ unit, familyDisplay }) or a selection
+ */
+export const isSoldByLF = (item) => {
+  if (!item) return false;
+  const unit = String(item.unit ?? item.raw?.unit ?? item.item?.unit ?? '').trim().toLowerCase();
+  if (/^(l\.?f\.?|lin(eal|ear)?\b.*|ft|feet|foot)$/.test(unit)) return true;
+  const fam = norm(item.familyLabel ?? item.familyDisplay ?? item.raw?.familyDisplay ?? item.item?.familyDisplay ?? '');
+  return /\b(lvl|lsl|psl)\b|rim ?board|microllam|timberstrand|parallam/.test(fam);
+};

@@ -13,7 +13,8 @@ import { listHistory } from '@/lib/company';
 const fmt = (ts) => (ts?.toDate ? ts.toDate().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 const fmtTime = (ts) => (ts?.toDate ? ts.toDate().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '');
 
-export default function HistoryView() {
+/** embedded: shown inside Revisions (no page header of its own). */
+export default function HistoryView({ embedded = false }) {
   const { projectId, projectData, appId, lastSavedAt } = useProject();
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState('');
@@ -39,13 +40,17 @@ export default function HistoryView() {
   const by = projectData.updatedBy;
   const created = projectData.createdBy;
   return (
-    <div className="app-content">
-      <PageHeader
-        icon={History}
-        title="History"
-        meta={by ? `Last change by ${by.name || by.email} · ${fmt(projectData.updatedAt)}` : `Last saved ${fmt(projectData.updatedAt)}`}
-        actions={<button type="button" className="ew-btn" onClick={load}><RefreshCw size={12} /> Refresh</button>}
-      />
+    <div className={embedded ? '' : 'app-content'}>
+      {embedded ? (
+        <p className="ew-subtle">{by ? `Last change by ${by.name || by.email} · ${fmt(projectData.updatedAt)}` : `Last saved ${fmt(projectData.updatedAt)}`}</p>
+      ) : (
+        <PageHeader
+          icon={History}
+          title="History"
+          meta={by ? `Last change by ${by.name || by.email} · ${fmt(projectData.updatedAt)}` : `Last saved ${fmt(projectData.updatedAt)}`}
+          actions={<button type="button" className="ew-btn" onClick={load}><RefreshCw size={12} /> Refresh</button>}
+        />
+      )}
       {err ? <p className="gate-err">History could not be read: {err}</p> : null}
       <div className="ew-card" style={{ padding: '0 6px' }}>
         {rows === null ? <div className="empty-state">Loading…</div> : rows.length === 0 ? (

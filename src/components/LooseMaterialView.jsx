@@ -1,6 +1,8 @@
 // src/components/LooseMaterialView.jsx
 'use client';
 
+import BufferBar from '@/components/BufferBar';
+import { bufferPctOf } from '@/domain/markup';
 import { useMemo } from 'react';
 import { Layers, Eye } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
@@ -26,7 +28,7 @@ function SortableSection({ section, ...props }) {
 }
 
 export default function LooseMaterialView() {
-  const { projectData, updateProject, blankLooseSection, blankLevelLooseSection, isLoaded } = useProject();
+  const { projectData, updateProject, blankLooseSection, blankLevelLooseSection, isLoaded, readOnly } = useProject();
   const confirm = useConfirm();
 
   const estimateData = useMemo(() => projectData?.estimateData || {}, [projectData]);
@@ -48,6 +50,14 @@ export default function LooseMaterialView() {
     const levelCount = list.filter((s) => sectionKind(s) === 'level').length;
     const sec = { ...blankLevelLooseSection(levelCount), kind: 'level' };
     // keep levels before the roof
+    const roofIdx = list.findIndex((s) => sectionKind(s) === 'roof');
+    return roofIdx === -1 ? [...list, sec] : [...list.slice(0, roofIdx), sec, ...list.slice(roofIdx)];
+  });
+
+  // a staircase (one section each: main stair, basement stair…), before the roof
+  const addStairs = () => updateList((list) => {
+    const count = list.filter((s) => sectionKind(s) === 'stairs').length;
+    const sec = { ...blankLooseSection(count ? `Stairs ${count + 1}` : 'Stairs'), kind: 'stairs', inputs: { widthIn: 36, type: 'straight', railSides: 1 } };
     const roofIdx = list.findIndex((s) => sectionKind(s) === 'roof');
     return roofIdx === -1 ? [...list, sec] : [...list.slice(0, roofIdx), sec, ...list.slice(roofIdx)];
   });
@@ -79,15 +89,18 @@ export default function LooseMaterialView() {
         icon={Layers}
         title="Loose material"
         meta={`${projectData.name || 'Untitled'} · ${visible.length} section${visible.length === 1 ? '' : 's'}`}
-        totalLabel="Loose material total"
-        total={calc.total}
+        totalLabel="Loose material total (with buffer)"
+        total={calc.total + Math.round(calc.total * bufferPctOf(estimateData, 'loose')) / 100}
         actions={(
           <>
             <AddRowButton onClick={addLevelSection} title="Add a floor level (joists, subfloor…)">Add level</AddRowButton>
+            <AddRowButton onClick={addStairs} title="Add a staircase: stringers, treads, risers, landing framing and handrail blocking">Add stairs</AddRowButton>
             <AddRowButton onClick={addSection} title="Add an empty section">Add section</AddRowButton>
           </>
         )}
       />
+
+      <BufferBar est={estimateData} part="loose" base={calc.total} updateProject={updateProject} readOnly={readOnly} />
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis]} onDragEnd={onDragEnd}>
         <SortableContext items={visible.map((s) => s.id)} strategy={verticalListSortingStrategy}>

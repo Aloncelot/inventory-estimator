@@ -88,6 +88,12 @@ export const LOOSE_SECTION_DEFAULTS = {
   rake: d('SPF#2', `2x6"-16'`),
   trim: d('PVC Trim (V)', `1x8"-8'`, 'The Home Depot'),
   trimScrews: d('50lf Cortex Screws and plugs', '2"', 'The Home Depot'),
+  // stairs
+  stringers: d('SPF#2', `2x12"-16'`, 'Fairway Lumber'),
+  landingJoists: d('SPF#2', `2x8"-12'`),
+  landingRim: d('SPF#2', `2x8"-16'`),
+  landingLedger: d('SPF#2', `2x8"-16'`),
+  railBlocking: d('SPF#2', `2x6"-16'`),
 };
 
 /** Manual loose rows carry their own suggestion (from the level template). */

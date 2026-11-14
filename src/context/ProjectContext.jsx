@@ -1,7 +1,8 @@
 // src/context/ProjectContext.jsx
 'use client';
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { doc, getDoc, setDoc, addDoc, collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, addDoc, collection, query, where, getDocs, Timestamp, orderBy, onSnapshot, runTransaction } from 'firebase/firestore';
+import { activeOf, holderOf, isConflict, HEARTBEAT_MS } from '@/domain/presence';
 import { db, auth } from '@/lib/firebase'; 
 import { useAuth } from '@/AuthContext'; 
 import { useCompany } from '@/context/CompanyContext';
@@ -134,9 +135,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     const { user } = useAuth();
     const { base, perms } = useCompany();
     // without the Estimator role the project can be seen, not changed
-    const readOnly = !perms?.canEditEstimate;
-    const readOnlyRef = useRef(readOnly);
-    readOnlyRef.current = readOnly;
+    const canEditRole = Boolean(perms?.canEditEstimate);
     const [projectId, setProjectId] = useState(initialProjectId);
     const [projectData, setProjectData] = useState(null);
     const [projectsList, setProjectsList] = useState([]);
@@ -152,6 +151,88 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     const [appId, setAppId] = useState(null);
     // size of the project document as last saved (Firestore allows 1 MB)
     const [projectBytes, setProjectBytes] = useState(0);
+
+    /* ── who has the project open; one person edits at a time ───────────
+       Each open project keeps a presence document per person
+       ({appId}/projects/{id}/presence/{uid}), refreshed every HEARTBEAT_MS.
+       Opening a project nobody is editing takes it; anyone with the
+       Estimator role can take over. Without presence (rules not deployed,
+       offline) everybody can edit and the save check below still stops one
+       save from silently overwriting another. */
+    const [presence, setPresence] = useState([]);
+    const [nowTick, setNowTick] = useState(() => Date.now());
+    const meRef = useRef({ editing: false, editSince: null, ready: false });
+    const writeMeRef = useRef(() => {});
+    const uid = user?.uid;
+    const presencePath = appId && projectId && uid ? `${appId}/projects/${projectId}/presence` : null;
+    useEffect(() => {
+        if (!presencePath || !user) { setPresence([]); return undefined; }
+        const meDoc = doc(db, `${presencePath}/${user.uid}`);
+        const actor = actorOf(user);
+        let alive = true;
+        meRef.current = { editing: false, editSince: null, ready: false };
+        const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+        const write = () => setDoc(meDoc, {
+            uid: user.uid, name: actor.name || actor.email, email: actor.email || '',
+            editing: meRef.current.editing, editSince: meRef.current.editSince, at: Timestamp.now(),
+            away: hidden(),
+        }).catch(() => {});
+        writeMeRef.current = write;
+        (async () => {
+            let others = [];
+            try {
+                const snap = await getDocs(collection(db, presencePath));
+                others = activeOf(snap.docs.map((d) => d.data()).filter((p) => p.uid !== user.uid));
+            } catch { /* presence unavailable: edit freely */ }
+            if (!alive) return;
+            meRef.current = canEditRole && !holderOf(others)
+                ? { editing: true, editSince: Timestamp.now(), ready: true }
+                : { editing: false, editSince: null, ready: true };
+            write();
+        })();
+        const off = onSnapshot(collection(db, presencePath), (snap) => { setPresence(snap.docs.map((d) => d.data())); setNowTick(Date.now()); }, () => {});
+        // only a visible tab keeps writing; hidden, it leaves one "away" mark and goes quiet
+        const beat = setInterval(() => { if (!hidden()) write(); setNowTick(Date.now()); }, HEARTBEAT_MS);
+        const onVisibility = () => { write(); setNowTick(Date.now()); };
+        document.addEventListener('visibilitychange', onVisibility);
+        const leave = () => { deleteDoc(meDoc).catch(() => {}); };
+        window.addEventListener('pagehide', leave);
+        return () => {
+            alive = false; off(); clearInterval(beat);
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('pagehide', leave);
+            leave(); setPresence([]); writeMeRef.current = () => {};
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [presencePath, uid, canEditRole]);
+
+    const active = useMemo(() => activeOf(presence, nowTick), [presence, nowTick]);
+    const holder = holderOf(active);
+    const lockedBy = holder && holder.uid !== uid ? holder : null;
+    // someone else holds it, or the role does not allow editing
+    const readOnly = !canEditRole || Boolean(lockedBy);
+    const readOnlyRef = useRef(readOnly);
+    readOnlyRef.current = readOnly;
+
+    // lost the project to someone who took over: stop claiming it.
+    // Nobody holds it any more (they closed it): take it.
+    useEffect(() => {
+        if (!meRef.current.ready || !presencePath) return;
+        if (meRef.current.editing && lockedBy) {
+            meRef.current = { ...meRef.current, editing: false, editSince: null };
+            writeMeRef.current();
+            // whatever was not saved yet goes in before they reload
+            if (dataRef.current?.estimateData && dataRef.current.estimateData !== savedEstimateRef.current) saveRef.current?.({ lastChance: true });
+        } else if (!meRef.current.editing && canEditRole && !holder && active.some((p) => p.uid === uid)) {
+            meRef.current = { ...meRef.current, editing: true, editSince: Timestamp.now() };
+            writeMeRef.current();
+        }
+    }, [lockedBy, holder, canEditRole, presencePath, active, uid]);
+
+    // a save from someone else since this screen loaded the project
+    const [conflict, setConflict] = useState(null);   // { by, at } or null
+    const baseAtRef = useRef(null);
+    const forceSaveRef = useRef(false);
 
     const dataRef = useRef(projectData);
     dataRef.current = projectData;
@@ -195,6 +276,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                 updatedAt: d.data().updatedAt?.toDate(),
                 updatedBy: d.data().updatedBy || null,
                 sizeBytes: d.data().sizeBytes || 0,
+                meta: d.data().meta || {},
             })));
         } catch (error) {
             console.error('Error fetching projects list:', error);
@@ -232,12 +314,14 @@ export function ProjectProvider({ children, initialProjectId = null }) {
     const loadingRef = useRef(false);
     const saveRef = useRef(null);
     const dirtyRef = useRef(false);
-    const loadProject = useCallback(async (pId) => {
+    const loadProject = useCallback(async (pId, { discard = false } = {}) => {
         if (!pId || loadingRef.current) return;
         const path = getProjectPath(pId);
         if (!path) return;
-        // never drop unsaved work when switching projects
-        if (dirtyRef.current && saveRef.current) await saveRef.current();
+        // never drop unsaved work when switching projects (unless asked to: a save conflict)
+        if (!discard && dirtyRef.current && saveRef.current) await saveRef.current();
+        setConflict(null);
+        forceSaveRef.current = false;
 
         loadingRef.current = true;
         setIsLoading(true);
@@ -289,6 +373,8 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                 // foam sealer and sill plates) up to date; if it changed, the
                 // project shows as unsaved so the new numbers get saved
                 data.estimateData = withPlanLoose(migrated);
+                // the estimate version this screen starts from (to notice someone else's save)
+                baseAtRef.current = data.estimateAt?.toMillis?.() || null;
                 setProjectData(data);
                 setSavedEstimate(migrated);
                 setProjectBytes(approxDocBytes(docSnap.data()));
@@ -333,10 +419,11 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         }
     }, [user]);
 
-    const saveProject = useCallback(async () => {
+    /** lastChance: the project was just taken over; save what is pending before it goes read-only. */
+    const saveProject = useCallback(async ({ lastChance = false } = {}) => {
         const data = dataRef.current;
         const pId = projectIdRef.current;
-        if (!user || !pId || !data || savingRef.current || readOnlyRef.current) return false;
+        if (!user || !pId || !data || savingRef.current || (readOnlyRef.current && lastChance !== true)) return false;
         const path = getProjectPath(pId);
         if (!path) return false;
 
@@ -347,8 +434,10 @@ export function ProjectProvider({ children, initialProjectId = null }) {
             const updatedAt = Timestamp.now();
             const updatedBy = actorOf(user);
             const before = savedEstimateRef.current;
+            // meta (status, client, revisions, contract) is written on its own: never overwrite it here
+            const { meta: _meta, ...rest } = data;
             const record = {
-                ...data,
+                ...rest,
                 estimateData: slimEstimate(estimate),
                 updatedAt,
                 updatedBy,
@@ -360,7 +449,20 @@ export function ProjectProvider({ children, initialProjectId = null }) {
             if (bytes > DOC_LIMIT_BYTES) {
                 throw new Error(`The project is ${fmtKB(bytes)}, over the 1 MB a project can hold. Remove unused plan walls or levels, or split the project.`);
             }
-            await setDoc(doc(db, path), record);
+            record.estimateAt = updatedAt;   // changes only when the estimate is saved (not its information)
+            await runTransaction(db, async (tx) => {
+                const ref = doc(db, path);
+                const snap = await tx.get(ref);
+                const server = snap.data() || {};
+                if (!forceSaveRef.current && isConflict(baseAtRef.current, server.estimateAt)) {
+                    const err = new Error('Someone else saved this project while you had it open.');
+                    err.conflict = { by: server.updatedBy || null, at: server.estimateAt?.toDate?.() || null };
+                    throw err;
+                }
+                tx.update(ref, record);
+            });
+            baseAtRef.current = updatedAt.toMillis();
+            forceSaveRef.current = false;
             writeHistory(path, before, estimate, updatedAt);
             // keep the in-memory estimate as is (edits made while saving stay unsaved)
             setSavedEstimate(estimate);
@@ -372,7 +474,8 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                 .sort((a, b) => b.updatedAt - a.updatedAt));
             return true;
         } catch (error) {
-            console.error('Error saving project:', error);
+            if (error?.conflict) setConflict(error.conflict);
+            else console.error('Error saving project:', error);
             setSaveError(error?.message || 'Save failed');
             return false;
         } finally {
@@ -389,10 +492,29 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
     // autosave a moment after the last change; retried after an error
     useEffect(() => {
-        if (!isDirty || isSaving) return undefined;
+        if (!isDirty || isSaving || conflict) return undefined;   // a conflict waits for the person to choose
         const t = setTimeout(() => { saveProject(); }, saveError ? AUTOSAVE_MS * 4 : AUTOSAVE_MS);
         return () => clearTimeout(t);
-    }, [isDirty, isSaving, saveError, projectData?.estimateData, saveProject]);
+    }, [isDirty, isSaving, saveError, conflict, projectData?.estimateData, saveProject]);
+
+    /** After a conflict: 'reload' takes the saved version (drops mine), 'mine' saves over it. */
+    const resolveConflict = useCallback(async (choice) => {
+        const pId = projectIdRef.current;
+        if (choice === 'reload') { setConflict(null); setSaveError(null); await loadProject(pId, { discard: true }); return; }
+        forceSaveRef.current = true;
+        setConflict(null);
+        setSaveError(null);
+        await saveRef.current?.();
+    }, [loadProject]);
+
+    /** Take the project from whoever is editing it, with the latest saved version. */
+    const takeOver = useCallback(async () => {
+        if (!canEditRole) return;
+        meRef.current = { ...meRef.current, editing: true, editSince: Timestamp.now(), ready: true };
+        await writeMeRef.current();
+        // give their last autosave a moment, then start from what is saved
+        setTimeout(() => { if (projectIdRef.current) loadProject(projectIdRef.current, { discard: true }); }, 1500);
+    }, [canEditRole, loadProject]);
 
     // warn before closing the tab with unsaved changes
     useEffect(() => {
@@ -464,6 +586,12 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
     const updateEstimateData = updateProject;
 
+    /** After a project's information changed in Firestore (status, revisions, contract): show it here too. */
+    const applyMeta = useCallback((pId, meta) => {
+        setProjectData((p) => (p && projectIdRef.current === pId ? { ...p, meta } : p));
+        setProjectsList((list) => list.map((x) => (x.id === pId ? { ...x, meta } : x)));
+    }, []);
+
     const refreshProjectPrices = useCallback(async () => {
         const data = dataRef.current;
         if (!data || readOnlyRef.current) return;
@@ -494,7 +622,8 @@ export function ProjectProvider({ children, initialProjectId = null }) {
                 for (const key in section.sel || {}) section.sel[key] = await refreshItem(section.sel[key]);
             }
 
-            updateProject((prev) => ({ ...prev, ...newEstimateData }));
+            // when the prices were last brought up to date (Revisions warns when they get old)
+            updateProject((prev) => ({ ...prev, ...newEstimateData, summaryInfo: { ...(newEstimateData.summaryInfo || {}), pricesAt: new Date().toISOString() } }));
         } catch (err) {
             console.error('Error during price refresh:', err);
         } finally {
@@ -534,6 +663,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         appId,
         fetchProjectsList,
         createNewProject,
+        applyMeta,
         loadProject,
         saveProject,
         updateEstimateData,
@@ -559,10 +689,17 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         isListLoading,
         readOnly,
         projectBytes,
+        presence: active,
+        lockedBy,
+        canEditRole,
+        takeOver,
+        conflict,
+        resolveConflict,
     }), [
-        projectId, projectData, projectsList, appId, fetchProjectsList, createNewProject,
+        projectId, projectData, projectsList, appId, fetchProjectsList, createNewProject, applyMeta,
         loadProject, saveProject, updateEstimateData, updateProject, runSilently, undo, redo, historySize,
         refreshProjectPrices, isLoaded, isLoading, isSaving, isDirty, saveStatus, saveError, lastSavedAt, isListLoading, readOnly, projectBytes,
+        active, lockedBy, canEditRole, takeOver, conflict, resolveConflict,
     ]);
 
     return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;

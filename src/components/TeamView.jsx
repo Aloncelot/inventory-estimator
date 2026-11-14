@@ -14,7 +14,7 @@ import {
   listMembers, setMemberRoles, removeMember, listInvites, inviteMember, cancelInvite,
   updateCompany, legacyCounts, importLegacy,
 } from '@/lib/company';
-import { ROLES, normalizeRoles, adminsAfter, addWarehouse, isEmail, normEmail, inviteMailto } from '@/domain/team';
+import { ROLES, normalizeRoles, adminsAfter, addWarehouse, isEmail, normEmail, inviteMailto, inviteEmail } from '@/domain/team';
 
 const fmtWhen = (ts) => (ts?.toDate ? ts.toDate().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 
@@ -85,7 +85,7 @@ export default function TeamView() {
     roles: iv.roles,
     companyName: company.name,
     inviterName: user?.displayName || user?.email,
-    appUrl: typeof window !== 'undefined' ? window.location.origin : '',
+    appUrl: typeof window !== 'undefined' ? `${window.location.origin}/app` : '',
   });
 
   const changeRoles = (m, roles) => {
@@ -103,7 +103,11 @@ export default function TeamView() {
     if (!isEmail(em)) { setMsg('Write a valid email.'); return; }
     if (members.some((m) => m.email === em)) { setMsg(`${em} is already a member.`); return; }
     const roles = newRoles;
-    act(async () => { await inviteMember(companyId, company.name, em, roles, user); setEmail(''); setJustInvited({ email: em, roles }); },
+    act(async () => {
+      const mail = inviteEmail({ email: em, roles, companyName: company.name, inviterName: user?.displayName || user?.email, appUrl: typeof window !== 'undefined' ? `${window.location.origin}/app` : '' });
+      const queued = await inviteMember(companyId, company.name, em, roles, user, mail);
+      setEmail(''); setJustInvited({ email: em, roles, queued });
+    },
       `Invitation saved. ${em} joins by signing in with that Google account.`);
   };
   const setCompany = (patch) => act(() => updateCompany(companyId, patch, user));
@@ -128,7 +132,11 @@ export default function TeamView() {
         <p className="team-msg">
           {msg}
           {justInvited && msg.startsWith('Invitation saved') ? (
-            <a className="ew-btn ew-btn--primary team-mail" href={mailto(justInvited)}><Mail size={13} /> Email the invitation</a>
+            justInvited.queued ? (
+              <span className="team-mail"><span className="ew-subtle">An email is on its way to {justInvited.email}. </span><a className="ew-link" href={mailto(justInvited)}>Send it from your mail too</a></span>
+            ) : (
+              <a className="ew-btn ew-btn--primary team-mail" href={mailto(justInvited)}><Mail size={13} /> Email the invitation</a>
+            )
           ) : null}
         </p>
       ) : null}

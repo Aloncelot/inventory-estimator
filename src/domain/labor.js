@@ -56,7 +56,8 @@ export const LABOR_DEFAULTS = {
     blocking: 4, // crew min per 10 LF of loose blocking
     post: 10, // crew min per post / column on the plan
     beam: 8, // crew min per 10 LF of beam (LVL, built-up)
-    stair: 240, // crew min per stair flight
+    stair: 50, // crew min per stair flight (stringers, treads, risers, hangers)
+    stairLanding: 25, // crew min per landing (joists, ledger, rim, subfloor); with the 70% efficiency a U stair ≈ 3 crew hours
     setupDays: 0.5, // crew days per level: set-up, crane, cleanup
     punchListPct: 10, // + % of the crew's hours for the punch list
   },
@@ -152,7 +153,8 @@ function computeLaborNow(est = {}) {
     if (blkLF) add({ key: `blocking|${id}`, group: 'Walls', level: name, levelIndex: i, label: 'Loose blocking', unit: '10 LF', auto: Math.ceil(blkLF / 10), min: t.blocking, factor });
     const posts = (lvl.plan?.walls || []).reduce((a, w) => a + (w.posts || []).length, 0);
     if (posts) add({ key: `posts|${id}`, group: 'Walls', level: name, levelIndex: i, label: 'Posts and columns', unit: 'pcs', auto: posts, min: t.post, factor });
-    add({ key: `stairs|${id}`, group: 'Stairs', level: name, levelIndex: i, label: 'Stair flights', unit: 'flights', auto: 0, min: t.stair, factor, typedOnly: true });
+    // stairs come from Loose material → Stairs; a count typed here before stays
+    if (qty[`stairs|${id}`] !== undefined) add({ key: `stairs|${id}`, group: 'Stairs', level: name, levelIndex: i, label: 'Stair flights (typed)', unit: 'flights', auto: 0, min: t.stair, factor, typedOnly: true });
     add({ key: `setup|${id}`, group: 'Site', level: name, levelIndex: i, label: 'Set-up, crane and cleanup', unit: 'crew days', auto: n(t.setupDays), min: n(s.hoursPerDay || 8) * 60, factor: 1, noEfficiency: true });
     const windows = [...L.exterior, ...L.interior].reduce((a, x) => a + n(x.stats?.windows), 0);
     const doors = L.exterior.reduce((a, x) => a + n(x.stats?.doors), 0);
@@ -196,6 +198,14 @@ function computeLaborNow(est = {}) {
       add({ key: `subfloor|${sec.id}`, group: 'Floor', level: name, levelIndex: i, label: 'Subfloor sheets', unit: 'sheets', auto: Math.ceil(pcs(['subfloor'])), min: t.subfloorSheet, factor });
       const bLF = lfOf(['beam']);
       if (bLF) add({ key: `beams|${sec.id}`, group: 'Floor', level: name, levelIndex: i, label: 'Beams', unit: '10 LF', auto: Math.ceil(bLF / 10), min: t.beam, factor });
+    } else if (kind === 'stairs' && c.stairs?.ready) {
+      // the flights and landing of a staircase (Loose material → Stairs)
+      const st = c.stairs;
+      const i = Math.min(levelIndexOf(sec, 0), Math.max(0, levels.length - 1));
+      const factor = levelFactor(s, i);
+      const name = sec.name || 'Stairs';
+      add({ key: `stairFlights|${sec.id}`, group: 'Stairs', level: name, levelIndex: i, label: 'Stair flights', unit: 'flights', auto: st.flights.length, min: t.stair, factor, hint: `${st.risers} risers, ${st.stringers} stringers` });
+      if (st.hasLanding) add({ key: `stairLanding|${sec.id}`, group: 'Stairs', level: name, levelIndex: i, label: 'Landing', unit: 'landings', auto: 1, min: t.stairLanding, factor, hint: st.landing ? `${st.landing.areaSqFt} sq ft` : '' });
     } else if (kind === 'roof') {
       const top = Math.max(0, levels.length - 1);
       const factor = r2(levelFactor(s, top) + n(s.roofExtra));

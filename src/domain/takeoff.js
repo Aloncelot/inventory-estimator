@@ -15,6 +15,7 @@
 
 import { wallPanelsOf, looseOf, trussesOf, sectionKind, PANEL_NAIL_SEL_KEY } from './estimate';
 import { scoped } from './scope';
+import { itemKeyFromSel } from './reserve';
 
 const n = (v) => Number(v) || 0;
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -98,7 +99,7 @@ function collect(entries) {
     const d = describe(e.sel, e.row.desc || e.row.label || e.row.type || 'Item');
     const unit = e.row.unit || 'pcs';
     const key = `${d.picked ? d.name : `?${e.row.label || e.row.type}`}|${unit}`;
-    const line = map.get(key) || { key, name: d.name, picked: d.picked, unit, qty: 0, total: 0, uses: new Set() };
+    const line = map.get(key) || { key, name: d.name, picked: d.picked, unit, qty: 0, total: 0, uses: new Set(), itemKey: d.picked ? itemKeyFromSel(e.sel) : null };
     line.qty += qty;
     line.total += total;
     const use = e.row.desc || e.row.label || e.row.type;
@@ -240,4 +241,27 @@ export function takeoffCsv(t, { prices = false } = {}) {
   }
   for (const g of t.project) add('Project', g);
   return rows.join('\n');
+}
+
+/**
+ * What the project needs from the warehouse: every picked material of the
+ * takeoff (wall panels, loose material, bracing) added up by price-list item,
+ * in whole units. Trusses and panel manufacture are not stock.
+ * @returns {{items: Array<{itemKey,name,unit,qty}>, unpicked: number}}
+ */
+export function materialNeeds(full = {}) {
+  const t = buildTakeoff(full);
+  const by = new Map();
+  let unpicked = 0;
+  const add = (l) => {
+    if (!l.picked || !l.itemKey) { unpicked += 1; return; }
+    const x = by.get(l.itemKey) || { itemKey: l.itemKey, name: l.name, unit: l.unit, qty: 0 };
+    x.qty += n(l.qty);
+    by.set(l.itemKey, x);
+  };
+  for (const lv of t.levels) for (const g of [...lv.wallPanels, ...lv.loose]) g.lines.forEach(add);
+  for (const g of t.project) if (g.key === 'bracing') g.lines.forEach(add);
+  const items = [...by.values()].map((x) => ({ ...x, qty: Math.ceil(x.qty - 1e-9) })).filter((x) => x.qty > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { items, unpicked };
 }

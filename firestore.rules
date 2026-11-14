@@ -69,8 +69,25 @@ service cloud.firestore {
 
       match /projects/{pid} {
         allow read: if isMember(cid);
-        allow create, update: if hasRole(cid, 'estimator') && stampedByMe();
+        allow create: if hasRole(cid, 'estimator') && stampedByMe();
+        // Estimators edit the project; an Admin changes only its information (status, client,
+        // the contract when a change order is approved)
+        allow update: if stampedByMe() && (hasRole(cid, 'estimator')
+          || (isAdmin(cid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['meta', 'updatedBy', 'updatedAt'])));
         allow delete: if hasRole(cid, 'estimator');
+
+        // who has the project open (each person writes only their own)
+        match /presence/{uid} {
+          allow read: if isMember(cid);
+          allow write: if isMember(cid) && request.auth.uid == uid;
+        }
+
+        // revisions: frozen copies of the estimate, never changed
+        match /revisions/{rid} {
+          allow read: if isMember(cid);
+          allow create: if hasRole(cid, 'estimator') && request.resource.data.by.uid == request.auth.uid;
+          allow update, delete: if false;
+        }
 
         // history entries: written by whoever saved, never rewritten by anyone else
         match /history/{hid} {
@@ -101,6 +118,61 @@ service cloud.firestore {
         allow delete: if isAdmin(cid) && resource.data.sample == true;
       }
 
+      // what each project needs from the warehouse: Estimators reserve it, issuing
+      // to the project (Warehouse) counts against it
+      match /reservations/{pid} {
+        allow read: if isMember(cid);
+        allow create, update: if (hasRole(cid, 'estimator') || isAdmin(cid) || canStock(cid))
+          && request.resource.data.updatedBy.uid == request.auth.uid;
+        allow delete: if hasRole(cid, 'estimator') || isAdmin(cid);
+      }
+      // change orders: an Estimator asks, an Admin approves or rejects; the
+      // requester may withdraw one still waiting
+      match /changeOrders/{coId} {
+        allow read: if isMember(cid);
+        allow create: if hasRole(cid, 'estimator') && request.resource.data.status == 'pending'
+          && request.resource.data.requestedBy.uid == request.auth.uid;
+        allow update: if resource.data.status == 'pending'
+          && request.resource.data.decidedBy.uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedBy', 'decidedAt', 'decisionNote'])
+          && ((isAdmin(cid) && request.resource.data.status in ['approved', 'rejected'])
+              || (resource.data.requestedBy.uid == request.auth.uid && request.resource.data.status == 'withdrawn'));
+        allow delete: if false;
+      }
+      // quality reviews: an Estimator asks, a colleague (Estimator or Admin, not
+      // the one who asked; the one named, if any) checks it or sends it back
+      match /reviews/{rid} {
+        allow read: if isMember(cid);
+        allow create: if hasRole(cid, 'estimator') && request.resource.data.status == 'pending'
+          && request.resource.data.requestedBy.uid == request.auth.uid;
+        allow update: if resource.data.status == 'pending'
+          && request.resource.data.decidedBy.uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedBy', 'decidedAt', 'note'])
+          && (((hasRole(cid, 'estimator') || isAdmin(cid)) && resource.data.requestedBy.uid != request.auth.uid
+                && (resource.data.reviewer == null || resource.data.reviewer.uid == request.auth.uid)
+                && request.resource.data.status in ['approved', 'changes'])
+              || (resource.data.requestedBy.uid == request.auth.uid && request.resource.data.status == 'withdrawn'));
+        allow delete: if false;
+      }
+      match /clients/{clientId} {
+        allow read: if isMember(cid);
+        allow create, update: if hasRole(cid, 'estimator') || isAdmin(cid);
+        allow delete: if isAdmin(cid);
+      }
+      // purchase orders: Estimators and Admins order, Warehouse receives against them
+      match /purchaseOrders/{poId} {
+        allow read: if isMember(cid);
+        allow create: if (hasRole(cid, 'estimator') || isAdmin(cid)) && request.resource.data.createdBy.uid == request.auth.uid;
+        allow update: if (hasRole(cid, 'estimator') || isAdmin(cid) || canStock(cid))
+          && request.resource.data.updatedBy.uid == request.auth.uid
+          && request.resource.data.number == resource.data.number;
+        allow delete: if false;
+      }
+      match /counters/{name} {
+        allow read: if isMember(cid);
+        allow write: if hasRole(cid, 'estimator') || isAdmin(cid);
+      }
+
       // the company's own price list (materials, sizes, suppliers, prices)
       match /families/{path=**} { allow read: if isMember(cid); allow write: if hasRole(cid, 'estimator') || isAdmin(cid); }
       match /priceLists/{path=**} { allow read: if isMember(cid); allow write: if hasRole(cid, 'estimator') || isAdmin(cid); }
@@ -118,6 +190,17 @@ service cloud.firestore {
     match /families/{id=**} { allow read: if inAnyCompany(); allow write: if false; }
     match /priceLists/{id=**} { allow read: if inAnyCompany(); allow write: if false; }
     match /itemVendorLookup/{id=**} { allow read: if inAnyCompany(); allow write: if false; }
+
+    /* outgoing email, sent by the "Trigger Email from Firestore" extension:
+       only invitations, by an Admin of the company, to an email it invited */
+    match /mail/{id} {
+      allow create: if signedIn() && request.resource.data.kind == 'invite'
+        && isAdmin(request.resource.data.companyId)
+        && request.resource.data.sentBy.uid == request.auth.uid
+        && request.resource.data.to is list && request.resource.data.to.size() == 1
+        && exists(/databases/$(database)/documents/companies/$(request.resource.data.companyId)/invites/$(request.resource.data.to[0]));
+      allow read, update, delete: if false;
+    }
 
     /* the old personal workspace: read-only, kept so it can be imported */
     match /artifacts/{uid}/{document=**} {

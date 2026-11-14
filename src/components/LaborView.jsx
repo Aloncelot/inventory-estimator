@@ -41,6 +41,7 @@ const TIMES = [
     ['subfloorSheet', 'Subfloor sheet', 'crew min / sheet', 'Glue and nail'],
     ['beam', 'Beam', 'crew min / 10 LF', 'LVL, built-up'],
     ['stair', 'Stair flight', 'crew min / flight', ''],
+    ['stairLanding', 'Stair landing', 'crew min / landing', ''],
   ]],
   ['Roof', [
     ['roofTruss', 'Roof truss', 'crew min / pc', 'Set, brace, tie down'],

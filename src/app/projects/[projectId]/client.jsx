@@ -5,6 +5,6 @@ import { useRouter } from 'next/navigation';
 
 export default function ProjectClient() {
   const router = useRouter();
-  useEffect(() => { router.replace('/'); }, [router]);
+  useEffect(() => { router.replace('/app'); }, [router]);
   return <main className="app-content"><div className="empty-state">Opening the estimator…</div></main>;
 }

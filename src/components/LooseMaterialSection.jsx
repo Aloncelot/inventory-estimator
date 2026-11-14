@@ -15,7 +15,8 @@ import {
   GroupBlock, MatHead, MatSub, SortableMatRow, RemoveIconButton,
   NumInput, Fld, MultiplierSelect, noteOf, patchNote, SortableList, applyOrder,
 } from '@/components/ui/mat';
-import { computeLooseSection, sectionKind, rowCalcType } from '@/domain/estimate';
+import { computeLooseSection, sectionKind, rowCalcType, computeStairs, STAIR_TYPES, inches } from '@/domain/estimate';
+import { STAIR_DEFAULTS } from '@/domain/estimate/stairs';
 import { LOOSE_SECTION_DEFAULTS, looseRowDefaults } from '@/domain/lib/defaults';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -202,6 +203,39 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
     );
   }
 
+  // a staircase: its geometry above the rows (more fields than a header holds)
+  let stairBlock = null;
+  if (kind === 'stairs') {
+    const st = calc.stairs || computeStairs(inputs);
+    const sf = (key, label, w = 56, step) => (
+      <Fld key={key} label={label} w={w}><NumInput allowEmpty step={step} value={inputs[key] ?? ''} placeholder={String(STAIR_DEFAULTS[key] ?? 0)} onCommit={(v) => setInput(key, v)} /></Fld>
+    );
+    stairBlock = (
+      <div className="stair-in">
+        <div className="stair-in__row">
+          {sf('floorToFloorIn', 'Floor to floor (in)', 64, '0.125')}
+          {sf('widthIn', 'Width (in)', 52)}
+          <Fld label="Type" w={150}>
+            <select className="ew-select" value={inputs.type || 'straight'} onChange={(e) => setInput('type', e.target.value)}>
+              {STAIR_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </Fld>
+          {sf('maxRiserIn', 'Max riser (in)', 52, '0.125')}
+          {sf('treadIn', 'Tread (in)', 52, '0.25')}
+          {st.hasLanding ? <>{sf('landingLenFt', 'Landing length (ft)', 52, '0.25')}{sf('landingWidthFt', 'Landing width (ft)', 52, '0.25')}{sf('joistSpacingIn', 'Joists o.c. (in)', 48)}</> : null}
+          {sf('railSides', 'Railed sides', 40)}
+        </div>
+        {st.ready ? (
+          <p className="stair-in__sum">
+            {st.risers} risers of {inches(st.riserIn)} · {st.treads} treads of {inches(st.tread)}{st.hasLanding ? ' + landing' : ''} · run {st.runFt} ft
+            {' · '}{st.stringers} stringers ({st.flights.map((f) => `${f.stringerFt} ft`).join(', ')})
+          </p>
+        ) : null}
+        {st.warnings.map((w) => <p key={w} className="stair-in__warn">{w}</p>)}
+      </div>
+    );
+  }
+
   const isProtected = ['foundation', 'basement', 'roof'].includes(kind);
 
   return (
@@ -224,6 +258,7 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
         </>
       )}
     >
+      {stairBlock}
       <div className="mat" role="table">
         <MatHead />
         <SortableList ids={calcOrdered.map((r) => r.key)} onMove={(a, o, ids) => update((p) => ({ ...p, calcOrder: ids }))}>

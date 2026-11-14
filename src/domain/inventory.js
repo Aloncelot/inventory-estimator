@@ -36,6 +36,9 @@ export function stockStatus(stock, warehouseId) {
   return 'ok';
 }
 
+/** At or under its minimum: time to reorder (only items with a minimum set). */
+export const needsReorder = (stock) => n(stock?.minQty) > 0 && onHand(stock) <= n(stock.minQty);
+
 export const stockValue = (stock, warehouseId) => round2(onHand(stock, warehouseId) * n(stock?.avgCost));
 
 /** Check a movement before saving it; returns an error message or ''. */

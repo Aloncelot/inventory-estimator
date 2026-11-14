@@ -52,3 +52,13 @@ test('invitation mailto and document size', () => {
   assert.match(body, /https:\/\/x\.web\.app/);
   assert.equal(approxDocBytes({ a: 'ñ' }), 10);
 });
+
+test('the invitation email', async () => {
+  const { inviteEmail, inviteMailto } = await import('./team.js');
+  const m = inviteEmail({ email: ' Joe@Acme.com ', roles: ['estimator'], companyName: 'Acme <Framing>', inviterName: 'Alonso', appUrl: 'https://app.example.com' });
+  assert.equal(m.to, 'joe@acme.com');
+  assert.match(m.subject, /Acme <Framing>/);
+  assert.match(m.text, /as: Estimator/);
+  assert.match(m.html, /Acme &lt;Framing&gt;/, 'escaped in HTML');
+  assert.match(inviteMailto({ email: 'joe@acme.com', roles: [], appUrl: 'x' }), /^mailto:joe%40acme\.com\?subject=/);
+});

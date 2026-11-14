@@ -1,11 +1,18 @@
 // src/lib/planFiles.js
-// The plan PDFs themselves stay in this browser (IndexedDB): they are too big
-// for the project document. The project only keeps the walls found on them, so
-// estimates work anywhere; re-attach the PDF on another computer to see it.
+// The plan PDFs. Each one lives in Cloud Storage under the company
+// (companies/{cid}/plans/{projectId}/{levelId}[/struct].pdf), so everyone on
+// the team sees the plans of a project, and in this browser (IndexedDB) as a
+// cache, so a plan opens at once the second time and still works offline.
+// Without Cloud Storage (the Spark plan, or no bucket yet) the PDFs stay in
+// this browser only, as before.
 'use client';
+
+import { ref, uploadBytes, getBlob } from 'firebase/storage';
+import { storage } from './firebase';
 
 const DB = 'inventory-estimator-plans';
 const STORE = 'files';
+export const MAX_PLAN_MB = 50;
 
 function open() {
   return new Promise((resolve, reject) => {
@@ -26,6 +33,45 @@ async function run(mode, fn) {
     tx.onerror = () => { db.close(); reject(tx.error); };
   });
 }
+const putLocal = (key, blob) => run('readwrite', (s) => s.put(blob, key));
+const getLocal = (key) => run('readonly', (s) => s.get(key)).catch(() => undefined);
 
-export const savePlanFile = (key, blob) => run('readwrite', (s) => s.put(blob, key));
-export const loadPlanFile = (key) => run('readonly', (s) => s.get(key)).catch(() => undefined);
+// the company's folder, set when the company is ready (CompanyContext)
+let base = null;
+export function setPlanBase(b) { base = b || null; }
+
+/** projectId:levelId[:struct] → companies/{cid}/plans/projectId/levelId[/struct].pdf */
+export const storagePathOf = (key, b = base) => (b ? `${b}/plans/${String(key).split(':').map((x) => x.replace(/[^\w-]/g, '_')).join('/')}.pdf` : null);
+
+/**
+ * Keep a plan: in this browser now, and in Cloud Storage for the team.
+ * @returns {{ cloud: boolean, error?: string }}
+ */
+export async function savePlanFile(key, blob) {
+  await putLocal(key, blob);
+  const path = storagePathOf(key);
+  if (!path) return { cloud: false };
+  if (blob.size > MAX_PLAN_MB * 1024 * 1024) return { cloud: false, error: `Over ${MAX_PLAN_MB} MB: kept on this computer only.` };
+  try {
+    await uploadBytes(ref(storage, path), blob, { contentType: 'application/pdf' });
+    return { cloud: true };
+  } catch (e) {
+    console.warn('Plan not uploaded (kept in this browser):', e?.code || e);
+    return { cloud: false, error: e?.code || String(e) };
+  }
+}
+
+/** A plan from this browser, or else from Cloud Storage (then kept here too). */
+export async function loadPlanFile(key) {
+  const local = await getLocal(key);
+  if (local) return local;
+  const path = storagePathOf(key);
+  if (!path) return undefined;
+  try {
+    const blob = await getBlob(ref(storage, path));
+    putLocal(key, blob).catch(() => {});
+    return blob;
+  } catch {
+    return undefined;   // not uploaded (attached before, on another computer) or no Storage
+  }
+}

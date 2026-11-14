@@ -3,12 +3,12 @@ import "./globals.css";
 import { AuthProvider } from "@/AuthContext";
 
 export const metadata = {
-  title: "Inventory Estimator",
-  description: "Internal estimating tool",
+  title: "Estimate Hub",
+  description: "Framing estimates from the plans: wall panels, loose material, labor, quotes, and the warehouse that supplies them.",
 };
 
 // Applies the saved theme before first paint (no light/dark flash).
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d);}catch(e){document.documentElement.classList.add('dark');}})();`;
+const themeScript = `(function(){var h=document.documentElement;try{var t=localStorage.getItem('theme');if(t==='dark')t='quasar';if(!t)t=window.matchMedia('(prefers-color-scheme: dark)').matches?'quasar':'light';h.classList.toggle('dark',t!=='light');h.classList.toggle('graphite',t==='graphite');}catch(e){h.classList.add('dark');}})();`;
 
 export default function RootLayout({ children }) {
   return (

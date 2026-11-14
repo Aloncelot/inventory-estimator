@@ -2,6 +2,7 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
 // Only validate envs on the server/build (never in the browser)
 if (typeof window === "undefined") {
@@ -39,4 +40,7 @@ const googleProvider = new GoogleAuthProvider();
 // Always show the account chooser so you can pick between your Google accounts
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-export { app, db, auth, googleProvider };
+// Cloud Storage: plan PDFs, so the whole team sees them (needs the Blaze plan)
+const storage = getStorage(app);
+
+export { app, db, auth, googleProvider, storage };

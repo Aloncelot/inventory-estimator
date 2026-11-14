@@ -5,9 +5,14 @@
 // the final value only. Printable, and downloadable as CSV.
 'use client';
 
-import { useMemo } from 'react';
-import { ClipboardList, Printer, Download } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ClipboardList, Printer, Download, PackageCheck } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
+import { useCompany } from '@/context/CompanyContext';
+import { useAuth } from '@/AuthContext';
+import { loadCatalogItems, saveReservation } from '@/lib/inventory';
+import { materialNeeds } from '@/domain/takeoff';
+import { goTo } from '@/lib/nav';
 import { PageHeader, fmtMoney } from '@/components/ui/mat';
 import { buildTakeoff, takeoffCsv } from '@/domain/takeoff';
 
@@ -48,7 +53,12 @@ function Group({ g, prices }) {
 }
 
 export default function TakeoffView() {
-  const { projectData, updateProject, isLoaded } = useProject();
+  const { projectData, projectId, updateProject, isLoaded } = useProject();
+  const { companyId, company, perms } = useCompany();
+  const { user } = useAuth();
+  const [resMsg, setResMsg] = useState(null);   // { text, ok }
+  const [reserving, setReserving] = useState(false);
+  const canReserve = Boolean(company?.inventoryEnabled && (perms?.canEditEstimate || perms?.isAdmin));
   const est = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const t = useMemo(() => buildTakeoff(est), [est]);
   const prices = Boolean(est.takeoff?.prices);
@@ -64,6 +74,25 @@ export default function TakeoffView() {
       </div>
     );
   }
+
+  // reserve this takeoff's materials in the warehouse (Inventory → Reservations)
+  const reserve = async () => {
+    setReserving(true); setResMsg(null);
+    try {
+      const catalog = new Map((await loadCatalogItems()).map((c) => [c.itemKey, c]));
+      const { items, unpicked } = materialNeeds(est);
+      const out = {}; let unknown = 0;
+      for (const x of items) {
+        const c = catalog.get(x.itemKey);
+        if (!c) { unknown += 1; continue; }
+        out[x.itemKey] = { qty: x.qty, family: c.family, size: c.size, unit: c.unit || x.unit || 'pcs' };
+      }
+      if (!Object.keys(out).length) throw new Error('No material of this takeoff is in the price list.');
+      await saveReservation(companyId, { projectId, projectName: projectData?.name || name, items: out }, user);
+      const skipped = unknown + unpicked;
+      setResMsg({ ok: true, text: `Reserved ${Object.keys(out).length} materials for this project${skipped ? ` (${skipped} lines without a price-list material were left out)` : ''}.` });
+    } catch (e) { setResMsg({ ok: false, text: `Not reserved: ${e?.message || e}` }); } finally { setReserving(false); }
+  };
 
   const download = () => {
     const blob = new Blob([takeoffCsv(t, { prices })], { type: 'text/csv' });
@@ -93,11 +122,18 @@ export default function TakeoffView() {
               </select>
             </label>
             <label className="pv-check no-print"><input type="checkbox" checked={prices} onChange={(e) => setPrices(e.target.checked)} /> Show prices</label>
+            {canReserve ? <button type="button" className="ew-btn no-print" onClick={reserve} disabled={reserving} title="Reserve these materials in the warehouse; doing it again updates the quantities"><PackageCheck size={13} /> {reserving ? 'Reserving…' : 'Reserve stock'}</button> : null}
             <button type="button" className="ew-btn ew-btn--ghost no-print" onClick={download} title="Download the list as CSV (Excel, Google Sheets)"><Download size={13} /> CSV</button>
             <button type="button" className="ew-btn ew-btn--primary no-print" onClick={() => window.print()} title="Print or save as PDF"><Printer size={13} /> Print / PDF</button>
           </>
         )}
       />
+
+      {resMsg ? (
+        <p className={`no-print ${resMsg.ok ? 'team-msg' : 'gate-err'}`}>
+          {resMsg.text}{resMsg.ok ? <> <button type="button" className="ew-link" onClick={() => goTo('inventory', { tab: 'reserve' })}>See it in Inventory → Reservations</button></> : null}
+        </p>
+      ) : null}
 
       <article className="tk-doc">
         <header className="tk-head print-only">

@@ -11,7 +11,7 @@ import { wallPanelsOf, looseOf, trussesOf, sectionKind } from './index';
 import { computeLabor } from '../labor';
 import { taxFor } from '../lib/tax';
 import { scoped, scopeOf } from '../scope';
-import { materialMarkupOf, markupFactor } from '../markup';
+import { materialMarkupOf, markupFactor, bufferPctOf } from '../markup';
 
 const n = (v) => Number(v) || 0;
 const round2 = (v) => Number((Number(v) || 0).toFixed(2));
@@ -53,9 +53,10 @@ function wallPanelsBlock(est, f = 1) {
   const general = [
     { key: 'bracing', label: 'Temporary bracing', detail: `${num(wp.bracing.panels)} panels`, amount: round2(wp.bracing.total * f) },
     { key: 'manufacture', label: 'Panels manufacture', detail: `${num(panels)} panels · ${lf(panelLF)}`, amount: round2(wp.manufacture.total) },
+    { key: 'trucking', label: 'Panel delivery', detail: `${num(wp.trucking.trucks)} truck${wp.trucking.trucks === 1 ? '' : 's'} · ${num(wp.trucking.milesCharged)} mi each`, amount: round2(wp.trucking.total) },
   ].filter((x) => n(x.amount) !== 0);
   if (general.length) groups.push({ id: 'wp-all', title: 'All levels', lines: general, subtotal: round2(general.reduce((a, x) => a + x.amount, 0)) });
-  const total = round2((wp.total - wp.manufacture.total) * f + wp.manufacture.total);
+  const total = round2((wp.total - wp.manufacture.total - wp.trucking.total) * f + wp.manufacture.total + wp.trucking.total);
   return { key: 'wallPanels', title: 'Wall panels', groups, total, material: true };
 }
 
@@ -114,15 +115,18 @@ function laborBlock(est) {
  *   markupDefault: the company's material markup % for a project without its own
  */
 export function computeQuote(full = {}, { shipping, include, detail = 'detail', markupDefault = 0 } = {}) {
-  const f = markupFactor(materialMarkupOf(full, markupDefault));
+  // the client sees prices with the error buffer and the markup in them
+  const m = markupFactor(materialMarkupOf(full, markupDefault));
+  const fWall = m * (1 + bufferPctOf(full, 'wallPanels') / 100);
+  const fLoose = m * (1 + bufferPctOf(full, 'loose') / 100);
   // the project's scope (Summary), unless a quote passes its own parts
   const sc = scopeOf(full);
   const inc = include || { wallPanels: sc.structural || sc.partitions, loose: sc.loose, trusses: sc.trusses, labor: sc.labor };
   const est = scoped(full);
   const on = (k) => inc[k] !== false;
   const blocks = [
-    on('wallPanels') && wallPanelsBlock(est, f),
-    on('loose') && looseBlock(est, f),
+    on('wallPanels') && wallPanelsBlock(est, fWall),
+    on('loose') && looseBlock(est, fLoose),
     on('trusses') && trussesBlock(est),
     on('labor') && laborBlock(est),
   ].filter((b) => b && n(b.total) !== 0);

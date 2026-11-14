@@ -136,22 +136,27 @@ export function continuesEntry(last, uid, now) {
 /* ── invitation email (opens the user's own mail app) ───────────────── */
 
 /** A mailto: link with the invitation written out; nothing is sent by the app. */
-export function inviteMailto({ email, roles, companyName, inviterName, appUrl }) {
+/** The invitation email: subject, plain text and HTML. */
+export function inviteEmail({ email, roles, companyName, inviterName, appUrl }) {
   const roleText = normalizeRoles(roles).map(roleLabel).join(', ') || 'view only';
   const company = companyName || 'our company';
-  const subject = `You're invited to ${company} on Inventory Estimator`;
-  const body = [
-    'Hi,',
-    '',
-    `${inviterName || 'I'} invited you to join ${company} on Inventory Estimator as: ${roleText}.`,
-    '',
+  const to = normEmail(email);
+  const subject = `You're invited to ${company} on Estimate Hub`;
+  const lines = [
+    `${inviterName || 'A colleague'} invited you to join ${company} on Estimate Hub as: ${roleText}.`,
     `1. Open ${appUrl}`,
-    `2. Sign in with Google using this email: ${normEmail(email)}`,
+    `2. Sign in with Google using this email: ${to}`,
     '3. Click "Join" on the invitation.',
-    '',
-    'Thanks!',
-  ].join('\n');
-  return `mailto:${encodeURIComponent(normEmail(email))}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  ];
+  const text = ['Hi,', '', lines[0], '', ...lines.slice(1), '', 'Thanks!'].join('\n');
+  const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const html = `<p>Hi,</p><p>${esc(lines[0])}</p><ol><li>Open <a href="${esc(appUrl)}">${esc(appUrl)}</a></li><li>Sign in with Google using this email: <strong>${esc(to)}</strong></li><li>Click <strong>Join</strong> on the invitation.</li></ol><p>Thanks!</p>`;
+  return { to, subject, text, html };
+}
+
+export function inviteMailto(opts) {
+  const m = inviteEmail(opts);
+  return `mailto:${encodeURIComponent(m.to)}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.text)}`;
 }
 
 /* ── project size (Firestore keeps up to 1 MB per document) ─────────── */

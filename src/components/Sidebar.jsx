@@ -11,9 +11,12 @@ import { useAuth } from '@/AuthContext';
 import { useProject } from '@/context/ProjectContext';
 import { useCompany } from '@/context/CompanyContext';
 import { roleLabel } from '@/domain/team';
+import PresenceBar from '@/components/PresenceBar';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import {
   LogOut, FolderOpen, LayoutDashboard, PanelsTopLeft, Layers, HardHat, ClipboardList, Receipt,
-  Package, Save, Sun, Moon, History, Users, Eye, Warehouse, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine,
+  Package, Sun, Moon, Sparkles, LifeBuoy, History, Users, Eye, Warehouse, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine,
 } from 'lucide-react';
 
 const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
@@ -40,15 +43,32 @@ const NAV = [
   { key: 'labor', label: 'Labor', Icon: HardHat, needsProject: true },
   { key: 'takeoff', label: 'Takeoff list', Icon: ClipboardList, needsProject: true },
   { key: 'quote', label: 'Quote', Icon: Receipt, needsProject: true },
-  { key: 'history', label: 'History', Icon: History, needsProject: true },
+  { key: 'history', label: 'Revisions', Icon: History, needsProject: true },
   { sep: true },
   { key: 'inventory', label: 'Inventory', Icon: Warehouse },
   { key: 'team', label: 'Company & team', Icon: Users },
+  { key: 'help', label: 'Help', Icon: LifeBuoy },
 ];
 
-function applyTheme(dark) {
-  document.documentElement.classList.toggle('dark', dark);
-  try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch { /* storage blocked */ }
+// Three themes: Light, Quasar (the synthwave dark) and Graphite (a quiet dark).
+// Both dark themes keep the .dark class; Graphite adds .graphite on top.
+const THEMES = [
+  { key: 'light', label: 'Light', Icon: Sun },
+  { key: 'quasar', label: 'Quasar', Icon: Sparkles },
+  { key: 'graphite', label: 'Graphite', Icon: Moon },
+];
+
+function currentTheme() {
+  const h = document.documentElement;
+  if (!h.classList.contains('dark')) return 'light';
+  return h.classList.contains('graphite') ? 'graphite' : 'quasar';
+}
+
+function applyTheme(theme) {
+  const h = document.documentElement;
+  h.classList.toggle('dark', theme !== 'light');
+  h.classList.toggle('graphite', theme === 'graphite');
+  try { localStorage.setItem('theme', theme); } catch { /* storage blocked */ }
 }
 
 function Label({ show, children, className = 'menu-label' }) {
@@ -86,7 +106,8 @@ function NavItem({ active, disabled, collapsed, onClick, title, Icon, label, tra
       {active ? <motion.span layoutId="nav-active" className="nav-pill" transition={SPRING} /> : null}
       <span className="menu-ico"><Icon size={18} /></span>
       <Label show={!collapsed}>{label}</Label>
-      {!collapsed && trailing ? <span className="soon">{trailing}</span> : null}
+      {!collapsed && trailing ? <span className={trailing === 'soon' ? 'soon' : 'menu-count'}>{trailing}</span> : null}
+      {collapsed && trailing && trailing !== 'soon' ? <span className="menu-dot" aria-label={`${trailing} waiting`} /> : null}
     </motion.button>
   );
 }
@@ -119,10 +140,35 @@ function SaveStatus({ status, lastSavedAt, error, collapsed }) {
 
 export default function Sidebar({ active, onChange, collapsed, onCollapsedChange }) {
   const { user } = useAuth();
-  const { company, roles } = useCompany();
+  const { company, companyId, roles, perms } = useCompany();
+  // on the Projects item: change orders waiting for an admin, estimates waiting for this person's review
+  const [pendingCOs, setPendingCOs] = useState(0);
+  const [toReview, setToReview] = useState(0);
+  useEffect(() => {
+    if (!companyId || !perms?.isAdmin) { setPendingCOs(0); return undefined; }
+    const q = query(collection(db, `companies/${companyId}/changeOrders`), where('status', '==', 'pending'));
+    return onSnapshot(q, (snap) => setPendingCOs(snap.size), () => setPendingCOs(0));
+  }, [companyId, perms?.isAdmin]);
+  // on the Inventory item: materials at or under their minimum
+  const [reorder, setReorder] = useState(0);
+  const invOn = Boolean(company?.inventoryEnabled);
+  useEffect(() => {
+    if (!companyId || !invOn) { setReorder(0); return undefined; }
+    const q = query(collection(db, `companies/${companyId}/stock`), where('belowMin', '==', true));
+    return onSnapshot(q, (snap) => setReorder(snap.size), () => setReorder(0));
+  }, [companyId, invOn]);
+  const uid = user?.uid;
+  useEffect(() => {
+    if (!companyId || !uid || !(perms?.canEditEstimate || perms?.isAdmin)) { setToReview(0); return undefined; }
+    const q = query(collection(db, `companies/${companyId}/reviews`), where('status', '==', 'pending'));
+    return onSnapshot(q, (snap) => setToReview(snap.docs.filter((d) => {
+      const r = d.data();
+      return r.requestedBy?.uid !== uid && (!r.reviewer || r.reviewer.uid === uid);
+    }).length), () => setToReview(0));
+  }, [companyId, uid, perms?.canEditEstimate, perms?.isAdmin]);
   const {
-    saveProject, isSaving, projectId, projectData, saveStatus, saveError, lastSavedAt, isDirty,
-    undo, redo, canUndo, canRedo,
+    saveProject, isSaving, projectId, projectData, saveStatus, saveError, lastSavedAt,
+    undo, redo, canUndo, canRedo, presence,
   } = useProject();
 
   // Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo. Inside a text field the
@@ -140,9 +186,9 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [projectId, undo, redo]);
-  const [isDark, setIsDark] = useState(true);
+  const [theme, setThemeState] = useState('quasar');
 
-  useEffect(() => { setIsDark(document.documentElement.classList.contains('dark')); }, []);
+  useEffect(() => { setThemeState(currentTheme()); }, []);
 
   // floating calculator (remembered per browser)
   const [calcOpen, setCalcOpen] = useState(false);
@@ -151,7 +197,10 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
     setCalcOpen(open);
     try { localStorage.setItem('calc-open', open ? '1' : '0'); } catch { /* storage blocked */ }
   };
-  const setTheme = (dark) => { setIsDark(dark); applyTheme(dark); };
+  const setTheme = (t) => { setThemeState(t); applyTheme(t); };
+  const themeIdx = Math.max(0, THEMES.findIndex((t) => t.key === theme));
+  const ThemeIcon = THEMES[themeIdx].Icon;
+  const nextTheme = THEMES[(themeIdx + 1) % THEMES.length];
 
   // Ctrl/Cmd + S saves the open project
   useEffect(() => {
@@ -165,7 +214,8 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
     return () => window.removeEventListener('keydown', onKey);
   }, [projectId, isSaving, saveProject]);
 
-  const canSave = Boolean(user && projectId && projectData && !isSaving && (isDirty || saveStatus === 'error'));
+  // the others with the open project (the menu no longer has Save now: it saves on its own, Ctrl+S still works)
+  const others = (presence || []).filter((p) => p.uid !== user?.uid);
   const initial = (user?.displayName || user?.email || 'U')[0].toUpperCase();
 
   return (
@@ -205,7 +255,7 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
                 title={it.soon ? `${it.label} — coming soon` : disabled ? 'Open a project first' : it.label}
                 Icon={it.Icon}
                 label={it.label}
-                trailing={it.soon ? 'soon' : null}
+                trailing={it.soon ? 'soon' : it.key === 'project' && pendingCOs + toReview ? String(pendingCOs + toReview) : it.key === 'inventory' && reorder ? String(reorder) : null}
               />
             );
           })}
@@ -222,15 +272,6 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
               </motion.button>
             </div>
           ) : null}
-          <NavItem
-            active={false}
-            disabled={!canSave}
-            collapsed={collapsed}
-            onClick={() => canSave && saveProject()}
-            title={projectId ? (isDirty ? 'Save now (Ctrl+S) — changes also save automatically' : 'All changes saved') : 'Open a project first'}
-            Icon={isSaving ? (p) => <LoaderCircle {...p} className="animate-spin" /> : Save}
-            label={isSaving ? 'Saving…' : 'Save now'}
-          />
         </nav>
 
         <div className="side-foot">
@@ -266,24 +307,27 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
             <motion.button
               type="button"
               className="ew-icon-btn"
-              onClick={() => setTheme(!isDark)}
-              title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-              aria-label="Toggle theme"
+              onClick={() => setTheme(nextTheme.key)}
+              title={`${THEMES[themeIdx].label} theme. Switch to ${nextTheme.label}`}
+              aria-label={`Switch to ${nextTheme.label} theme`}
               style={{ alignSelf: 'center' }}
               whileTap={{ scale: 0.85, rotate: -30 }}
               transition={SPRING}
             >
-              {isDark ? <Moon size={16} /> : <Sun size={16} />}
+              <ThemeIcon size={16} />
             </motion.button>
           ) : (
             <div className="theme-switch" role="group" aria-label="Theme">
-              <motion.span className="theme-knob" layout transition={SPRING} style={{ gridColumn: isDark ? 1 : 2 }} />
-              <button type="button" aria-pressed={isDark} onClick={() => setTheme(true)}><Moon size={14} /> Dark</button>
-              <button type="button" aria-pressed={!isDark} onClick={() => setTheme(false)}><Sun size={14} /> Light</button>
+              <motion.span className="theme-knob" layout transition={SPRING} style={{ gridColumn: themeIdx + 1 }} />
+              {THEMES.map(({ key, label, Icon }, i) => (
+                <button key={key} type="button" style={{ gridColumn: i + 1 }} aria-pressed={theme === key} onClick={() => setTheme(key)} title={`${label} theme`}><Icon size={13} /> {label}</button>
+              ))}
             </div>
           )}
 
           {user ? (
+            <>
+            {!collapsed ? <PresenceBar others={others} collapsed={false} /> : null}
             <div className="side-user">
               {collapsed ? (
                 <motion.button type="button" className="avatar" onClick={() => onChange('auth')} title={`${user.email} — sign out`} aria-label="Sign out" whileTap={{ scale: 0.9 }} transition={SPRING}>
@@ -302,6 +346,8 @@ export default function Sidebar({ active, onChange, collapsed, onCollapsedChange
                 </button>
               ) : null}
             </div>
+            {collapsed ? <PresenceBar others={others} collapsed /> : null}
+            </>
           ) : null}
         </div>
       </motion.aside>

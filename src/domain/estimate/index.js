@@ -4,6 +4,8 @@
 // project. That keeps levels, sections and Summary consistent by construction,
 // and every rule can be unit-tested (see estimate.test.js).
 
+import { computeTrucking } from './trucking';
+import { computeStairs, inches } from './stairs';
 import {
   calcPlates, calcStuds, calcBlocking, calcSheathing, calcHeader, calcPost, calcHeadersInfill,
   looseExtBottomPlates, looseExtTopPlates, loosePanelBandSheathing, looseExtraSheathing,
@@ -656,8 +658,10 @@ export function computeWallPanels(est = {}) {
   const panelCount = manufacture.lines.filter((x) => PANEL_KEYS.includes(x.key)).reduce((acc, x) => acc + n(x.panels), 0);
   const roof = (est.looseList || []).find((x) => x && sectionKind(x) === 'roof');
   const bracing = computeBracing(est.bracing, { panels: panelCount, roofAreaSqFt: n(roof?.inputs?.roofArea) });
-  const total = round2(sum(levels, 'total') + bracing.total + manufacture.total);
-  return { levels, totals: t, lf, addons, bracing, manufacture, total };
+  // delivering the panels to the job
+  const trucking = computeTrucking(est.trucking, panelCount);
+  const total = round2(sum(levels, 'total') + bracing.total + manufacture.total + trucking.total);
+  return { levels, totals: t, lf, addons, bracing, manufacture, trucking, total };
 }
 
 /* ───────────────────────── Loose material page ───────────────────────── */
@@ -668,6 +672,7 @@ export function sectionKind(section) {
   if (name === 'Foundation') return 'foundation';
   if (name === 'Basement') return 'basement';
   if (name === 'Roof') return 'roof';
+  if (/^stairs?\b/i.test(name)) return 'stairs';
   if (/level/i.test(name)) return 'level';
   return 'custom';
 }
@@ -748,6 +753,65 @@ export function computeLooseSection(section = {}, foundation = null) {
       lumber('trim', 'Trim', lf('trimLF')),
       mk('trimScrews', 'Trim screws', calcTrimScrews({ trimLF: lf('trimLF'), wastePct: w('trimScrews'), item: getItem(sel.trimScrews) })),
     ];
+  } else if (kind === 'stairs') {
+    // one staircase: geometry from the stair plan and section; the materials are picked
+    const st = computeStairs(inputs);
+    const count = (key, label, qty, d = 0, extra = {}) => {
+      const item = getItem(sel[key]);
+      const qtyRaw = n(qty);
+      const qtyFinal = Math.ceil(qtyRaw * (1 + w(key, d) / 100) - 1e-9);
+      const unitPrice = unitPriceFrom(item);
+      return mk(key, label, { qtyRaw, qtyFinal, unit: getUnit(sel[key]), unitPrice, subtotal: qtyFinal * unitPrice }, d, extra);
+    };
+    // engineered lumber (LVL, LSL…) and anything priced per foot is bought by the LF;
+    // sawn lumber by whole boards of the picked length (2 pieces from one board when it fits)
+    const byLF = (key) => /^(lf|lin|linear|ft|feet)/i.test(String(getUnit(sel[key], ''))) || isLVL(getFamily(sel[key])) || /\blsl\b|\blvl\b|psl|rimboard|rim board/i.test(getFamily(sel[key]));
+    const boards = (key, pieces, pieceFt) => {
+      const len = parseBoardLengthFt(getSize(sel[key]));
+      if (!len || !pieceFt) return pieces;
+      if (len >= pieceFt) return Math.ceil(pieces / Math.max(1, Math.floor(len / pieceFt)));
+      return pieces * Math.ceil(pieceFt / len);
+    };
+    // a lumber row: pieces of a length, as boards or as LF
+    const lumberRow = (key, label, pieces, pieceFt, d, extra = {}) => {
+      if (byLF(key)) {
+        const lfQty = Math.round(pieces * pieceFt * 100) / 100;
+        const item = getItem(sel[key]);
+        const qtyFinal = Math.ceil(lfQty * (1 + w(key, d) / 100) - 1e-9);
+        const unitPrice = unitPriceFrom(item);
+        return mk(key, label, { qtyRaw: lfQty, qtyFinal, unit: 'lf', unitPrice, subtotal: qtyFinal * unitPrice }, d, { ...extra, hint: `${extra.hint || ''}${extra.hint ? '; ' : ''}bought by the LF` });
+      }
+      return count(key, label, boards(key, pieces, pieceFt), d, extra);
+    };
+    // a run of LF (rim, ledger, blocking): by the LF, or in boards of the picked length
+    const runRow = (key, label, lf, d, boardFallback, extra = {}) => (byLF(key)
+      ? lumberRow(key, label, 1, lf, d, extra)
+      : mk(key, label, calcPlates({ lengthLF: lf, boardLenFt: pieceLength(sel[key], boardFallback), wastePct: w(key, d), item: getItem(sel[key]) }), d, { piece: piece(sel[key], lf, boardFallback), ...extra }));
+    // over 12 ft a stringer is LVL/LSL rather than sawn lumber
+    const longStringer = st.ready && st.flights.some((f) => f.stringerFt > 12);
+    const LVL_STRINGER = { family: 'LVL', size: '1-3/4x11-7/8"', vendor: 'BlueLinx' };
+    if (st.ready) {
+      const wFt = n(st.inputs.widthIn) / 12;
+      const fl = st.flights;
+      const stringerHint = `${st.stringers} stringers (${st.perFlight} per flight), ${fl.map((f) => `${f.stringerFt} ft`).join(' + ')} long${longStringer ? '; over 12 ft: LVL or LSL' : ''}`;
+      const stringerRow = byLF('stringers')
+        ? lumberRow('stringers', 'Stringers', 1, fl.reduce((a, f) => a + st.perFlight * f.stringerFt, 0), 0, { hint: stringerHint })
+        : count('stringers', 'Stringers', fl.reduce((a, f) => a + st.perFlight * boards('stringers', 1, f.stringerFt), 0), 0, { hint: stringerHint });
+      calcRows = [
+        { ...stringerRow, ...(longStringer ? { defaults: LVL_STRINGER } : {}) },
+        lumberRow('treads', 'Treads', st.treads, wFt, 5, { hint: `${st.treads} treads of ${st.tread}" × ${n(st.inputs.widthIn)}" wide` }),
+        lumberRow('risers', 'Risers', st.risers, wFt, 5, { hint: `${st.risers} risers of ${inches(st.riserIn)}` }),
+        count('stringerTies', 'Stringer hangers', st.stringers, 0, { hint: `${st.stringers} stringers, one at the top of each` }),
+        ...(st.landing ? [
+          lumberRow('landingJoists', 'Landing joists', st.landing.joists, st.landing.joistFt, 5, { hint: `${st.landing.joists} joists of ${st.landing.joistFt} ft, ${n(st.inputs.joistSpacingIn) || 16}" o.c.` }),
+          runRow('landingRim', 'Landing rim', st.landing.rimLF, 5, 16, { hint: `${st.landing.rimLF} LF` }),
+          runRow('landingLedger', 'Landing ledger', st.landing.ledgerLF, 5, 16, { hint: `${st.landing.ledgerLF} LF` }),
+          count('landingHangers', 'Landing joist hangers', st.landing.hangers, 0, { hint: `${st.landing.joists} joists, both ends` }),
+          mk('landingSubfloor', 'Landing subfloor', calcSubfloor({ areaSqFt: st.landing.areaSqFt, wastePct: w('landingSubfloor', 10), item: getItem(sel.landingSubfloor) }), 10, { hint: `${st.landing.areaSqFt} sq ft` }),
+        ] : []),
+        runRow('railBlocking', 'Handrail blocking', st.railBlockingLF, 10, 8, { hint: `one row along ${n(st.inputs.railSides)} side${n(st.inputs.railSides) === 1 ? '' : 's'}, ${st.railBlockingLF} LF` }),
+      ];
+    }
   }
 
   const rows = section.rows || [];
@@ -785,7 +849,7 @@ export function computeLooseSection(section = {}, foundation = null) {
     return { ...row, ...res, calcType: ct, wastePct: wp, piece: pc, priceDate: priceDateOf(row.item) };
   });
 
-  return { kind, calcRows, manualRows, subtotal: round2(sum(calcRows) + sum(manualRows)) };
+  return { kind, calcRows, manualRows, subtotal: round2(sum(calcRows) + sum(manualRows)), ...(kind === 'stairs' ? { stairs: computeStairs(inputs) } : {}) };
 }
 
 export function computeLoose(est = {}) {
@@ -832,3 +896,6 @@ export const projectOf = memo((est) => {
   const trusses = trussesOf(est).total;
   return { wallPanels, loose, trusses, subtotal: round2(wallPanels + loose + trusses) };
 });
+
+export { computeTrucking } from './trucking';
+export { computeStairs, STAIR_TYPES, inches } from './stairs';

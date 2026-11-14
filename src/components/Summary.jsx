@@ -12,6 +12,8 @@ import { US_STATES, CA_PROVINCES, NO_TAX, SOURCES, regionOf, taxFor } from '@/do
 import { CURRENCIES, currencyOf } from '@/domain/lib/currency';
 import { SCOPE_PARTS, scopeOf } from '@/domain/scope';
 import { useCompany } from '@/context/CompanyContext';
+import { computeLabor } from '@/domain/labor';
+import { goTo } from '@/lib/nav';
 
 export default function Summary() {
   const { projectData, updateProject, refreshProjectPrices, isSaving } = useProject();
@@ -19,7 +21,9 @@ export default function Summary() {
   const markupDefault = company?.materialMarkupPct ?? 0;
   const est = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const info = useMemo(() => est.summaryInfo || {}, [est.summaryInfo]);
-  const snapshot = est.snapshotTotals || null;
+  // compared with the contract (the bid plus approved change orders); older projects may have a locked quote
+  const contract = projectData?.meta?.contract || null;
+  const snapshot = contract?.totals ? { ...contract.totals, lockedAt: contract.at?.toDate ? contract.at.toDate().toISOString() : null, contractRev: contract.number } : est.snapshotTotals || null;
 
   const setInfo = useCallback((key, value) => {
     updateProject((prev) => ({ ...prev, summaryInfo: { ...(prev.summaryInfo || {}), [key]: value } }));
@@ -55,20 +59,11 @@ export default function Summary() {
   const tax = taxBase * (taxRate / 100);
   const shipping = Number(info.shipping) || 0;
   const grand = totals.subtotal + tax + shipping;
+  // the whole project per sq ft of floor: the same area the Labor page uses (every level, or typed there)
+  const areaSqFt = computeLabor(est).totals.areaSqFt;
+  const perSqFt = areaSqFt ? grand / areaSqFt : 0;
 
   const confirm = useConfirm();
-  const lockTotals = async () => {
-    if (!(await confirm({ title: 'Lock as original quote?', message: 'These totals are saved as the original quote, and later changes are compared against them.', confirmLabel: 'Lock quote' }))) return;
-    updateProject((prev) => ({
-      ...prev,
-      snapshotTotals: {
-        wallPanelsTotal: totals.wallPanels, trussTotal: totals.trusses, looseTotal: totals.loose, laborTotal: totals.labor,
-        markupTotal: totals.markup, markupPct: totals.markupPct,
-        subtotal: totals.subtotal, taxAmount: tax, shippingAmount: shipping, grandTotal: grand,
-        lockedAt: new Date().toISOString(),
-      },
-    }));
-  };
   const clearSnapshot = async () => {
     if (await confirm({ title: 'Clear the original quote?', message: 'The comparison columns disappear. Lock a new quote any time.', confirmLabel: 'Clear quote', tone: 'danger' })) updateProject((prev) => ({ ...prev, snapshotTotals: null }));
   };
@@ -89,8 +84,8 @@ export default function Summary() {
   const setScope = (key, v) => updateProject((prev) => ({ ...prev, scope: { ...(prev.scope || {}), [key]: v } }));
   const wpLabel = sc.structural && sc.partitions ? 'Wall panels' : sc.structural ? 'Wall panels · structural' : sc.partitions ? 'Wall panels · partitions' : 'Wall panels';
   const lines = [
-    [wpLabel, totals.wallPanels, snapshot?.wallPanelsTotal, sc.structural || sc.partitions],
-    ['Loose material', totals.loose, snapshot?.looseTotal, sc.loose],
+    [`${wpLabel}${totals.wallPanelsBuffer ? ` (incl. ${totals.wallPanelsBufferPct}% buffer)` : ''}`, totals.wallPanels, snapshot?.wallPanelsTotal, sc.structural || sc.partitions],
+    [`Loose material${totals.looseBuffer ? ` (incl. ${totals.looseBufferPct}% buffer)` : ''}`, totals.loose, snapshot?.looseTotal, sc.loose],
     ['Trusses', totals.trusses, snapshot?.trussTotal, sc.trusses],
     [`Labor (${totals.laborBy === 'sqft' ? 'per sq ft' : `by time · ${Math.round(totals.laborHours).toLocaleString('en-US')} h`})`, totals.labor, snapshot?.laborTotal, sc.labor],
   ];
@@ -114,11 +109,10 @@ export default function Summary() {
             <button type="button" className="ew-btn" onClick={refresh} disabled={isSaving} title="Reload prices for all items">
               <RefreshCw size={12} className={isSaving ? 'animate-spin' : ''} /> {isSaving ? 'Refreshing…' : 'Refresh prices'}
             </button>
-            {snapshot ? (
+            {!contract && est.snapshotTotals ? (
               <button type="button" className="ew-btn" onClick={clearSnapshot}><LockOpen size={12} /> Clear original quote</button>
-            ) : (
-              <button type="button" className="ew-btn ew-btn--primary" onClick={lockTotals}><Lock size={12} /> Lock as original quote</button>
-            )}
+            ) : null}
+            <button type="button" className="ew-btn ew-btn--primary" onClick={() => goTo('history')} title="Save the estimate as a revision (Rev 0 is the bid) and compare"><Lock size={12} /> {contract ? 'Revisions' : 'Save as bid (Rev 0)'}</button>
           </>
         )}
       />
@@ -128,6 +122,7 @@ export default function Summary() {
           <label className="fld" style={{ '--w': '220px' }}><span>Project name</span><TextInput value={info.projectName || ''} onCommit={(v) => setInfo('projectName', v)} /></label>
           <label className="fld" style={{ '--w': '300px' }}><span>Address</span><TextInput value={info.address || ''} onCommit={(v) => setInfo('address', v)} placeholder="Street, City, ST 00000" /></label>
           <label className="fld" style={{ '--w': '130px' }}><span>Drawings date</span><input className="ew-input" type="date" value={info.drawingsDate || ''} onChange={(e) => setInfo('drawingsDate', e.target.value)} /></label>
+          <label className="fld" style={{ '--w': '130px' }} title="The day the drawings reached you (the date on them is the Drawings date)"><span>Drawings received</span><input className="ew-input" type="date" value={info.drawingsReceived || ''} onChange={(e) => setInfo('drawingsReceived', e.target.value)} /></label>
           <label className="fld" style={{ '--w': '130px' }}><span>Estimate date</span><input className="ew-input" type="date" value={info.estimateDate || ''} onChange={(e) => setInfo('estimateDate', e.target.value)} /></label>
           <label className="fld" style={{ '--w': '170px' }} title="Which dollars the prices and totals are in. Prices are shown as entered in the price lists: no exchange conversion. Unset, a Canadian tax province makes it CAD.">
             <span>Currency</span>
@@ -162,7 +157,7 @@ export default function Summary() {
             <tr>
               <th>Category</th>
               <th className="num">Current</th>
-              {snapshot ? <th className="num">Original ({new Date(snapshot.lockedAt).toLocaleDateString()})</th> : null}
+              {snapshot ? <th className="num">{snapshot.contractRev != null ? `Contract (Rev ${snapshot.contractRev})` : `Original (${new Date(snapshot.lockedAt).toLocaleDateString()})`}</th> : null}
               {snapshot ? <th className="num">Difference</th> : null}
             </tr>
           </thead>
@@ -242,6 +237,15 @@ export default function Summary() {
               <td className="num money-grand">{fmtMoney(grand)}</td>
               {snapshot ? <td className="num">{fmtMoney(snapshot.grandTotal)}</td> : null}
               {snapshot ? diffCell(snapshot.grandTotal, grand) : null}
+            </tr>
+            <tr className="sm-sqft">
+              <td title="Grand total divided by the floor area of every level, as the Labor page measures it (or as typed there)">
+                Per sq ft
+                <span className="ew-subtle"> · {areaSqFt ? `${areaSqFt.toLocaleString('en-US')} sq ft` : 'no floor area yet (draw the levels or type it on the Labor page)'}</span>
+              </td>
+              <td className="num">{areaSqFt ? `${fmtMoney(perSqFt)} / sq ft` : '—'}</td>
+              {snapshot ? <td className="num ew-subtle">{snapshot.perSqFt ? `${fmtMoney(snapshot.perSqFt)} / sq ft` : '—'}</td> : null}
+              {snapshot ? diffCell(snapshot.perSqFt, Math.round(perSqFt * 100) / 100) : null}
             </tr>
           </tfoot>
         </table>

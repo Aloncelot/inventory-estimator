@@ -1,0 +1,28 @@
+rules_version = '2';
+// Plan PDFs of each company: everyone in the company can open them, the
+// estimators attach them. PDFs only, 50 MB at most. Membership and roles come
+// from Firestore (companies/{cid}/members/{uid}).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function member(cid) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/companies/$(cid)/members/$(request.auth.uid));
+    }
+    function estimator(cid) {
+      return member(cid)
+        && 'estimator' in firestore.get(/databases/(default)/documents/companies/$(cid)/members/$(request.auth.uid)).data.roles;
+    }
+
+    match /companies/{cid}/plans/{path=**} {
+      allow read: if member(cid);
+      allow create, update: if estimator(cid)
+        && request.resource.size < 50 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+      allow delete: if estimator(cid);
+    }
+
+    match /{everything=**} {
+      allow read, write: if false;
+    }
+  }
+}

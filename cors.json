@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://estimator-dd6e6.web.app", "https://estimator-dd6e6.firebaseapp.com"],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -21,3 +21,15 @@ export const markupFactor = (pct) => 1 + Math.max(0, n(pct)) / 100;
 
 /** What a material cost becomes on the quote. */
 export const withMaterialMarkup = (cost, pct) => round2(n(cost) * markupFactor(pct));
+
+/* ── error buffer ──────────────────────────────────────────────────────
+   A contingency on the materials for what a takeoff misses (one item less is
+   thousands of dollars). Its own % for wall panels and for loose material,
+   10% unless the project says otherwise; on the materials at cost (not panel
+   manufacture), before the markup. */
+export const BUFFER_DEFAULT_PCT = 10;
+/** key: 'wallPanels' | 'loose' */
+export function bufferPctOf(est = {}, key) {
+  const v = est?.buffers?.[key];
+  return v === undefined || v === null || v === '' ? BUFFER_DEFAULT_PCT : Math.max(0, n(v));
+}

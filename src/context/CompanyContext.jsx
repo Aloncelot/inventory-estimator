@@ -11,6 +11,7 @@ import { findMembership, acceptInvite, declineInvite, createCompany, companyBase
 import { permissionsOf, normalizeRoles } from '@/domain/team';
 import { isAllowedEmail } from '@/lib/allowedUsers';
 import { setCatalogBase } from '@/lib/catalog';
+import { setPlanBase } from '@/lib/planFiles';
 
 const CompanyContext = createContext({ status: 'loading', perms: permissionsOf([]) });
 
@@ -55,6 +56,7 @@ export function CompanyProvider({ children }) {
 
   // the price list in use is the company's own (set before the pages render)
   setCatalogBase(ready ? companyBase(companyId) : null);
+  setPlanBase(ready ? companyBase(companyId) : null);
 
   const value = useMemo(() => ({
     status: ready ? 'ready' : state.status === 'member' ? 'loading' : state.status,
