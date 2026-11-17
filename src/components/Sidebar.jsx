@@ -16,7 +16,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   LogOut, FolderOpen, LayoutDashboard, PanelsTopLeft, Layers, HardHat, ClipboardList, Receipt,
-  Package, Sun, Moon, Sparkles, LifeBuoy, History, Users, Eye, Warehouse, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine,
+  Package, Sun, Moon, Sparkles, LifeBuoy, History, Users, Eye, Warehouse, LoaderCircle, PanelLeftClose, PanelLeftOpen, Undo2, Redo2, Calculator, Ruler, ScanLine, CalendarRange,
 } from 'lucide-react';
 
 const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
@@ -41,6 +41,7 @@ const NAV = [
   { key: 'items', label: 'Price list', Icon: Package },
   { sep: true },
   { key: 'labor', label: 'Labor', Icon: HardHat, needsProject: true },
+  { key: 'schedule', label: 'Schedule', Icon: CalendarRange, needsProject: true },
   { key: 'takeoff', label: 'Takeoff list', Icon: ClipboardList, needsProject: true },
   { key: 'quote', label: 'Quote', Icon: Receipt, needsProject: true },
   { key: 'history', label: 'Revisions', Icon: History, needsProject: true },

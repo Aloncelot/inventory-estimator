@@ -177,6 +177,48 @@ export const HELP = [
     ],
   },
   {
+    id: 'schedule', title: 'Schedule', page: 'schedule',
+    intro: 'The job laid out day by day, like Microsoft Project: a task table on the left and a Gantt chart on the right.',
+    sections: [
+      { id: 'build', title: 'Building it from the estimate', body: [
+        'Build schedule makes one task for each framing phase in Labor, in the order a crew builds them: set-up, floor deck, walls and stairs of each level, then the roof, the windows and doors, and the punch list.',
+        'Each phase lasts its labor hours divided by the crew and the hours a day, rounded up to whole work days. When the estimate changes, those lengths change with it.',
+        { tip: 'Phases you add to the estimate later, like a new level, show up with Update from estimate. Your names, lengths and delays are kept.' },
+      ] },
+      { id: 'edit', title: 'Changing tasks', body: [
+        { ul: [
+          'Days: type a length to replace the one from Labor. The round arrow returns it to the estimate. 0 days makes a milestone.',
+          'Predecessors: the row numbers a task waits for, like "2, 4". A task starts the work day after all of them finish.',
+          'Delay: work days a task waits after its predecessors. Everything that waits for it moves too.',
+          'Start: pick a date to make a task start no earlier than that day.',
+        ] },
+        'On the chart, drag a bar to move the task, or drag its right edge to change its length.',
+        'Add task puts your own task, like the foundation, an inspection or a delivery, after the selected row and links it to that row.',
+      ] },
+      { id: 'breakdown', title: 'Breaking a phase down', body: [
+        'For the site, any task can hold tasks inside it, like folders and subfolders: Walls · Level 1 can hold "Exterior, rooms 102–105" for one day and "Interior partitions" for two. Labor stays as it is; the breakdown only lives in the schedule.',
+        { ul: [
+          'Break down splits the selected phase into its Labor tasks (panels, plumb and brace, top plate…) to rename by room or wall type. Any other task splits into two parts.',
+          'Subtask adds a task inside the selected one. Indent puts a task inside the one above it; Outdent takes it out.',
+          'A folder runs from its first task to its last. Its predecessors, delay and start date hold for everything inside it, and a task that waits for the folder waits for all of it.',
+          'The arrow next to a folder hides or shows what is inside.',
+        ] },
+        { tip: 'A phase from the estimate shows its days against Labor’s, like 4 / 3. In red, the breakdown takes longer than what was estimated.' },
+      ] },
+      { id: 'assistant', title: 'The assistant', body: [
+        'The assistant panel on the right changes the schedule from what you write, in your own words: "the roof is delayed 2 weeks", "break down Walls · Level 1", "add a 1-day inspection after the roof", "start the job next Monday". It can also answer questions, like what is on the critical path.',
+        'It shows the changes and the new end date first. Apply saves them as one step that Undo takes back; Discard drops them. You can keep asking before you apply: each request builds on the changes shown.',
+        { tip: 'Open and close it with the sparkle button or Ctrl+I.' },
+      ] },
+      { id: 'calendar', title: 'Work days', body: [
+        'Choose the start date and a Monday to Friday or Monday to Saturday week. Add holidays under Days off. Weekends and days off are shaded and skipped.',
+      ] },
+      { id: 'critical', title: 'Critical path', body: [
+        'The tasks outlined in red set the end date: any delay to them moves the end of the job. The others have slack, and the tip on each bar says how many days.',
+      ] },
+    ],
+  },
+  {
     id: 'takeoff', title: 'Takeoff list', page: 'takeoff',
     intro: 'The full material list of the job, ready to send to the yard or to reserve in the warehouse.',
     sections: [

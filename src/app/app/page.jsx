@@ -21,13 +21,16 @@ import QuoteView from '@/components/QuoteView';
 import LayoutView from '@/components/LayoutView';
 import PlanTakeoffView from '@/components/PlanTakeoffView';
 import LaborView from '@/components/LaborView';
+import ScheduleView from '@/components/ScheduleView';
 import TakeoffView from '@/components/TakeoffView';
 import RevisionsView from '@/components/RevisionsView';
 import TeamView from '@/components/TeamView';
 import InventoryView from '@/components/InventoryView';
 import HelpView from '@/components/help/HelpView';
 import { topicForPage } from '@/components/help/content';
-import { CircleHelp } from 'lucide-react';
+import { CircleHelp, Sparkles } from 'lucide-react';
+import { AssistantProvider, useAssistant } from '@/context/AssistantContext';
+import AssistantPanel from '@/components/assistant/AssistantPanel';
 import CompanyGate from '@/components/CompanyGate';
 import { PageHeader } from '@/components/ui/mat';
 import { ConfirmProvider } from '@/components/ui/confirm';
@@ -84,6 +87,7 @@ function Shell({ ui, setUi }) {
       case 'layout': return <LayoutView />;
       case 'plans': return <PlanTakeoffView />;
       case 'labor': return <LaborView />;
+      case 'schedule': return <ScheduleView />;
       case 'takeoff': return <TakeoffView />;
       case 'history': return <RevisionsView />;
       case 'team': return <TeamView />;
@@ -103,7 +107,19 @@ function Shell({ ui, setUi }) {
   };
 
   return (
-    <div className="app-container">
+    <AssistantProvider resetKey={projectId}>
+      <Layout ui={ui} active={active} setActive={setActive} setCollapsed={setCollapsed} renderOther={renderOther}
+        user={user} authLoading={authLoading} companyStatus={companyStatus} projectData={projectData} projectBytes={projectBytes}
+        conflict={conflict} resolveConflict={resolveConflict} readOnly={readOnly} lockedBy={lockedBy} takeOver={takeOver} canEditRole={canEditRole} />
+    </AssistantProvider>
+  );
+}
+
+function Layout({ ui, active, setActive, setCollapsed, renderOther, user, authLoading, companyStatus, projectData, projectBytes, conflict, resolveConflict, readOnly, lockedBy, takeOver, canEditRole }) {
+  const assistant = useAssistant();
+  const ready = user && companyStatus === 'ready';
+  return (
+    <div className={`app-container${ready && assistant.open ? ' has-aside' : ''}`}>
       <Sidebar active={active} onChange={setActive} collapsed={ui.collapsed} onCollapsedChange={setCollapsed} />
 
       <main className={`app-main${readOnly && user && companyStatus === 'ready' && !['team', 'project', 'items', 'inventory', 'help'].includes(active) ? ' is-readonly' : ''}`}>
@@ -144,9 +160,13 @@ function Shell({ ui, setUi }) {
             {active !== 'help' && active !== 'auth' ? (
               <button type="button" className="help-fab no-print" onClick={() => setActive('help')} title="Help for this page" aria-label="Help for this page"><CircleHelp size={18} /></button>
             ) : null}
+            {!assistant.open && active !== 'auth' ? (
+              <button type="button" className="as-fab no-print" onClick={() => assistant.setOpen(true)} title="Assistant (Ctrl+I)" aria-label="Open the assistant"><Sparkles size={17} /></button>
+            ) : null}
           </>
         )}
       </main>
+      {ready ? <AssistantPanel /> : null}
     </div>
   );
 }
