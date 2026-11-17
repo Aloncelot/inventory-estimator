@@ -153,8 +153,8 @@ function Layout({ ui, active, setActive, setCollapsed, renderOther, user, authLo
             ) : readOnly && projectData && !canEditRole && !['team', 'project', 'auth', 'history', 'inventory', 'help'].includes(active) ? (
               <div className="ro-banner no-print">View only: you can see this project but not change it. Editing needs the Estimator role; ask an Admin.</div>
             ) : null}
-            <div hidden={active !== 'wallpanels'}><WallPanelsView /></div>
-            <div hidden={active !== 'loose'}><LooseMaterialView /></div>
+            <div hidden={active !== 'wallpanels'}><WallPanelsView active={active === 'wallpanels'} /></div>
+            <div hidden={active !== 'loose'}><LooseMaterialView active={active === 'loose'} /></div>
             <div hidden={active !== 'trusses'}><TrussesView /></div>
             {renderOther()}
             {active !== 'help' && active !== 'auth' ? (

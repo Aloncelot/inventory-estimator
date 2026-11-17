@@ -34,14 +34,16 @@ import { extractSheet } from '@/lib/pdflib';
 import { alignSheets, readStructural, placeStructural, removeStructural, addStructWalls, UNLABELED_POSTS, SHEAR_DEFAULTS } from '@/domain/plans/structural';
 import { SHEAR_TYPES } from '@/domain/plans/hardware';
 import { onConcrete as isOnConcrete } from '@/domain/plans/loose';
-import { PLAN_KINDS, WALL_SIZES, KIND_LABEL, normWall, isDoubleWall, planGroups, groupKeysOf, wallLengthFt, storeWalls, mergeRedetect, planJunctions } from '@/domain/plans/sync';
+import { PLAN_KINDS, WALL_SIZES, KIND_LABEL, normWall, isDoubleWall, standardThick, thickSize, followThick, planGroups, groupKeysOf, wallLengthFt, storeWalls, mergeRedetect, planJunctions } from '@/domain/plans/sync';
 import { JUNCTION_DEFAULTS } from '@/domain/plans/junctions';
 
 const COMMON_SCALES = [`1/16" = 1'-0"`, `3/32" = 1'-0"`, `1/8" = 1'-0"`, `3/16" = 1'-0"`, `1/4" = 1'-0"`, `3/8" = 1'-0"`, `1/2" = 1'-0"`, `3/4" = 1'-0"`, `1" = 1'-0"`];
-const DEFAULT_THICK = { '2x4': 4.75, '2x6': 6.75, '2x8': 8.5, '2x10': 10.5 };
-const STUD_DEPTH = { '2x4': 3.5, '2x6': 5.5, '2x8': 7.25, '2x10': 9.25 };
-/** Drawn thickness of a new wall: studs + drywall (+ 1" gap for a double wall). */
-const thickOf = (n) => (n.double ? STUD_DEPTH[n.size] + STUD_DEPTH[n.size2] + 2.25 : DEFAULT_THICK[n.size] || 4.75);
+/** Inches with quarters as fractions: 6.75 → 6¾ */
+const inFrac = (v) => {
+  const q = Math.round(v * 4);
+  const whole = Math.floor(q / 4);
+  return `${whole || ''}${['', '¼', '½', '¾'][q % 4]}` || '0';
+};
 const wallTitle = (w) => {
   const n = normWall(w);
   return n.double
@@ -724,8 +726,11 @@ export default function PlanTakeoffView() {
       walls: (p.walls || []).map((w) => {
         if (!set.has(w.id)) return w;
         const cur = { ...w, ...normWall(w) }; // older '(2)2x4' sizes become double + two sizes
-        const next = { ...cur, ...(typeof patch === 'function' ? patch(cur) : patch), auto: false };
+        const p2 = typeof patch === 'function' ? patch(cur) : patch;
+        let next = { ...cur, ...p2, auto: false };
         if (!next.double) { delete next.kind2; delete next.size2; }
+        // a new type or studs redraws a wall drawn at its standard thickness
+        if (['kind', 'size', 'kind2', 'size2', 'double'].some((k) => k in p2)) next = followThick(cur, next);
         return next;
       }),
     }));
@@ -758,7 +763,7 @@ export default function PlanTakeoffView() {
   const lastProps = useRef({ kind: 'partition', size: '2x4', double: false });
   const addWall = useCallback((a, b) => {
     const n = normWall(lastProps.current);
-    const w = { id: newId(), x1: a[0], y1: a[1], x2: b[0], y2: b[1], t: thickOf(n), kind: n.kind, size: n.size, auto: false, added: true, openings: [] };
+    const w = { id: newId(), x1: a[0], y1: a[1], x2: b[0], y2: b[1], t: standardThick(n), kind: n.kind, size: n.size, auto: false, added: true, openings: [] };
     if (n.double) Object.assign(w, { double: true, kind2: n.kind2, size2: n.size2 });
     setPlan((p) => ({ ...p, walls: [...(p.walls || []), w] }));
     setSelected(new Set([w.id]));
@@ -1284,6 +1289,45 @@ export default function PlanTakeoffView() {
   );
 }
 
+/**
+ * Drawn thickness of one wall, picked by lumber size: each size is its studs
+ * plus finishes (more for an exterior wall). Custom takes any thickness in inches.
+ * Only the drawing changes; the studs picked above are what is counted.
+ */
+function ThickField({ wall, onPatch }) {
+  const n = normWall(wall);
+  const t = Number(wall.t) || 0;
+  const matched = thickSize(wall);
+  const [custom, setCustom] = useState(false);
+  useEffect(() => { setCustom(false); }, [wall.id]);
+  const isCustom = custom || (n.double ? Math.abs(standardThick(n) - t) > 0.5 : !matched);
+  const value = isCustom ? 'custom' : n.double ? 'studs' : matched;
+  return (
+    <>
+      <label className="fld" title="How thick the wall is drawn: the lumber size plus drywall (and sheathing and siding outside). The studs picked above are what is counted.">
+        <span>Thick</span>
+        <select className="ew-select" value={value} onChange={(e) => {
+          const v = e.target.value;
+          if (v === 'custom') { setCustom(true); return; }
+          setCustom(false);
+          onPatch({ t: v === 'studs' ? standardThick(n) : standardThick({ ...n, size: v }) });
+        }}>
+          {n.double
+            ? <option value="studs">Both walls · {inFrac(standardThick(n))}&quot;</option>
+            : WALL_SIZES.map((s) => <option key={s} value={s}>{s} · {inFrac(standardThick({ ...n, size: s }))}&quot;</option>)}
+          <option value="custom">Custom…</option>
+        </select>
+      </label>
+      {isCustom ? (
+        <label className="fld" title="Thickness as drawn, in inches">
+          <span>Inches</span>
+          <NumInput w={56} step="0.25" value={Math.round(t * 100) / 100} onCommit={(v) => v > 0 && onPatch({ t: v })} />
+        </label>
+      ) : null}
+    </>
+  );
+}
+
 function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
   const one = walls.length === 1 ? walls[0] : null;
   const isExterior = one ? normWall(one).kind === 'exterior' : false;
@@ -1345,10 +1389,7 @@ function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onSimi
               <span>Length (ft)</span>
               <NumInput w={72} step="0.01" value={Math.round(wallLengthFt(one, ptPerFt) * 100) / 100} onCommit={(v) => v > 0 && onSetLength(one, v)} />
             </label>
-            <label className="fld" title="Thickness as drawn, studs and finishes; the studs picked above are what is counted">
-              <span>Thick (in)</span>
-              <NumInput w={56} step="0.25" value={Math.round((Number(one.t) || 0) * 100) / 100} onCommit={(v) => v > 0 && onPatch({ t: v })} />
-            </label>
+            <ThickField wall={one} onPatch={onPatch} />
           </div>
           <div className="ew-subtle">
             {ftIn(wallLengthFt(one, ptPerFt))} along the centre line

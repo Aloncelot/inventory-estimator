@@ -15,9 +15,21 @@ import PanelTrucking from '@/components/PanelTrucking';
 import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader, AddRowButton, SortableList, SortableBlock, reorderById } from '@/components/ui/mat';
 import { wallPanelsOf } from '@/domain/estimate';
+import { useEstimateAssistant } from '@/components/assistant/useEstimateAssistant';
 
-export default function WallPanelsView() {
+// active: this is the page on screen (the view stays mounted while hidden)
+export default function WallPanelsView({ active = true }) {
   const { projectData, updateProject, blankLevel, isLoaded, readOnly } = useProject();
+
+  useEstimateAssistant({
+    page: 'Wall panels',
+    active,
+    examples: [
+      'Add an exterior section on Level 1: Green ZIP R6, single studs @16", 150 LF, "Poolhouse"',
+      'A 50 × 120 rectangle, 12\' high, on Level 1',
+      'Make the Level 2 partitions 9\' high',
+    ],
+  });
 
   const estimateData = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const levels = useMemo(() => (estimateData.levels || []).filter(Boolean), [estimateData.levels]);

@@ -12,6 +12,7 @@ import LooseMaterialSection, { sectionKind } from './LooseMaterialSection';
 import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader, AddRowButton, fmtMoney } from '@/components/ui/mat';
 import { looseOf } from '@/domain/estimate';
+import { useEstimateAssistant } from '@/components/assistant/useEstimateAssistant';
 import { DndContext, PointerSensor, KeyboardSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -29,9 +30,16 @@ function SortableSection({ section, ...props }) {
   );
 }
 
-export default function LooseMaterialView() {
+// active: this is the page on screen (the view stays mounted while hidden)
+export default function LooseMaterialView({ active = true }) {
   const { projectData, updateProject, blankLooseSection, blankLevelLooseSection, isLoaded, readOnly } = useProject();
   const confirm = useConfirm();
+
+  useEstimateAssistant({
+    page: 'Loose material',
+    active,
+    examples: ['Add 20 joist hangers to the Roof', 'Add a "Poolhouse" section with 120 LF of 2x10 joists'],
+  });
 
   const estimateData = useMemo(() => projectData?.estimateData || {}, [projectData]);
   const looseList = useMemo(() => estimateData.looseList || [], [estimateData.looseList]);

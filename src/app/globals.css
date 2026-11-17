@@ -2076,7 +2076,27 @@ tr.sm-out td { color: var(--text-300); }
   border: 1px solid var(--accent); border-radius: 50%;
   background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); cursor: pointer;
 }
-.as-fab:hover { filter: brightness(1.1); }
+/* iridescent on hover: a rotating spectrum (oil-film colors) under the icon */
+@property --as-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.as-fab { overflow: hidden; isolation: isolate; transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s; }
+.as-fab::before {
+  content: ''; position: absolute; inset: -2px; z-index: -1; border-radius: inherit; opacity: 0;
+  background: conic-gradient(from var(--as-angle), #ff7ad9, #9b7bff, #5ad1ff, #6dffb0, #ffe66d, #ff9a6b, #ff7ad9);
+  transition: opacity 0.25s;
+}
+.as-fab::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; opacity: 0;
+  background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.65), transparent 55%);
+  transition: opacity 0.25s;
+}
+.as-fab:hover, .as-fab:focus-visible { border-color: transparent; color: #1b1030; transform: scale(1.06); box-shadow: 0 0 14px rgba(155, 123, 255, 0.55), var(--shadow); }
+.as-fab:hover::before, .as-fab:focus-visible::before { opacity: 1; animation: as-iris 2.4s linear infinite; }
+.as-fab:hover::after, .as-fab:focus-visible::after { opacity: 1; }
+@keyframes as-iris { to { --as-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) {
+  .as-fab:hover, .as-fab:focus-visible { transform: none; }
+  .as-fab:hover::before, .as-fab:focus-visible::before { animation: none; }
+}
 .as-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .has-aside .help-fab { right: calc(var(--aside-w) + 18px); }
 @media (max-width: 900px) {

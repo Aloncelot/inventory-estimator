@@ -111,6 +111,11 @@ export const HELP = [
       { id: 'material', title: 'Material', body: [
         'Plates, studs, sheathing, blocking, nails and bracing are counted per wall. Material sold by the linear foot, such as LVL and LSL, is priced by the foot; sawn lumber is priced in whole boards of the length you pick.',
       ] },
+      { id: 'assistant', title: 'The assistant', body: [
+        'The assistant panel on the right builds and changes wall sections from what you write, in your own words: "add an exterior section on Level 1, 150 LF, Green ZIP R6, single studs @16 on center", "a 50 × 120 rectangle, 12 feet high, on Level 1", "make the Level 2 partitions 9 feet high". It can also answer questions about what is in the estimate.',
+        'Materials always come from your price list: if it cannot find one there, it says so and does not make one up. It shows the changes and the new estimate total first. Apply saves them as one step that Undo takes back; Discard drops them.',
+        { tip: 'Open and close it with the sparkle button or Ctrl+I.' },
+      ] },
       { id: 'trucking', title: 'Trucking', body: [
         'Enter how many panels fit on a truck, the flat charge per trip, the rate per mile and the distance. Trips are worked out from the panel count.',
       ] },
@@ -122,6 +127,11 @@ export const HELP = [
     sections: [
       { id: 'sections', title: 'Sections', body: [
         'Material is grouped in sections per level. Add rows from the price list and set the quantity, or let the plan takeoff fill them.',
+      ] },
+      { id: 'assistant', title: 'The assistant', body: [
+        'The assistant panel on the right adds and changes loose material from what you write, in your own words: "add 20 joist hangers to the Roof", "add a Poolhouse section with 120 LF of 2x10 joists". It can also answer questions about what is in the estimate.',
+        'Materials always come from your price list: if it cannot find one there, it says so and does not make one up. It shows the changes and the new estimate total first. Apply saves them as one step that Undo takes back; Discard drops them.',
+        { tip: 'Open and close it with the sparkle button or Ctrl+I.' },
       ] },
       { id: 'stairs', title: 'Stairs', body: [
         'Describe each flight and its landings. The app works out the stringers, treads, landing joists, ledgers, hangers and the rail blocking, and checks the riser and tread against the IRC.',

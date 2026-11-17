@@ -24,6 +24,15 @@ function toSchema(p) {
     case 'number': return Schema.number({ description });
     case 'boolean': return Schema.boolean({ description });
     case 'array': return Schema.array({ description, items: toSchema(p.items || { type: 'string' }) });
+    case 'object': {
+      // nested parameters, e.g. a rectangle {width, length}; same optional convention as the top level
+      const entries = Object.entries(p.properties || {});
+      return Schema.object({
+        description,
+        properties: Object.fromEntries(entries.map(([k, v]) => [k, toSchema(v)])),
+        optionalProperties: entries.filter(([, v]) => v.optional).map(([k]) => k),
+      });
+    }
     case 'string':
     default:
       return p.enum ? Schema.enumString({ description, enum: p.enum }) : Schema.string({ description });

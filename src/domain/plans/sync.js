@@ -62,6 +62,44 @@ export function normWall(w = {}) {
 }
 export const isDoubleWall = (w) => normWall(w).double;
 
+/* ── drawn thickness ── */
+// A wall is drawn as its studs plus finishes: drywall both faces inside;
+// drywall, sheathing and siding on an exterior wall; a double wall adds a 1" gap.
+export const STUD_DEPTH_IN = { '2x4': 3.5, '2x6': 5.5, '2x8': 7.25, '2x10': 9.25 };
+const FINISH_IN = 1.25;
+const EXT_FINISH_IN = 2.75;
+const DOUBLE_GAP_IN = 1;
+
+/** Standard drawn thickness (in) of a wall with these type and studs. */
+export function standardThick(w = {}) {
+  const n = normWall(w);
+  const finish = n.kind === 'exterior' ? EXT_FINISH_IN : FINISH_IN;
+  const depth = (s) => STUD_DEPTH_IN[s] || STUD_DEPTH_IN['2x4'];
+  return n.double ? depth(n.size) + depth(n.size2) + finish + DOUBLE_GAP_IN : depth(n.size) + finish;
+}
+
+/**
+ * Stud size whose standard thickness the wall is drawn at (within ½"), for a
+ * single wall; '' when it is drawn at some other thickness.
+ */
+export function thickSize(w = {}) {
+  const n = normWall(w);
+  if (n.double) return '';
+  const t = Number(w.t) || 0;
+  return WALL_SIZES.find((s) => Math.abs(standardThick({ ...n, size: s }) - t) <= 0.5) || '';
+}
+
+/**
+ * A wall after a type/studs edit: one drawn at its standard thickness moves to
+ * the new standard; one drawn at a custom thickness keeps it.
+ */
+export function followThick(before, after) {
+  if ('t' in after && after.t !== before.t) return after;
+  const t = Number(before.t) || 0;
+  if (t && Math.abs(standardThick(before) - t) > 0.5) return after;
+  return { ...after, t: standardThick(after) };
+}
+
 /** Group keys a wall feeds (two for a double wall). */
 /** Order of wall groups: by type (exterior, bearing, shear, partition, knee), thickest first. */
 const KIND_ORDER = ['exterior', 'bearing', 'shear', 'partition', 'knee'];

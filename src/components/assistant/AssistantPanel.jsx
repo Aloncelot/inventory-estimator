@@ -70,6 +70,7 @@ export default function AssistantPanel() {
             <ul>
               {pending.changes.items.map((c, i) => <li key={i} className={`is-${c.kind}`}>{c.text}</li>)}
             </ul>
+            {pending.changes.totals ? <p className="as-ends">Estimate total {pending.changes.totals.from} → <strong>{pending.changes.totals.to}</strong></p> : null}
             {pending.changes.ends ? <p className="as-ends">Job ends {pending.changes.ends.from} → <strong>{pending.changes.ends.to}</strong></p> : null}
             <div className="as-proposal__actions">
               <button type="button" className="ew-btn ew-btn--primary" onClick={a.apply}><Check size={14} /> Apply</button>

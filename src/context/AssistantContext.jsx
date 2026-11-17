@@ -48,8 +48,9 @@ export function AssistantProvider({ resetKey, children }) {
     const ex = (spec.examples || []).join('|');
     setPage((p) => (p?.key === spec.key && p?.title === spec.title && p?.subtitle === spec.subtitle && (p?.examples || []).join('|') === ex ? p : { key: spec.key, title: spec.title, subtitle: spec.subtitle, examples: spec.examples }));
   }, []);
-  const unregister = useCallback((key) => {
-    if (pageRef.current?.key === key) { pageRef.current = null; setPage(null); }
+  // only the page that registered can clear its registration, so a late cleanup never wipes the next page's
+  const unregister = useCallback((key, spec) => {
+    if (pageRef.current?.key === key && (!spec || pageRef.current === spec)) { pageRef.current = null; setPage(null); }
   }, []);
 
   const send = useCallback(async (text) => {
@@ -64,14 +65,16 @@ export function AssistantProvider({ resetKey, children }) {
     const history = chatHistory(messages);
     setMessages((m) => [...m, { role: 'user', text: msg }]);
     setBusy(true);
+    // per-request state for the tools (a tool such as find_material may keep what it found here)
+    const session = {};
     try {
       const { text: answer } = await askAssistant({
         system: spec.system,
         history,
         message: `${spec.context(draft)}\n\nUser request: ${msg}`,
         tools: spec.tools,
-        execute: (name, args) => {
-          const r = spec.run(draft, name, args);
+        execute: async (name, args) => {
+          const r = await spec.run(draft, name, args, session); // a tool may be async
           draft = r.state;
           return r.result;
         },
@@ -116,7 +119,7 @@ export const useAssistant = () => useContext(Ctx);
 
 /**
  * Lets the assistant work on this page while it is open.
- * spec: { key, title, subtitle, examples, system, tools, context(state), getState(), run(state, name, args) → {state, result}, changes(before, after), apply(state) }
+ * spec: { key, title, subtitle, examples, system, tools, context(state), getState(), run(state, name, args, session) → {state, result} or a Promise of it, changes(before, after), apply(state) }
  */
 export function useAssistantPage(spec) {
   const a = useContext(Ctx);
@@ -135,13 +138,13 @@ export function useAssistantPage(spec) {
     get tools() { return ref.current.tools; },
     context: (s) => ref.current.context(s),
     getState: () => ref.current.getState(),
-    run: (s, n, args) => ref.current.run(s, n, args),
+    run: (s, n, args, session) => ref.current.run(s, n, args, session),
     changes: (b, d) => ref.current.changes(b, d),
     apply: (s) => ref.current.apply(s),
   }), []);
   useEffect(() => {
     if (!register || !key) return undefined;
     register(proxy);
-    return () => unregister(key);
+    return () => unregister(key, proxy);
   }, [register, unregister, key, proxy, spec?.subtitle, (spec?.examples || []).join('|')]);
 }
