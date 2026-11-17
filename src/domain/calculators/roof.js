@@ -1,4 +1,6 @@
 // src/domain/calculators/roof.js
+// Quantities for the roof framing rows of Loose material. Each returns
+// { qtyRaw, qtyFinal, unit, unitPrice, subtotal } like the other calculators.
 import { calcPlates } from "./plates";
 import { calcBoxes } from "./boxes";
 import { applyWaste, unitPriceFrom } from "../lib/parsing";

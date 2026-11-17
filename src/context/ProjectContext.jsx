@@ -1,4 +1,7 @@
 // src/context/ProjectContext.jsx
+// The open project: loading it, editing it (with undo/redo), saving it
+// (autosave, conflict check, history entries) and who else has it open.
+// Every page reads projectData and changes it through updateProject.
 'use client';
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { doc, getDoc, setDoc, deleteDoc, addDoc, collection, query, where, getDocs, Timestamp, orderBy, onSnapshot, runTransaction } from 'firebase/firestore';
@@ -16,7 +19,9 @@ import { setCurrency, currencyOf } from '@/domain/lib/currency';
 
 const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
 
-// --- 1. DEFINE THE DEFAULT BLANK STRUCTURE ---
+/* ── blank pieces of a new estimate ─────────────────────────────────
+   Also exposed through the context so pages add levels, sections and
+   rows with the same defaults. */
 const blankSection = (props = {}) => ({
   id: generateId('section-'),
   name: "",
@@ -48,7 +53,7 @@ const blankTrussRow = (label, defaultAmount = 0) => ({
   subtotal: defaultAmount,
 });
 
-// Helper to create rows with defaults
+// a Loose material row; the default vendor/family/size let the item picker preselect it
 const blankLooseRow = (type, vendor, family, size) => ({
   id: generateId('loose-item-'),
   type: type || 'Custom Item',
@@ -73,7 +78,7 @@ const blankLooseSection = (name = "New Section") => ({
   waste: {},  
 });
 
-// --- Template for Level sections (1st Level, etc.) ---
+// a level's Loose material section ("1st Level", "2nd Level"…) with the usual floor rows
 const blankLevelLooseSection = (index) => {
     const n = index + 1;
     const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
@@ -110,7 +115,7 @@ const blankEstimateData = () => ({
   looseList: [
     blankLooseSection("Foundation"),
     blankLooseSection("Basement"),
-    blankLevelLooseSection(0), // Default with rows
+    blankLevelLooseSection(0), // the only section that starts with rows
     blankLooseSection("Roof"),
   ],
   summaryInfo: {
@@ -337,12 +342,14 @@ export function ProjectProvider({ children, initialProjectId = null }) {
             const docSnap = await getDoc(doc(db, path));
             if (docSnap.exists()) {
                 const data = docSnap.data();
+                // fill in what older projects lack, so every page can rely on these fields
                 if (!data.estimateData) data.estimateData = blankEstimateData();
                 const est = data.estimateData;
                 if (!est.levels || est.levels.length === 0) est.levels = [blankLevel({ index: 0 })];
                 if (!est.trusses) {
                     est.trusses = [blankTrussRow('Roof Trusses & Hangers'), blankTrussRow('1st Floor Trusses & Hangers')];
                 } else if (est.trusses.length > 0 && est.trusses[0].base) {
+                    // old format: one group with base and extra rows; now a flat list
                     const oldGroup = est.trusses[0];
                     est.trusses = [...(oldGroup.base || []), ...(oldGroup.extras || [])];
                 }
@@ -584,7 +591,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         return true;
     }, [syncHistorySize]);
 
-    const updateEstimateData = updateProject;
+    const updateEstimateData = updateProject; // older name, still used by some pages
 
     /** After a project's information changed in Firestore (status, revisions, contract): show it here too. */
     const applyMeta = useCallback((pId, meta) => {
@@ -592,11 +599,18 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         setProjectsList((list) => list.map((x) => (x.id === pId ? { ...x, meta } : x)));
     }, []);
 
+    /**
+     * Brings every selected item's price up to date with the company's price
+     * list: walls, panel nails, loose material and bracing. Each item is looked
+     * up again by vendor, family and size; one that is no longer there keeps
+     * the price it had. One undo step.
+     */
     const refreshProjectPrices = useCallback(async () => {
         const data = dataRef.current;
         if (!data || readOnlyRef.current) return;
         setIsSaving(true);
         try {
+            // a deep copy, changed in place below and applied in one update
             const newEstimateData = JSON.parse(JSON.stringify(data.estimateData));
 
             const refreshItem = async (selItem) => {

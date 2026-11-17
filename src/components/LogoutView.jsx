@@ -1,4 +1,5 @@
 // src/components/LogoutView.jsx
+// Signing out: saves the open project first if it has unsaved changes.
 'use client';
 import { useState } from 'react';
 import { LogOut, LoaderCircle } from 'lucide-react';

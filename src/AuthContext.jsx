@@ -1,67 +1,52 @@
 // src/AuthContext.jsx
-
+// The signed-in Google account. Access to companies and projects is decided
+// later, by company membership and the Firestore security rules.
 'use client';
- import { createContext, useContext, useState, useEffect, useMemo } from 'react';
- import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'; // Import sign-in/out
- import { auth, googleProvider } from '@/lib/firebase'; // Import auth and provider
 
- const AuthContext = createContext({
-     user: undefined, // undefined: loading, null: logged out, object: logged in
-     loading: true,
-     signIn: async () => {}, // Add signIn function
-     signOutUser: async () => {}, // Add signOut function (named differently to avoid conflict)
-     authError: null,
- });
+import { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { auth, googleProvider } from '@/lib/firebase';
 
- export function AuthProvider({ children }) {
-     const [user, setUser] = useState(undefined);
-     const [authError, setAuthError] = useState(null);
-     const loading = user === undefined;
+const AuthContext = createContext({
+  user: undefined, // undefined while Firebase checks the session, null when signed out
+  loading: true,
+  signIn: async () => {},
+  signOutUser: async () => {},
+  authError: null,
+});
 
-     const signIn = async () => {
-        setAuthError(null);
-        try {
-            await signInWithPopup(auth, googleProvider);
-            // onAuthStateChanged listener will automatically update the user state
-        } catch (error) {
-            console.error("Error signing in with Google:", error);
-            // Handle sign-in errors (e.g., show a message to the user)
-        }
-    };
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(undefined);
+  const [authError, setAuthError] = useState(null);
+  const loading = user === undefined;
 
-    const signOutUser = async () => {
-        try {
-            await signOut(auth);
-            // onAuthStateChanged listener will automatically update the user state to null
-        } catch (error) {
-            console.error("Error signing out:", error);
-        }
-    };
+  // the user state itself is updated by onAuthStateChanged below
+  const signIn = async () => {
+    setAuthError(null);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      // closing the popup is not an error worth showing
+      if (error?.code !== 'auth/popup-closed-by-user' && error?.code !== 'auth/cancelled-popup-request') {
+        console.error('Error signing in with Google:', error);
+        setAuthError('Sign-in did not finish. Try again, and allow pop-ups for this site if the window did not open.');
+      }
+    }
+  };
 
-     useEffect(() => {
-         // Listen for auth state changes
-         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-             console.log("Auth State Changed:", currentUser?.uid || 'No user'); // Debug log
-             // access is decided by the company membership (and the security rules)
-             setUser(currentUser); // Will be null if logged out, user object if logged in
-         });
+  const signOutUser = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
-         // Cleanup subscription on unmount
-         return () => unsubscribe();
-     }, []);
+  useEffect(() => onAuthStateChanged(auth, (currentUser) => setUser(currentUser)), []);
 
-    // Memoize context value to prevent unnecessary re-renders
-    const value = useMemo(() => ({ user, loading, signIn, signOutUser, authError }), [user, loading, authError]); // Add functions to value
+  const value = useMemo(() => ({ user, loading, signIn, signOutUser, authError }), [user, loading, authError]);
 
-    // Add a check to render children only after initial auth check is done (optional but good practice)
-    // if (loading) {
-    //     return <div style={{padding: 24}}>Checking Authentication...</div>; // Or a proper loading spinner
-    // }
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
 
-     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
- }
-
- // Custom hook to use the auth context
- export const useAuth = () => {
-     return useContext(AuthContext);
- };
+export const useAuth = () => useContext(AuthContext);

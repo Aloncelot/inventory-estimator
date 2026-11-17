@@ -1,4 +1,7 @@
 // src/components/MaterialListView.jsx
+// The company's price list (Items page): families, then sizes, then each
+// supplier's price. Estimators and Admins add materials and change prices;
+// prices paid on inventory receipts can be taken as the new supplier price.
 'use client';
 
 import { Plus, Pencil, Package, Copy, Warehouse, Check, X } from 'lucide-react';
@@ -77,7 +80,7 @@ function PriceReviews({ reviews, onResolve, busy }) {
   );
 }
 
-// ListColumn component using global classes
+// one column of the family → size picker
 function ListColumn({ title, items, selectedValue, onSelect, loading, headerAction }) {
   return (
     <div className="material-col">

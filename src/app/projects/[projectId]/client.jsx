@@ -1,5 +1,6 @@
-'use client';
+// src/app/projects/[projectId]/client.jsx
 // Legacy route: projects open inside the main app now.
+'use client';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 

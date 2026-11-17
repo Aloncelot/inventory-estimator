@@ -1,4 +1,7 @@
 // src/components/Summary.jsx
+// The project's totals: materials by section, labor, markup, tax and
+// shipping, compared with the contract (the bid plus approved change orders).
+// Also the project details the quote prints (name, address, dates, currency).
 'use client';
 
 import { useCallback, useEffect, useMemo } from 'react';
@@ -37,6 +40,7 @@ export default function Summary() {
     const needsMarkup = info.materialMarkupPct === undefined && company?.materialMarkupPct != null;
     if (!needsDate && !needsName && !needsMarkup) return;
     const d = new Date();
+    // today's local date as YYYY-MM-DD (built in UTC so the time zone can't shift the day)
     const iso = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10);
     updateProject((prev) => ({
       ...prev,
@@ -83,12 +87,14 @@ export default function Summary() {
   const sc = scopeOf(est);
   const setScope = (key, v) => updateProject((prev) => ({ ...prev, scope: { ...(prev.scope || {}), [key]: v } }));
   const wpLabel = sc.structural && sc.partitions ? 'Wall panels' : sc.structural ? 'Wall panels · structural' : sc.partitions ? 'Wall panels · partitions' : 'Wall panels';
+  // each line: [label, current total, total in the contract, part of the scope]
   const lines = [
     [`${wpLabel}${totals.wallPanelsBuffer ? ` (incl. ${totals.wallPanelsBufferPct}% buffer)` : ''}`, totals.wallPanels, snapshot?.wallPanelsTotal, sc.structural || sc.partitions],
     [`Loose material${totals.looseBuffer ? ` (incl. ${totals.looseBufferPct}% buffer)` : ''}`, totals.loose, snapshot?.looseTotal, sc.loose],
     ['Trusses', totals.trusses, snapshot?.trussTotal, sc.trusses],
     [`Labor (${totals.laborBy === 'sqft' ? 'per sq ft' : `by time · ${Math.round(totals.laborHours).toLocaleString('en-US')} h`})`, totals.labor, snapshot?.laborTotal, sc.labor],
   ];
+  // against the contract: more in red, less in green
   const diffCell = (orig, cur) => {
     if (orig === undefined || orig === null) return <td className="num ew-subtle">—</td>;
     const d = cur - orig;

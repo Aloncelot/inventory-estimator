@@ -1,4 +1,5 @@
 // src/components/ui/AddButton.jsx
+// A small "+ Add" button.
 'use client';
 import { Plus } from 'lucide-react';
 

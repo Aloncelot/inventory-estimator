@@ -1,4 +1,5 @@
 // src/domain/calculators/index.js
+// Every material calculator in one import (used by src/domain/estimate).
 export { calcPlates }         from "./plates";
 export { calcStuds }          from "./studs";
 export { calcBlocking }       from "./blocking";

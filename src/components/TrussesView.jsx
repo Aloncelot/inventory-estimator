@@ -1,4 +1,6 @@
 // src/components/TrussesView.jsx
+// The Trusses page: the truss supplier's quote as rows (roof trusses, floor
+// trusses, hangers…) with an amount each; rows can be dragged to reorder.
 'use client';
 
 import { useCallback, useMemo } from 'react';
@@ -18,7 +20,7 @@ const TrussIcon = ({ size = 18 }) => (
 );
 
 const generateId = (prefix = 'id-') => prefix + Math.random().toString(36).slice(2, 9);
-const amountOf = (r) => r.amount ?? r.subtotal ?? '';
+const amountOf = (r) => r.amount ?? r.subtotal ?? ''; // older projects stored it as subtotal
 
 function TrussRow({ row, onPatch, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id });

@@ -1,4 +1,6 @@
 // src/components/LooseMaterialView.jsx
+// The Loose material page: one section per part of the building (foundation,
+// basement, each level, stairs, roof), each with its rows of material.
 'use client';
 
 import BufferBar from '@/components/BufferBar';

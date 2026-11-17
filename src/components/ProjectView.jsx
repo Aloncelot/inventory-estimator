@@ -1,4 +1,7 @@
 // src/components/ProjectView.jsx
+// The Projects page: the company's projects with status, client and due
+// date, filters, creating and opening a project, and what is waiting on the
+// user (change orders to approve, quality reviews to answer).
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -47,6 +50,8 @@ export default function ProjectView({ onOpened }) {
   const uid = user?.uid;
   const canEst = Boolean(perms?.canEditEstimate);
   const admin = Boolean(perms?.isAdmin);
+  // clients, team members and pending change orders and reviews, for the side panels;
+  // each list fails on its own (missing rules or permissions) without hiding the rest
   const loadSide = useCallback(async () => {
     if (!companyId) return;
     const [c, m, p, r] = await Promise.all([

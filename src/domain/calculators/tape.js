@@ -1,4 +1,5 @@
 // src/domain/calculators/tape.js
+// Seam tape: rolls to cover the seam length, rounded up, plus waste.
 import { applyWaste, unitPriceFrom } from '../lib/parsing';
 
 export function calcTape({ seamLF, rollLenFt, wastePct = 5, item, unit = 'roll' }) {

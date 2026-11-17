@@ -1,4 +1,6 @@
 // src/components/WallPanelsView.jsx
+// The Wall panels page: each level's exterior and interior wall sections,
+// panel nails, temporary bracing and panel manufacture.
 'use client';
 
 import BufferBar from '@/components/BufferBar';

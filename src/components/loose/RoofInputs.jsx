@@ -1,8 +1,11 @@
 // src/components/loose/RoofInputs.jsx
+// The measurements typed for a roof section (roof area and the lengths of
+// rafters, ridge, eaves, rakes, gables and trim) its rows are calculated from.
 'use client';
 
 import { useState, useEffect } from 'react';
 
+// keeps typing local and reports the value when the field is left (not on every key)
 function DebouncedInput({ value: propValue, onChange, className, ...props }) {
   const [localValue, setLocalValue] = useState(propValue ?? '');
   useEffect(() => { setLocalValue(propValue ?? ''); }, [propValue]);
@@ -88,7 +91,7 @@ export default function RoofInputs({ inputs, onUpdate }) {
             onChange={v => update('trimLF', v)} 
         />
       </label>
-      {/* Hurricane Ties & Clips calculated automatically */}
+      {/* hurricane ties and clips need no input: they are counted from the rafters and the sheathing */}
     </div>
   );
 }

@@ -68,6 +68,7 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
   const H = plan.h || 1728;
   const k = plan.ptPerFt || 0;
   const svgRef = useRef(null);
+  // the part of the sheet on screen (the SVG viewBox), in sheet points
   const [view, setView] = useState({ x: 0, y: 0, w: W, h: H });
   const [draft, setDraft] = useState(null); // { a:[x,y], b:[x,y] }
   const [hover, setHover] = useState(null);
@@ -79,6 +80,7 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
   useEffect(() => { setView({ x: 0, y: 0, w: W, h: H }); }, [W, H]);
   useEffect(() => { setDraft(null); }, [tool]);
 
+  // a mouse event's position on the sheet, whatever the zoom and pan
   const toPt = useCallback((e) => {
     const svg = svgRef.current;
     const p = svg.createSVGPoint();
@@ -86,6 +88,7 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
     const q = p.matrixTransform(svg.getScreenCTM().inverse());
     return [q.x, q.y];
   }, []);
+  // sheet points per screen pixel, so tolerances stay the same size on screen at any zoom
   const pxToPt = useCallback(() => {
     const r = svgRef.current?.getBoundingClientRect();
     return r ? Math.max(view.w / r.width, view.h / r.height) : 1;
@@ -103,7 +106,8 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
       }
     }
     if (best) return best.q;
-    // onto another wall's centre line: a T
+    // onto another wall's centre line: a T. u is the distance along that wall,
+    // off the distance from it; half the wall's thickness counts as on it
     let line = null;
     for (const w of plan.walls || []) {
       if (exclude && w.id === exclude) continue;
@@ -132,6 +136,8 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
     return pt;
   }, [plan.walls, pxToPt, k]);
 
+  // zoom by a factor keeping the point (cx, cy) under the cursor; without a point, the centre.
+  // Between 1/60 of the sheet and a little more than all of it.
   const zoomAt = useCallback((factor, cx, cy) => {
     setView((v) => {
       const w = Math.min(W * 1.2, Math.max(W / 60, v.w / factor));
@@ -144,6 +150,7 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
     });
   }, [W]);
 
+  // the wheel zooms; added by hand because React's onWheel is passive and can't stop the page from scrolling
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return undefined;

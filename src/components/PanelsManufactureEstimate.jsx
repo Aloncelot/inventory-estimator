@@ -1,4 +1,6 @@
 // src/components/PanelsManufactureEstimate.jsx
+// The cost of building the wall panels in the shop: the panel LF of every
+// level times the manufacture rate, plus add-ons.
 "use client";
 import { useEffect, useCallback, useRef } from "react";
 import { computeManufacture, STUD_MULTIPLIER_ADDON_PER_LF, TALL_WALL_ADDON_PER_LF, TALL_WALL_LIMIT_FT } from '@/domain/estimate';

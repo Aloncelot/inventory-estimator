@@ -1,4 +1,7 @@
 // src/components/PriceEditModal.jsx
+// Adds or edits a supplier's price for an item, or creates a new item (and
+// family or supplier) in the company's price list. A quote per bundle or per
+// MBF is turned into the price per piece the estimate uses.
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -15,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BUY_UNITS, boardFeetOf, piecePriceFromQuote } from '@/domain/purchase';
 
-// Helper component using global classes
+// a read-only label and value
 function InfoRow({ label, value }) {
   return (
     <div className="info-row">
@@ -90,7 +93,7 @@ export default function PriceEditModal({
     setIsSaving(true);
     setFormError('');
     
-    // Validation Logic
+    // check the form before writing anything
     if (isCreatingItem && !item.familyDisplay) {
         if (isNewFamilyMode) {
              if (!formData.newFamilyName.trim()) {
@@ -121,7 +124,7 @@ export default function PriceEditModal({
       }
     }
 
-    // Prepare Data
+    // the names to store: a new family or supplier typed in, or the one picked
     let familyDisplay = item.familyDisplay;
     if (isCreatingItem && !familyDisplay) {
          if (isNewFamilyMode) {

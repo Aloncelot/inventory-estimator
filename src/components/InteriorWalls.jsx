@@ -1,4 +1,4 @@
-// src/components/InteriorWalls.jsx
+// src/components/InteriorWalls.jsx — a level's interior wall sections (see WallCategory.jsx)
 'use client';
 import WallCategory from '@/components/WallCategory';
 

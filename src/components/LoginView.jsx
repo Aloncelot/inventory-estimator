@@ -1,4 +1,5 @@
 // src/components/LoginView.jsx
+// The sign-in screen (Google account).
 'use client';
 import { useAuth } from '@/AuthContext';
 

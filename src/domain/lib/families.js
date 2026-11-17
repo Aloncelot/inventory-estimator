@@ -1,4 +1,7 @@
 // src/domain/lib/families.js
+// What kind of material a price-list family is, from its name ("SPF#2",
+// "LVL", "PT"…): the calculators count lumber, engineered lumber and infill
+// differently.
 import { norm } from "./parsing";
 
 export const isLVL         = (f = "") => norm(f).includes("lvl");

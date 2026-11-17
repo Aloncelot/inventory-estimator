@@ -1,4 +1,15 @@
 // scripts/import-prices.js
+// Loads supplier price sheets (CSV) into the starter price list: the top-level
+// families, priceLists and itemVendorLookup collections that a new company can
+// copy (src/lib/catalog.js). A company's own list lives under its document and
+// is not touched here.
+//
+//   node scripts/import-prices.js <data.csv> <prices1.csv> [prices2.csv ...]
+//
+// data.csv maps each description to its family and size; the price sheets give
+// supplier, unit, price and markup per row. When a price changes, the old one
+// is kept in the item's priceHistory. Needs serviceAccount.json in the project
+// root (never commit it).
 const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse/sync');
@@ -89,7 +100,7 @@ function canonicalVendorName(s = '') {
   return { vendorId: id, displayName: name || 'Unknown Supplier' };
 }
 
-// ---------- load Data.csv into a map:  "SIZE FAMILY" -> { family, size } ----------
+// ---------- data.csv: description -> { family, size } ----------
 function loadDataMap(dataCsvPath) {
   const file = path.resolve(process.cwd(), dataCsvPath);
   if (!fs.existsSync(file)) {
@@ -111,7 +122,7 @@ function loadDataMap(dataCsvPath) {
   return map;
 }
 
-// --- Global maps/sets for lookup data ---
+// what the price sheets mention, written to the lookup collections at the end
 const uniqueFamilies = new Map(); // Map<familySlug, familyDisplay>
 const itemVendorMap = new Map(); // Map<itemLookupId, { vendorSet, familyDisplay, sizeDisplay, ... }>
 
@@ -144,9 +155,9 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
     const markupPct = pct(rawMarkup);
     const priceWithMarkup = money(rawPriceWithMarkup);    
     
-    const link          = pick(row, 'URL'); // Uses your fix from before
+    const link          = pick(row, 'URL');
 
-    // 1) Find family/size via Data map
+    // family and size: from data.csv, else guessed from the description
     const key = normalizeKey(description);
     let family, size;
     const hit = dataMap.get(key);
@@ -154,7 +165,6 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       family = hit.family;
       size   = hit.size;
     } else {
-      // 2) Fallback parsing if it wasn't in the Data sheet
       const sp = splitFamilySizeFallback(description, familySheet);
       family = sp.family;
       size   = sp.size;
@@ -173,10 +183,10 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
 
     const familySlug = slug(family);
     const sizeSlug = slug(size);
-    const docId = slug(joinKey); // ID within vendor's items subcollection
+    const docId = slug(joinKey); // id within the supplier's items
     const itemLookupId = `${familySlug}_${sizeSlug}`; // Unique ID for the item across vendors
 
-    // This is the NEW data from the CSV
+    // the item as this sheet gives it
     const data = {
       familyDisplay: family,
       sizeDisplay:   size,
@@ -191,11 +201,11 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       basePrice: basePrice,
       markupPct:  (markupPct != null) ? Number(markupPct) : null,
       priceWithMarkup: (priceWithMarkup != null) ? Number(priceWithMarkup) : null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(), // This is the NEW timestamp
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       source: `sheet:${path.basename(pricesCsvPath)}`,
     };
 
-    // (This logic for lookup maps is fine)
+    // remember the family and which suppliers sell this item
     if (familySlug && !uniqueFamilies.has(familySlug)) {
              uniqueFamilies.set(familySlug, family); 
          }
@@ -212,9 +222,9 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
              itemVendorMap.get(itemLookupId).vendorSet.add(vendorId); 
          }
          
-    // --- *** NEW PRICE HISTORY LOGIC *** ---
+    // supplier, then the item; a changed price keeps the old one in its history
     try {
-      // 1. Set vendor info (no change)
+      // the supplier
       const vendorDoc = {
         displayName,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -224,32 +234,31 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       }
       await db.collection('priceLists').doc(vendorId).set(vendorDoc, { merge: true });
 
-      // 2. Get reference to the item
+      // the item
       const itemRef = db.collection('priceLists').doc(vendorId).collection('items').doc(docId);
       const docSnap = await itemRef.get();
 
-      // 3. Check for price change and create history
-      if (docSnap.exists()) {
+      // a different price: the old values go to priceHistory first
+      if (docSnap.exists) { // a property in firebase-admin (a method only in the web SDK)
         const oldData = docSnap.data();
-        // Check if price is different
         if (oldData.basePrice !== data.basePrice) {
           console.log(`Price change for ${docId} (${vendorId}): ${oldData.basePrice} -> ${data.basePrice}`);
           
-          // Create history entry from OLD data
+          // the history entry holds the old values
           const historyEntry = {
             basePrice: oldData.basePrice,
             markupPct: oldData.markupPct,
             priceWithMarkup: oldData.priceWithMarkup,
-            updatedAt: oldData.updatedAt || admin.firestore.FieldValue.serverTimestamp(), // Use old timestamp
+            updatedAt: oldData.updatedAt || admin.firestore.FieldValue.serverTimestamp(), // when the old price was set
             source: oldData.source || 'unknown'
           };
           
-          // Save old data to history sub-collection (let Firestore auto-gen ID)
+          // Firestore picks the id
           await itemRef.collection('priceHistory').add(historyEntry);
         }
       }
 
-      // 4. Set/overwrite the main item doc with NEW data
+      // then the item with the new values
       await itemRef.set(data, { merge: true });
 
       written++;
@@ -258,14 +267,13 @@ async function importPricesCsv(pricesCsvPath, dataMap) {
       console.error(`Failed row "${description}" for vendor "${vendorId}":`, e.message);
       skipped++;
     }
-    // --- *** END OF NEW LOGIC *** ---
   }
 
   console.log(`[import] Done ${path.basename(file)}. Written to priceLists: ${written}, Skipped: ${skipped}`);
      return { written, skipped };
 }
 
-// --- Function to write lookup collections (no change) ---
+// ---------- families and itemVendorLookup, from what the sheets mentioned ----------
 async function writeLookupCollections() {
     console.log('\n[import] Writing lookup collections...');
     const batchSize = 400; 
@@ -273,7 +281,7 @@ async function writeLookupCollections() {
     let count = 0;
     let batchNum = 1;
 
-    // Write Families
+    // families
     console.log(`[import] Writing ${uniqueFamilies.size} unique families to /families...`);
     count = 0;
     batchNum = 1;
@@ -294,7 +302,7 @@ async function writeLookupCollections() {
         console.log(`...committed final family batch ${batchNum} (${count} docs)`);
     }
 
-    // Write Item-Vendor Lookups
+    // which suppliers sell each item
     console.log(`[import] Writing ${itemVendorMap.size} item-vendor lookups to /itemVendorLookup...`);
     batch = db.batch(); 
     count = 0;
@@ -326,7 +334,7 @@ async function writeLookupCollections() {
     console.log('[import] Finished writing lookup collections.');
 }
 
-// ---------- main (no change) ----------
+// ---------- main ----------
 async function run() {
   const args = process.argv.slice(2);
   if (args.length < 2) {

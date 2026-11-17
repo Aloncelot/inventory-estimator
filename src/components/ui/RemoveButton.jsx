@@ -1,4 +1,5 @@
 // src/components/ui/RemoveButton.jsx
+// A small remove (trash) button.
 'use client';
 import { Trash2 } from 'lucide-react';
 

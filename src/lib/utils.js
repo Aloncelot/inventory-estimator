@@ -1,4 +1,5 @@
 // src/lib/utils.js
+// Small helpers: class names (cn) and size labels.
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge"
 
@@ -10,7 +11,7 @@ export function titleizeSlug(s = '') {
   return String(s).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-// Extract feet from size strings like: 2x10"-10'  -> 10   |  8 ft -> 8
+// the length in feet from a size label: 2x10"-10' → 10, 8 ft → 8
 export function feetFromSize(size = '') {
   const m = String(size).match(/(\d+)\s*(?:'|ft)\b/i);
   return m ? Number(m[1]) : null;
