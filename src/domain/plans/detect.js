@@ -5,14 +5,19 @@
 // A wall on a plan is two (or more) parallel lines a wall-thickness apart. The
 // detector:
 //   1. reads the drawing scale from the sheet text (3/32" = 1'-0" …);
-//   2. buckets segments by direction and line style;
+//   2. buckets segments by direction and line style, leaving out annotation
+//      that can pass for a wall face (tag frames, dimension lines: marks.js)
+//      and joining a face cut by a wall meeting it (a T);
 //   3. pairs parallel lines whose spacing is a wall thickness (3"–14") and
 //      overlap along their length, and merges overlapping pairs into bands;
 //   4. joins collinear bands across openings (a door leaf/swing or window
 //      glazing in the gap), recording the openings;
-//   5. guesses stud size from thickness, and exterior vs interior by casting a
-//      ray from each wall outward: nothing beyond it means it faces outside.
+//   5. drops door leaves drawn open, guesses stud size from thickness, and
+//      exterior vs interior by casting a ray from each wall outward: nothing
+//      beyond it means it faces outside.
 // Every guess is editable by the user; detection only has to get close.
+
+import { tagFrames, dimensionLines, curveMarks } from './marks.js';
 
 export const DETECT_DEFAULTS = {
   minThickIn: 3, // thinnest wall band (2x3 + no finish)
@@ -147,10 +152,19 @@ export function detectWalls(page, opts = {}) {
   const area = o.area || drawingArea(page);
   const inside = (s) => Math.min(s.x1, s.x2) >= area.x0 && Math.max(s.x1, s.x2) <= area.x1 && Math.min(s.y1, s.y2) >= area.y0 && Math.max(s.y1, s.y2) <= area.y1;
 
+  const poche = pocheIndex(page.polys); // filled wall shapes, when the sheet has them
+
+  // annotation that can pass for a wall face: tag frames, dimension lines
+  // curves flattened to short lines, fixture outlines and open door leaves
+  const curves = curveMarks(page, k);
+  const dims = dimensionLines(page);
+  const marked = new Set([...tagFrames(page), ...dims, ...curves.marked]);
+
   // 1. directional buckets of usable segments
   const buckets = new Map(); // deg → { d, n, byStyle: Map(style → [{u0,u1,v}]) }
   const all = []; // every segment in its bucket frame, for opening evidence
-  for (const s of page.segments) {
+  for (let si = 0; si < page.segments.length; si++) {
+    const s = page.segments[si];
     const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
     const len = Math.hypot(dx, dy);
     if (len < 0.5 || !inside(s)) continue;
@@ -170,11 +184,71 @@ export function detectWalls(page, opts = {}) {
     // poché: the grey fill a CAD export puts in cut walls, any pen
     if (s.fill && lum(styleColor(s.style)) < 0.9) (b.fills || (b.fills = [])).push(rec);
     all.push({ ...s, deg });
-    if (s.arc || len < minSeg) continue;
+    if (s.arc || marked.has(si)) continue;
     if (s.fill && lum(styleColor(s.style)) > 0.97) continue; // white masks
     if (allow && !allow.has(s.style)) continue;
     if (!b.byStyle.has(s.style)) b.byStyle.set(s.style, []);
     b.byStyle.get(s.style).push(rec);
+  }
+
+  // swings drawn as polylines count as arcs, start to end
+  for (const c of curves.chords) {
+    let deg = Math.round((Math.atan2(c.y2 - c.y1, c.x2 - c.x1) * 180) / Math.PI);
+    deg = ((deg % 180) + 180) % 180;
+    all.push({ ...c, deg });
+  }
+
+  // A wall face is cut where another wall meets it (a T): join collinear
+  // pieces across such a gap, so a short wall between two closet doors still
+  // pairs. A T gap is at most a wall thick and the other wall's faces end at
+  // both of its edges (a dashed line's gaps have nothing ending there).
+  const endsAt = new Map(); // rounded point → directions of segments ending there
+  for (const sg of page.segments) {
+    const L = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1);
+    if (!L || sg.arc) continue;
+    const dir = [(sg.x2 - sg.x1) / L, (sg.y2 - sg.y1) / L];
+    for (const [x, y] of [[sg.x1, sg.y1], [sg.x2, sg.y2]]) {
+      const key = `${Math.round(x)},${Math.round(y)}`;
+      if (!endsAt.has(key)) endsAt.set(key, []);
+      endsAt.get(key).push({ x, y, dir });
+    }
+  }
+  const crossEndsAt = (b, u, v) => {
+    const x = b.d[0] * u + b.n[0] * v, y = b.d[1] * u + b.n[1] * v;
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      for (const e of endsAt.get(`${Math.round(x) + i},${Math.round(y) + j}`) || []) {
+        if (Math.hypot(e.x - x, e.y - y) <= 0.75 && Math.abs(e.dir[0] * b.d[0] + e.dir[1] * b.d[1]) < 0.1) return true;
+      }
+    }
+    return false;
+  };
+  for (const b of buckets.values()) {
+    for (const [style, segs] of b.byStyle) {
+      segs.sort((p, q) => p.v - q.v);
+      const joined = [];
+      for (let i = 0; i < segs.length;) {
+        // one line: pieces within 0.3 pt of each other across it
+        let j = i + 1;
+        while (j < segs.length && segs[j].v - segs[i].v <= 0.3) j++;
+        const line = segs.slice(i, j).sort((p, q) => p.u0 - q.u0);
+        let cur = null;
+        for (const r of line) {
+          const gap = cur ? r.u0 - cur.u1 : Infinity;
+          if (gap <= 0.3 || (gap <= tMax && crossEndsAt(b, cur.u1, cur.v) && crossEndsAt(b, r.u0, r.v))) {
+            cur.u1 = Math.max(cur.u1, r.u1);
+            continue;
+          }
+          if (cur) joined.push(cur);
+          cur = { ...r };
+        }
+        if (cur) joined.push(cur);
+        i = j;
+      }
+      // poché stubs beside a closet's doors can be shorter than any wall line:
+      // a filled piece is a wall however short
+      const min = style.startsWith('fill|') ? 0.3 * k : minSeg;
+      b.byStyle.set(style, joined.filter((r) => r.u1 - r.u0 >= min));
+    }
   }
 
   // 2–3. pair parallel lines into bands
@@ -182,6 +256,7 @@ export function detectWalls(page, opts = {}) {
   for (const b of buckets.values()) {
     for (const [style, segs] of b.byStyle) {
       segs.sort((p, q) => p.v - q.v);
+      const minPair = style.startsWith('fill|') ? 0.3 * k : minSeg;
       const pieces = [];
       for (let i = 0; i < segs.length; i++) {
         const a = segs[i];
@@ -191,7 +266,7 @@ export function detectWalls(page, opts = {}) {
           if (gap > tMax) break;
           if (gap < tMin) continue;
           const u0 = Math.max(a.u0, c.u0), u1 = Math.min(a.u1, c.u1);
-          if (u1 - u0 < minSeg) continue;
+          if (u1 - u0 < minPair) continue;
           pieces.push({ u0, u1, va: a.v, vb: c.v });
         }
       }
@@ -224,7 +299,10 @@ export function detectWalls(page, opts = {}) {
         const parts = g.vb - g.va > tMax * 1.05
           ? splitBand(members.get(r), tMax, minSeg).filter((p) => pocheCover(b.fills, p) >= 0.6)
           : [g];
-        for (const p of parts) bands.push({ deg: b.deg, d: b.d, n: b.n, style, u0: p.u0, u1: p.u1, v: (p.va + p.vb) / 2, t: p.vb - p.va });
+        for (const p0 of parts) {
+          const p = poche.count > 50 ? fitPoche(p0, b, poche, inPt, tMin, tMax) : p0;
+          bands.push({ deg: b.deg, d: b.d, n: b.n, style, u0: p.u0, u1: p.u1, v: (p.va + p.vb) / 2, t: p.vb - p.va, fitted: p.fitted });
+        }
       }
     }
   }
@@ -254,12 +332,12 @@ export function detectWalls(page, opts = {}) {
       for (const bd of ln.items) {
         if (!cur) { cur = { ...bd, v: ln.v, openings: [] }; continue; }
         const gap = bd.u0 - cur.u1;
-        if (gap <= minOpen) { cur.u1 = Math.max(cur.u1, bd.u1); cur.t = Math.max(cur.t, bd.t); continue; }
+        if (gap <= minOpen) { cur.u1 = Math.max(cur.u1, bd.u1); cur.t = Math.max(cur.t, bd.t); cur.fitted = cur.fitted || bd.fitted; continue; }
         if (gap <= maxGap) {
           const kind = openingEvidence(buckets, all, bands, cur, cur.u1, bd.u0, ln.v, Math.max(cur.t, bd.t), inPt);
           if (kind) {
             cur.openings.push({ u0: cur.u1, u1: bd.u0, type: kind });
-            cur.u1 = Math.max(cur.u1, bd.u1); cur.t = Math.max(cur.t, bd.t);
+            cur.u1 = Math.max(cur.u1, bd.u1); cur.t = Math.max(cur.t, bd.t); cur.fitted = cur.fitted || bd.fitted;
             continue;
           }
         }
@@ -267,6 +345,47 @@ export function detectWalls(page, opts = {}) {
       }
       flush();
     }
+  }
+
+  // 4b. a wall that stops at a door whose other jamb is a crossing wall (a
+  // door next to a corner): run it across the door to that wall's face
+  const maxDoor = 4.5 * k; // one swinging door
+  const maxCloset = 8 * k; // a closet's sliding / bifold doors
+  // on a sheet whose walls are filled (poché), a cabinet or counter edge has
+  // no fill: only a filled wall is run across a door
+  const swings = all.filter((sg) => sg.arc);
+  for (const w of walls) {
+    if (poche.count > 50) {
+      const at = [0.25, 0.5, 0.75].map((f) => { const u = w.u0 + (w.u1 - w.u0) * f; return [w.d[0] * u + w.n[0] * w.v, w.d[1] * u + w.n[1] * w.v]; });
+      if (at.filter((p) => poche.inside(p[0], p[1])).length < 2) continue;
+    }
+    for (const side of [1, -1]) {
+      const end = side > 0 ? w.u1 : w.u0;
+      let best = null;
+      for (const o of bands) {
+        if (Math.abs(((o.deg - w.deg + 180) % 180) - 90) > 2) continue; // crossing walls only
+        // where o's centre line meets w's line, and whether o spans it
+        const a = [o.d[0] * o.u0 + o.n[0] * o.v, o.d[1] * o.u0 + o.n[1] * o.v];
+        const b = [o.d[0] * o.u1 + o.n[0] * o.v, o.d[1] * o.u1 + o.n[1] * o.v];
+        const va = a[0] * w.n[0] + a[1] * w.n[1], vb = b[0] * w.n[0] + b[1] * w.n[1];
+        const reach = w.t / 2 + 3 * inPt; // o may stop short of w (a corner piece between them), meet its face (a T) or run through
+        if (Math.min(va, vb) > w.v + w.t / 2 + reach || Math.max(va, vb) < w.v - w.t / 2 - reach) continue;
+        const uc = a[0] * w.d[0] + a[1] * w.d[1]; // o's centre along w
+        const face = uc - side * (o.t / 2);
+        const gap = (face - end) * side;
+        if (gap < minOpen || gap > maxCloset) continue;
+        if (!best || gap < best.gap) best = { gap, face };
+      }
+      if (!best) continue;
+      const [g0, g1] = side > 0 ? [end, best.face] : [best.face, end];
+      // the door's swing must be drawn (a tag's slanted sides are no leaf), or
+      // the panels of a sliding / bifold closet door fill the opening
+      const swing = best.gap <= maxDoor && openingEvidence(buckets, swings, bands, w, g0, g1, w.v, w.t, inPt) === 'door';
+      if (!swing && !closetDoors(buckets.get(w.deg), g0, g1, w.v, w.t, inPt)) continue;
+      w.openings.push({ u0: g0, u1: g1, type: 'door' });
+      if (side > 0) w.u1 = best.face; else w.u0 = best.face;
+    }
+    w.openings.sort((p, q) => p.u0 - q.u0);
   }
 
   // 5. to page coordinates, sizes, exterior test
@@ -278,15 +397,24 @@ export function detectWalls(page, opts = {}) {
       const thickIn = w.t / inPt;
       return {
         x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1],
-        style: w.style, thickIn: +thickIn.toFixed(2), size: studSizeFor(thickIn, o.finishIn),
+        style: w.style, thickIn: +thickIn.toFixed(2), size: studSizeFor(thickIn, o.finishIn), fitted: w.fitted,
         lengthFt: +((w.u1 - w.u0) / k).toFixed(2),
         openings: w.openings.map((op) => ({ atFt: +((op.u0 - w.u0) / k).toFixed(2), widthFt: +((op.u1 - op.u0) / k).toFixed(2), type: op.type })),
       };
     });
+  out = dropDoorLeaves(out, [...page.segments.filter((s) => s.arc), ...curves.chords], k);
+  if (poche.count > 50) out = cutAtDimensions(out, [...dims].map((i) => page.segments[i]), poche, k, o.minWallFt);
   out = dropContained(out, k);
   out = mainBuilding(out, k);
   joinCorners(out, k);
   markExterior(out, k);
+  if (poche.count > 50) {
+    // short unfilled stubs sticking out of the building with a loose end: the
+    // witness lines of a dimension, a leader
+    const loose = (w, x, y) => !out.some((o) => o !== w && segDist(o, { x1: x, y1: y, x2: x, y2: y }) <= k);
+    const unfilled = (w) => ![0.2, 0.4, 0.6, 0.8].some((f) => poche.inside(w.x1 + (w.x2 - w.x1) * f, w.y1 + (w.y2 - w.y1) * f));
+    out = out.filter((w) => !(w.exterior && w.lengthFt <= 4 && unfilled(w) && (loose(w, w.x1, w.y1) || loose(w, w.x2, w.y2))));
+  }
   // interior walls drawn with the same pen as the exterior are usually the
   // rated / bearing ones (corridor, demising); lighter pens are partitions
   const extStyles = new Set(out.filter((w) => w.exterior).map((w) => w.style));
@@ -316,7 +444,7 @@ export function detectWalls(page, opts = {}) {
     styles.set(w.style, s);
   }
   const styleList = [...styles.values()].sort((a, b) => b.lengthFt - a.lengthFt).map((s) => ({ ...s, lengthFt: Math.round(s.lengthFt) }));
-  out.forEach((w, i) => { w.id = `w${i + 1}`; });
+  out.forEach((w, i) => { w.id = `w${i + 1}`; delete w.fitted; });
   return { walls: out, styles: styleList, ptPerFt: k, suggested: suggestStyles(styleList), area };
 }
 
@@ -324,6 +452,112 @@ export function detectWalls(page, opts = {}) {
  * Pieces of a chained group that is too thick for one wall, regrouped from the
  * longest piece out: a piece joins a band while the band stays a wall thickness.
  */
+/**
+ * Panels of a sliding or bifold closet door across an opening: each panel is a
+ * thin rectangle (two lines a door's thickness apart) along the wall, inside
+ * its thickness, part of the width; two or more of them span it. (A tag's
+ * leader or the edge of a floor finish is one line.)
+ */
+function closetDoors(bucket, g0, g1, v, t, inPt) {
+  const gap = g1 - g0;
+  const lines = (bucket?.any || []).filter((s) => Math.abs(s.v - v) <= t / 2 + 0.5 && s.u0 >= g0 - 1 && s.u1 <= g1 + 1
+    && s.u1 - s.u0 >= 0.2 * gap && s.u1 - s.u0 <= 0.8 * gap);
+  const panels = [];
+  for (const a of lines) {
+    const twin = lines.some((b) => b !== a && Math.abs(b.u0 - a.u0) <= 1 && Math.abs(b.u1 - a.u1) <= 1
+      && Math.abs(b.v - a.v) >= 0.3 && Math.abs(b.v - a.v) <= 2.5 * inPt);
+    if (twin && !panels.some((p) => Math.abs(p[0] - a.u0) <= 1 && Math.abs(p[1] - a.u1) <= 1)) panels.push([a.u0, a.u1]);
+  }
+  if (panels.length < 2) return false;
+  panels.sort((a, b) => a[0] - b[0]);
+  let len = 0, end = g0;
+  for (const [a, b] of panels) { if (b <= end) continue; len += b - Math.max(a, end); end = b; }
+  return len >= 0.85 * gap;
+}
+
+/**
+ * Fit a band as thick as a double wall to the wall fill (poché) it lies on. A
+ * band thicker than its fill is a wall plus something drawn against it (a
+ * tub's side, a range, a cabinet); a band paired off a stray line can sit
+ * across only part of a double wall. Fill is sampled across the band and a few
+ * inches past it, at three points along it; the filled run the band overlaps
+ * most becomes the band (air gaps of up to 1½" bridged: a double wall is two
+ * filled walls side by side). Single walls, and bands on no fill, keep their
+ * faces.
+ */
+function fitPoche(p, b, poche, inPt, tMin, tMax) {
+  if (p.vb - p.va < DETECT_DEFAULTS.doubleMinIn * inPt) return p;
+  const step = 0.25;
+  const lo = p.va - 4 * inPt, hi = p.vb + 4 * inPt;
+  const n = Math.max(2, Math.ceil((hi - lo) / step));
+  const vAt = (i) => lo + ((hi - lo) * i) / n;
+  const covered = [];
+  for (let i = 0; i <= n; i++) {
+    const v = vAt(i);
+    const hits = [0.25, 0.5, 0.75].filter((f) => {
+      const u = p.u0 + (p.u1 - p.u0) * f;
+      return poche.inside(b.d[0] * u + b.n[0] * v, b.d[1] * u + b.n[1] * v);
+    }).length;
+    covered.push(hits >= 2);
+  }
+  const bridge = Math.ceil((1.5 * inPt) / ((hi - lo) / n));
+  const runs = [];
+  let start = -1, last = -1;
+  covered.forEach((c, i) => {
+    if (!c) return;
+    if (start >= 0 && i - last > bridge + 1) { runs.push([start, last]); start = -1; }
+    if (start < 0) start = i;
+    last = i;
+  });
+  if (start >= 0) runs.push([start, last]);
+  let best = null, bestOv = 0;
+  for (const [a, z] of runs) {
+    const ov = Math.min(p.vb, vAt(z)) - Math.max(p.va, vAt(a));
+    if (ov > bestOv) { bestOv = ov; best = [a, z]; }
+  }
+  if (!best) return p;
+  const va = vAt(best[0]) - 0.4, vb = vAt(best[1]) + 0.4; // the outline around the fill
+  if (vb - va < tMin || vb - va > tMax) return p;
+  if (Math.abs(va - p.va) < 1.5 * inPt && Math.abs(vb - p.vb) < 1.5 * inPt) return p; // already the wall
+  return { ...p, va, vb, fitted: true };
+}
+
+/** Grey filled shapes of the sheet (wall poché) and a point-in-shape test. */
+function pocheIndex(polys = []) {
+  const grey = polys.filter((p) => lum(p.color || '#000000') < 0.9); // white is a mask
+  const cell = 48;
+  const map = new Map();
+  grey.forEach((p, i) => {
+    const xs = p.pts.map((q) => q[0]), ys = p.pts.map((q) => q[1]);
+    p.box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    for (let a = Math.floor(p.box[0] / cell); a <= Math.floor(p.box[2] / cell); a++) {
+      for (let b = Math.floor(p.box[1] / cell); b <= Math.floor(p.box[3] / cell); b++) {
+        const key = `${a},${b}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(i);
+      }
+    }
+  });
+  const inPoly = (x, y, pts) => {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i], [xj, yj] = pts[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+  return {
+    count: grey.length,
+    inside(x, y) {
+      for (const i of map.get(`${Math.floor(x / cell)},${Math.floor(y / cell)}`) || []) {
+        const p = grey[i];
+        if (x >= p.box[0] && x <= p.box[2] && y >= p.box[1] && y <= p.box[3] && inPoly(x, y, p.pts)) return true;
+      }
+      return false;
+    },
+  };
+}
+
 /** Share of a band's length with wall poché (filled areas) inside it. */
 function pocheCover(fills, g) {
   if (!fills?.length) return 0;
@@ -416,6 +650,95 @@ function openingEvidence(buckets, all, bands, band, g0, g1, v, t, inPt) {
 }
 
 /**
+ * Dimension witness lines run out from a wall to the dimension strings past
+ * the building, and pair like a wall's faces. Where a dimension line crosses a
+ * wall outside the wall fill (poché), the part of the wall on the side with no
+ * fill at all is cut off; a wall with no fill on either side goes.
+ */
+export function cutAtDimensions(walls, dimSegs, poche, k, minWallFt = 1.5) {
+  const cross = (w, s) => {
+    const dx = w.x2 - w.x1, dy = w.y2 - w.y1, ex = s.x2 - s.x1, ey = s.y2 - s.y1;
+    const den = dx * ey - dy * ex;
+    const L = Math.hypot(dx, dy), M = Math.hypot(ex, ey);
+    if (!L || !M || Math.abs(den) / (L * M) < 0.5) return null; // nearly parallel
+    const t = ((s.x1 - w.x1) * ey - (s.y1 - w.y1) * ex) / den;
+    const u = ((s.x1 - w.x1) * dy - (s.y1 - w.y1) * dx) / den;
+    return t > 0 && t < 1 && u >= 0 && u <= 1 ? t : null;
+  };
+  const at = (w, t) => [w.x1 + (w.x2 - w.x1) * t, w.y1 + (w.y2 - w.y1) * t];
+  const filled = (w, t0, t1) => {
+    const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) / k;
+    const n = Math.max(2, Math.ceil(((t1 - t0) * L) / 0.5)); // every 6"
+    for (let i = 0; i <= n; i++) { const p = at(w, t0 + ((t1 - t0) * i) / n); if (poche.inside(p[0], p[1])) return true; }
+    return false;
+  };
+  const out = [];
+  for (let w of walls) {
+    let ts = dimSegs.map((s) => cross(w, s)).filter((t) => t !== null && !poche.inside(...at(w, t))).sort((a, b) => a - b);
+    let gone = false;
+    while (ts.length) {
+      const t = ts.shift();
+      const before = filled(w, 0, t), after = filled(w, t, 1);
+      if (!before && !after) { gone = true; break; }
+      if (before && after) continue;
+      const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) / k;
+      const [a, b] = before ? [0, t] : [t, 1];
+      const startFt = a * L, endFt = b * L;
+      const p1 = at(w, a), p2 = at(w, b);
+      w = {
+        ...w, x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], lengthFt: +(endFt - startFt).toFixed(2),
+        openings: (w.openings || []).filter((op) => op.atFt >= startFt && op.atFt + op.widthFt <= endFt).map((op) => ({ ...op, atFt: +(op.atFt - startFt).toFixed(2) })),
+      };
+      ts = ts.map((x) => (x - a) / (b - a)).filter((x) => x > 0 && x < 1);
+    }
+    if (!gone && w.lengthFt >= minWallFt) out.push(w);
+  }
+  return out;
+}
+
+/**
+ * Drop door leaves drawn open. Two signs, either is enough:
+ *  - a short "wall" askew to the building's grid with a loose end: a leaf
+ *    hangs from its hinge, while an angled wall (a bay) meets walls at both ends;
+ *  - a short "wall" whose far end is the hinge of a swing arc that starts at its
+ *    near end (every point of the arc lies one leaf length from the hinge). A
+ *    wall beside a door only meets the arc at its end, the strike side: the
+ *    hinge is across the opening, not at its other end.
+ */
+export function dropDoorLeaves(walls, arcs, k) {
+  const ends = arcs.flatMap((a) => [[a.x1, a.y1], [a.x2, a.y2]]);
+  // the building's grid: the direction (mod 90°) most wall length runs in
+  const byDeg = new Map();
+  for (const w of walls) {
+    const deg = Math.round(((angleOf(w) * 180) / Math.PI) % 90);
+    byDeg.set(deg, (byDeg.get(deg) || 0) + w.lengthFt);
+  }
+  const grid = [...byDeg].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+  const askew = (w) => {
+    const deg = ((angleOf(w) * 180) / Math.PI) % 90;
+    const off = Math.abs(deg - grid);
+    return Math.min(off, 90 - off) > 5;
+  };
+  const loose = (w, p) => !walls.some((o) => o !== w && segDist(o, { x1: p[0], y1: p[1], x2: p[0], y2: p[1] }) <= k);
+  const isLeaf = (w) => {
+    const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+    if (L > 4.5 * k) return false;
+    if (askew(w) && (loose(w, [w.x1, w.y1]) || loose(w, [w.x2, w.y2]))) return true;
+    if (!ends.length) return false;
+    const tol = Math.max(0.1 * L, 0.35 * k);
+    for (const [A, B] of [[[w.x1, w.y1], [w.x2, w.y2]], [[w.x2, w.y2], [w.x1, w.y1]]]) {
+      const near = (p, q, r) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= r;
+      if (!ends.some((e) => near(e, A, tol))) continue;
+      // another point of the arc, away from A, at leaf length from the hinge B
+      const onSwing = ends.filter((e) => !near(e, A, 0.5 * L) && Math.abs(Math.hypot(e[0] - B[0], e[1] - B[1]) - L) <= tol);
+      if (onSwing.length) return true;
+    }
+    return false;
+  };
+  return walls.filter((w) => !isLeaf(w));
+}
+
+/**
  * Remove walls lying inside a longer parallel wall (double-drawn bands, one
  * layer of a wall's poché). Of two bands of about one length the thicker one
  * stays: it is the whole wall.
@@ -439,7 +762,10 @@ function dropContained(walls, k) {
       if (Math.abs(v([w.x1, w.y1]) - v([o.x1, o.y1])) > half) continue;
       const [a0, a1] = span(o, u), [b0, b1] = span(w, u);
       if (b0 >= a0 - 0.5 && b1 <= a1 + 0.5) {
-        if (w.thickIn > o.thickIn + 0.5 && w.lengthFt >= o.lengthFt - 0.5) keep[i] = w;
+        // the thicker one is the whole wall, unless it was cut down to the fill
+        if (w.thickIn > o.thickIn + 0.5 && w.lengthFt >= o.lengthFt - 0.5 && !w.fitted) keep[i] = w;
+        // a wall found by its own faces beats one cut down to the fill
+        else if (o.fitted && !w.fitted && w.lengthFt >= o.lengthFt - 0.5) keep[i] = w;
         drop = true;
       } else if (Math.min(a1, b1) - Math.max(a0, b0) > 0.5) {
         // overlapping along part of its length (one wall drawn by two pens):
@@ -509,7 +835,9 @@ export function mainBuilding(walls, k) {
     gbox.set(r, g);
   });
   const near = (g) => g.x0 >= m.x0 - pad && g.x1 <= m.x1 + pad && g.y0 >= m.y0 - pad && g.y1 <= m.y1 + pad;
-  return walls.filter((_, i) => big(i) || (sizes.get(find(i)) >= 3 && near(gbox.get(find(i)))));
+  // a group no bigger than a closet is a symbol (a roof drain or downspout box)
+  const tiny = (g) => g.x1 - g.x0 <= 3 * k && g.y1 - g.y0 <= 3 * k;
+  return walls.filter((_, i) => !tiny(gbox.get(find(i))) && (big(i) || (sizes.get(find(i)) >= 3 && near(gbox.get(find(i))))));
 }
 
 function segDist(a, b) {

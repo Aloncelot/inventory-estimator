@@ -154,3 +154,45 @@ test('a wall chained to a counter line is split off when its poché backs it', (
   assert.equal(r.walls.filter((x) => !x.exterior).length, 2, 'the counter is not a wall');
   assert.ok(suggestStyles([{ style: 'fill|#c0c0c0', width: 0, color: '#c0c0c0', lengthFt: 100 }]).includes('fill|#c0c0c0'), 'grey poché is suggested');
 });
+
+test('a wall stopping at a door beside a crossing wall runs across the door', () => {
+  const k = 9;
+  const st = '0.5|#000000';
+  const seg = (x1, y1, x2, y2, pid) => ({ x1, y1, x2, y2, w: 0.5, style: st, pid });
+  const segments = [
+    // crossing wall, 6" thick, 30' long
+    seg(100, 0, 100, 270, 1), seg(104.5, 0, 104.5, 270, 2),
+    // stub to the right of a 3' door, 6" thick, 2' long, then a long wall on
+    seg(131.5, 100, 300, 100, 3), seg(131.5, 104.5, 300, 104.5, 4),
+    // the door: leaf open downward from the hinge at the stub, swing drawn as short lines
+  ];
+  const r = 27; // 3' leaf
+  const hinge = [131.5, 104.5];
+  segments.push(seg(hinge[0], hinge[1], hinge[0], hinge[1] + r, 5), seg(hinge[0] - 1.3, hinge[1], hinge[0] - 1.3, hinge[1] + r, 6));
+  const n = 8;
+  for (let i = 0; i < n; i++) {
+    const a0 = Math.PI / 2 + (Math.PI / 2) * (i / n), a1 = Math.PI / 2 + (Math.PI / 2) * ((i + 1) / n);
+    segments.push(seg(hinge[0] + r * Math.cos(a0), hinge[1] + r * Math.sin(a0), hinge[0] + r * Math.cos(a1), hinge[1] + r * Math.sin(a1), 7));
+  }
+  const res = detectWalls({ width: 400, height: 300, segments, texts: [] }, { ptPerFt: k, styles: [st], area: { x0: 0, y0: 0, x1: 400, y1: 300 } });
+  const h = res.walls.find((w) => Math.abs(w.y1 - w.y2) < 1);
+  assert.ok(h, 'the horizontal wall');
+  assert.ok(Math.min(h.x1, h.x2) <= 105, `it reaches the crossing wall (${Math.min(h.x1, h.x2)})`);
+  assert.deepEqual(h.openings.map((o) => o.type), ['door']);
+});
+
+test('witness lines past the building are cut where a dimension crosses them', async () => {
+  const { cutAtDimensions } = await import('./detect.js');
+  const k = 9;
+  // building fill: y from 0 to 100
+  const poche = { count: 100, inside: (x, y) => y >= 0 && y <= 100 && x >= 0 && x <= 300 };
+  const w = (x1, y1, x2, y2) => ({ x1, y1, x2, y2, lengthFt: Math.hypot(x2 - x1, y2 - y1) / k, openings: [] });
+  const dim = { x1: -50, y1: 140, x2: 400, y2: 140 }; // a dimension string below the building
+  const runsOut = w(50, 20, 50, 160); // a wall running on along its witness lines
+  const outside = w(150, 110, 150, 170); // witness lines only
+  const inside = w(250, 10, 250, 90);
+  const out = cutAtDimensions([runsOut, outside, inside], [dim], poche, k);
+  assert.equal(out.length, 2);
+  assert.ok(Math.abs(Math.max(out[0].y1, out[0].y2) - 140) < 0.01, 'cut at the dimension');
+  assert.equal(out[1], inside);
+});

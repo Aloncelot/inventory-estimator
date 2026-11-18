@@ -43,11 +43,13 @@ export async function extractPage(page, OPS) {
   const stack = [];
   const segments = [];
   const fills = [];
+  let pathNo = 0; // segments of one path share a pid (tags, symbols)
 
   const emitPath = (paintOp, data) => {
     const stroked = strokeOps.has(paintOp);
     const filled = fillOps.has(paintOp);
     if (!stroked && !filled) return;
+    const pid = pathNo++;
     const w = +(st.lw * scaleOf(st.ctm)).toFixed(3);
     const style = `${w}|${st.stroke}${st.dashed ? '|d' : ''}`;
     let sx = 0, sy = 0, cx = 0, cy = 0;
@@ -64,17 +66,17 @@ export async function extractPage(page, OPS) {
         [cx, cy] = apply(st.ctm, data[i++], data[i++]); sx = cx; sy = cy; pts.push([cx, cy]);
       } else if (op === PATH.lineTo) {
         const [x, y] = apply(st.ctm, data[i++], data[i++]);
-        if (stroked) segments.push({ x1: cx, y1: cy, x2: x, y2: y, w, style });
+        if (stroked) segments.push({ x1: cx, y1: cy, x2: x, y2: y, w, style, pid });
         cx = x; cy = y; pts.push([cx, cy]);
       } else if (op === PATH.curveTo) {
         i += 4; const [x, y] = apply(st.ctm, data[i++], data[i++]); curved = true;
         // keep the chord of every curve: door swings are found by their arcs
-        if (stroked) segments.push({ x1: cx, y1: cy, x2: x, y2: y, w, style, arc: true });
+        if (stroked) segments.push({ x1: cx, y1: cy, x2: x, y2: y, w, style, arc: true, pid });
         cx = x; cy = y;
       } else if (op === PATH.quadraticCurveTo) {
         i += 2; [cx, cy] = apply(st.ctm, data[i++], data[i++]); curved = true;
       } else if (op === PATH.closePath) {
-        if (stroked && (cx !== sx || cy !== sy)) segments.push({ x1: cx, y1: cy, x2: sx, y2: sy, w, style });
+        if (stroked && (cx !== sx || cy !== sy)) segments.push({ x1: cx, y1: cy, x2: sx, y2: sy, w, style, pid });
         cx = sx; cy = sy;
       } else break;
     }
@@ -142,7 +144,9 @@ export async function extractPage(page, OPS) {
   for (const it of tc.items) {
     if (!it.str || !it.str.trim()) continue;
     const m = mul(vp.transform, it.transform);
-    texts.push({ str: it.str, x: m[4], y: m[5], size: Math.hypot(m[2], m[3]) || Math.hypot(m[0], m[1]), angle: Math.atan2(m[1], m[0]) });
+    texts.push({ str: it.str, x: m[4], y: m[5], size: Math.hypot(m[2], m[3]) || Math.hypot(m[0], m[1]), angle: Math.atan2(m[1], m[0]), w: it.width || 0 });
   }
-  return { width: vp.width, height: vp.height, segments, texts };
+  // filled shapes (wall poché is grey), for telling a wall from a cabinet edge
+  const polys = fills.filter((f) => f.pts.length >= 4 && f.pts.length <= 40).map((f) => ({ pts: f.pts, color: f.color }));
+  return { width: vp.width, height: vp.height, segments, texts, polys };
 }
