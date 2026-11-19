@@ -8,7 +8,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScanLine, Upload, MousePointer2, PenLine, Ruler, Trash2, ZoomIn, ZoomOut, Maximize2,
   Link2, Unlink, RefreshCw, TriangleAlert, CopyCheck, DoorOpen, X, Plus, Columns2, Copy, Anchor, Minus, SquareDashed,
+  Lock, LockOpen,
 } from 'lucide-react';
+import { LockMixed, GripOn, GripOff } from '@/components/PlanIcons';
+import { moveWall, setEnd } from '@/domain/plans/move';
 import { useProject } from '@/context/ProjectContext';
 import PlanLegend from '@/components/PlanLegend';
 import { displayOf } from '@/domain/plans/display';
@@ -65,7 +68,7 @@ const fmtLF = (v) => Math.round(Number(v) || 0).toLocaleString('en-US');
 
 /* ───────────────────────── drawing ───────────────────────── */
 
-function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd, onAddGap, onAddWall, onAddOpening, onAddPost, onAddHardware, onAddFloorHole, onAddBlocking, onCalibrate, onDeleteSelected }) {
+function PlanCanvas({ plan, imgUrl, selected, tool, display, grip, onSelect, onMoveEnd, onMoveOpening, onMoveWall, onAddGap, onAddWall, onAddOpening, onAddPost, onAddHardware, onAddFloorHole, onAddBlocking, onCalibrate, onDeleteSelected }) {
   const W = plan.w || 2592;
   const H = plan.h || 1728;
   const k = plan.ptPerFt || 0;
@@ -77,6 +80,12 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
   const drag = useRef(null);
   const endDrag = useRef(null);
   const [endPt, setEndPt] = useState(null);
+  // an opening dragged along its wall: { wallId, i, grab (ft from its start to the pointer), lo, hi, at }
+  const opDrag = useRef(null);
+  const [opAt, setOpAt] = useState(null);
+  // an unlocked wall dragged: { id, p0, moved }; wallMove is the move so far, [dx, dy] in sheet pt
+  const wallDrag = useRef(null);
+  const [wallMove, setWallMove] = useState(null);
   const junctions = useMemo(() => (k ? planJunctions(plan) : []), [plan, k]);
 
   useEffect(() => { setView({ x: 0, y: 0, w: W, h: H }); }, [W, H]);
@@ -200,6 +209,28 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
         return;
       }
     }
+    // dragging an opening along its wall
+    const opEl = e.target.closest?.('[data-opening]');
+    if (opEl && tool === 'select' && e.button === 0 && k) {
+      const [id, si] = opEl.getAttribute('data-opening').split(':');
+      const w = (plan.walls || []).find((x) => x.id === id);
+      const i = Number(si);
+      const o = w?.openings?.[i];
+      if (o) {
+        const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) / k;
+        const others = w.openings.filter((_, j) => j !== i);
+        const at = Number(o.atFt) || 0, wd = Number(o.widthFt) || 0;
+        // it stays between its neighbours and inside the wall
+        const lo = Math.max(0, ...others.filter((x) => (Number(x.atFt) || 0) < at).map((x) => (Number(x.atFt) || 0) + (Number(x.widthFt) || 0)));
+        const hi = Math.min(L, ...others.filter((x) => (Number(x.atFt) || 0) > at).map((x) => Number(x.atFt) || 0)) - wd;
+        opDrag.current = { wallId: id, i, grab: onWall(w, toPt(e)).u / k - at, lo: Math.min(lo, at), hi: Math.max(hi, at), at, moved: false };
+        setOpAt(at);
+        if (!selected.has(id)) onSelect([id], false);
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        e.stopPropagation();
+        return;
+      }
+    }
     if ((tool === 'post' || tool === 'hardware') && e.button === 0) {
       const hit = wallNear(toPt(e));
       if (hit) (tool === 'post' ? onAddPost : onAddHardware)(hit.w.id, hit.u / k);
@@ -225,7 +256,14 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
     }
     if (tool === 'select') {
       const id = e.target.closest('[data-wall]').getAttribute('data-wall');
-      onSelect([id], e.shiftKey || e.ctrlKey || e.metaKey);
+      const add = e.shiftKey || e.ctrlKey || e.metaKey;
+      const w = (plan.walls || []).find((x) => x.id === id);
+      // an unlocked wall can be dragged; a locked one is only selected
+      if (w?.unlocked && !add && e.button === 0 && k) {
+        wallDrag.current = { id, p0: toPt(e), moved: false };
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      }
+      onSelect([id], add);
       return;
     }
     const pt = tool === 'floorhole' ? toPt(e) : snap(toPt(e), draft?.a);
@@ -240,6 +278,38 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
   };
   const onPointerMove = (e) => {
     if (endDrag.current) { setEndPt(snap(toPt(e), endDrag.current.other, endDrag.current.id)); return; }
+    if (wallDrag.current) {
+      const wd = wallDrag.current;
+      const w = (plan.walls || []).find((x) => x.id === wd.id);
+      const pt = toPt(e);
+      let d = [pt[0] - wd.p0[0], pt[1] - wd.p0[1]];
+      if (!w) return;
+      if (!wd.moved && Math.hypot(d[0], d[1]) < 4 * pxToPt()) return;
+      wd.moved = true;
+      // square to the wall, to the inch; Shift moves it freely
+      const inch = k / 12;
+      if (!e.shiftKey) {
+        const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
+        const nx = -(w.y2 - w.y1) / L, ny = (w.x2 - w.x1) / L;
+        const dn = Math.round((d[0] * nx + d[1] * ny) / inch) * inch;
+        d = [nx * dn, ny * dn];
+      } else d = [Math.round(d[0] / inch) * inch, Math.round(d[1] / inch) * inch];
+      wd.d = d;
+      setWallMove(d);
+      return;
+    }
+    if (opDrag.current) {
+      const od = opDrag.current;
+      const w = (plan.walls || []).find((x) => x.id === od.wallId);
+      if (w) {
+        // to the inch
+        const at = Math.round(Math.min(od.hi, Math.max(od.lo, onWall(w, toPt(e)).u / k - od.grab)) * 12) / 12;
+        if (Math.abs(at - od.at) > 1e-6) od.moved = true;
+        od.cur = at;
+        setOpAt(at);
+      }
+      return;
+    }
     const d = drag.current;
     if (d) {
       const r = svgRef.current.getBoundingClientRect();
@@ -257,6 +327,20 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
     if (draft) setDraft((dr) => ({ ...dr, b: tool === 'floorhole' ? toPt(e) : snap(toPt(e), dr.a) }));
   };
   const onPointerUp = () => {
+    if (wallDrag.current) {
+      const wd = wallDrag.current;
+      wallDrag.current = null;
+      if (wd.moved && wd.d && (wd.d[0] || wd.d[1])) onMoveWall(wd.id, wd.d);
+      setWallMove(null);
+      return;
+    }
+    if (opDrag.current) {
+      const od = opDrag.current;
+      opDrag.current = null;
+      if (od.moved && od.cur !== undefined) onMoveOpening(od.wallId, od.i, Math.round(od.cur * 100) / 100);
+      setOpAt(null);
+      return;
+    }
     if (endDrag.current) {
       const ed = endDrag.current;
       endDrag.current = null;
@@ -276,11 +360,20 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
     if (e.key === '0') setView({ x: 0, y: 0, w: W, h: H });
   };
 
-  const walls = plan.walls || [];
+  // while a wall is dragged, it and the walls it grips are drawn where they will go
+  const walls = useMemo(() => {
+    const list = plan.walls || [];
+    const wd = wallDrag.current;
+    return wallMove && wd ? moveWall(list, wd.id, wallMove, { grip, k }) : list;
+  }, [plan.walls, wallMove, grip, k]);
   const hoverWall = hover ? walls.find((w) => w.id === hover) : null;
   const draftFt = draft && k ? (tool === 'opening' ? Math.abs(draft.u1 - draft.u0) : Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1])) / k : 0;
   const draftWall = draft && tool === 'opening' ? walls.find((w) => w.id === draft.wallId) : null;
-  const readout = endPt && endDrag.current
+  const readout = wallMove && wallDrag.current
+    ? `Moved ${ftIn(Math.hypot(wallMove[0], wallMove[1]) / (k || 1))}${grip ? ' · walls it meets follow' : ''}`
+    : opAt !== null && opDrag.current
+    ? `Opening at ${ftIn(opAt)} from the wall start`
+    : endPt && endDrag.current
     ? `${ftIn(Math.hypot(endPt[0] - endDrag.current.other[0], endPt[1] - endDrag.current.other[1]) / (k || 1))}`
     : draft
     ? (tool === 'opening' ? `Opening ${ftIn(draftFt)} wide` : tool === 'calibrate' ? `Distance on sheet: ${Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1]).toFixed(1)} pt` : `${ftIn(draftFt)}`)
@@ -351,7 +444,9 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
                 {isDoubleWall(w) ? <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke={colors[w.kind2 || 'partition']} strokeOpacity={0.9} strokeWidth={t * 0.4} /> : null}
                 {(w.openings || []).map((o, i) => {
                   if (hidden[o.type === 'door' ? 'door' : 'window']) return null;
-                  const a = (o.atFt || 0) * k, b = a + (o.widthFt || 0) * k;
+                  const od = opDrag.current;
+                  const at = od && od.wallId === w.id && od.i === i && opAt !== null ? opAt : (o.atFt || 0);
+                  const a = at * k, b = a + (o.widthFt || 0) * k;
                   const mx = w.x1 + ux * (a + b) / 2, my = w.y1 + uy * (a + b) / 2;
                   return (
                     <g key={i}>
@@ -390,7 +485,21 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, onSelect, onMoveEnd
                   const label = w.shear.map((x) => `${x.type} ${Math.round(x.lengthFt * 10) / 10}'`).join(' · ');
                   return <text x={mx - uy * (t + fs)} y={my + ux * (t + fs) + fs / 3} className="pt-shtag" fill={colors.sheartag} fontSize={fs} textAnchor="middle">{label}</text>;
                 })()}
-                <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke="transparent" strokeWidth={12} vectorEffect="non-scaling-stroke" className="pt-hit" />
+                {w.unlocked ? <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke="#fff" strokeOpacity={0.9} strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" pointerEvents="none" /> : null}
+                <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke="transparent" strokeWidth={12} vectorEffect="non-scaling-stroke" className={`pt-hit${w.unlocked && tool === 'select' ? ' is-free' : ''}`}>
+                  {w.unlocked && tool === 'select' ? <title>Unlocked: drag to move it (Shift: freely)</title> : null}
+                </line>
+                {tool === 'select' && k ? (w.openings || []).map((o, i) => {
+                  if (hidden[o.type === 'door' ? 'door' : 'window']) return null;
+                  const od = opDrag.current;
+                  const at = od && od.wallId === w.id && od.i === i && opAt !== null ? opAt : (o.atFt || 0);
+                  const a = at * k, b = a + (o.widthFt || 0) * k;
+                  return (
+                    <line key={`oh${i}`} data-opening={`${w.id}:${i}`} x1={w.x1 + ux * a} y1={w.y1 + uy * a} x2={w.x1 + ux * b} y2={w.y1 + uy * b} stroke="transparent" strokeWidth={14} vectorEffect="non-scaling-stroke" className="pt-ophit">
+                      <title>Drag along the wall to move this opening</title>
+                    </line>
+                  );
+                }) : null}
               </g>
             );
           })}
@@ -492,6 +601,8 @@ export default function PlanTakeoffView() {
 
   const [selected, setSelected] = useState(() => new Set());
   const [tool, setTool] = useState('select');
+  // walls meeting a moved wall stretch with it
+  const [grip, setGrip] = useState(true);
   const [openingType, setOpeningType] = useState('window');
   const [postChoice, setPostChoice] = useState(''); // a type id, or '' = the first type (made if none)
   const [copyFrom, setCopyFrom] = useState('');
@@ -739,15 +850,24 @@ export default function PlanTakeoffView() {
   const moveEnd = useCallback((id, end, pt) => {
     setPlan((p) => ({
       ...p,
+      walls: (p.walls || []).map((w) => (w.id !== id ? w : setEnd(w, end, pt, p.ptPerFt))),
+    }));
+  }, [setPlan]);
+  /** Move a whole (unlocked) wall; with grip the walls meeting it stretch to keep meeting it. */
+  const moveWallBy = useCallback((id, d) => {
+    setPlan((p) => ({ ...p, walls: moveWall(p.walls || [], id, d, { grip, k: p.ptPerFt }) }));
+  }, [setPlan, grip]);
+  /** Lock or unlock walls for dragging (not an edit of the wall: detecting again treats it the same). */
+  const setUnlocked = useCallback((ids, on) => {
+    const set = ids ? new Set(ids) : null;
+    setPlan((p) => ({
+      ...p,
       walls: (p.walls || []).map((w) => {
-        if (w.id !== id) return w;
-        const next = end === '1' ? { ...w, x1: pt[0], y1: pt[1] } : { ...w, x2: pt[0], y2: pt[1] };
-        const L = Math.hypot(next.x2 - next.x1, next.y2 - next.y1) / (p.ptPerFt || 1);
-        // openings are measured from the start: moving the start shifts them
-        const shift = end === '1' ? (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) / (p.ptPerFt || 1)) - L : 0;
-        const openings = (w.openings || []).map((o) => ({ ...o, atFt: Math.round((o.atFt - shift) * 100) / 100 })).filter((o) => o.atFt >= 0 && o.atFt + o.widthFt <= L + 0.01);
-        const { lenFt, ...rest } = next; // the drawing is the length now
-        return { ...rest, openings, auto: false, ...(openings.length !== (w.openings || []).length ? { openingsEdited: true } : {}) };
+        if (set && !set.has(w.id)) return w;
+        if (on) return w.unlocked ? w : { ...w, unlocked: true };
+        if (!w.unlocked) return w;
+        const { unlocked, ...rest } = w;
+        return rest;
       }),
     }));
   }, [setPlan]);
@@ -957,6 +1077,26 @@ export default function PlanTakeoffView() {
             {plan.scaleSource === 'sheet' ? <span className="ew-subtle">from the sheet</span> : plan.scaleSource === 'calibrated' ? <span className="ew-subtle">calibrated</span> : null}
             <div className="pt-tools" role="toolbar" aria-label="Tools">
               <button type="button" className={`ew-btn${tool === 'select' ? ' is-on' : ''}`} onClick={() => setTool('select')} title="Select walls"><MousePointer2 size={14} /> Select</button>
+              {(() => {
+                const all = plan.walls || [];
+                const open = all.filter((w) => w.unlocked).length;
+                const state = !open ? 'locked' : open === all.length ? 'unlocked' : 'mixed';
+                return (
+                  <button type="button" className={`ew-icon-btn pt-lock is-${state}`} disabled={!all.length}
+                    onClick={() => setUnlocked(null, state === 'locked')}
+                    title={state === 'locked' ? 'All walls are locked: click to unlock them all so they can be dragged'
+                      : state === 'unlocked' ? 'All walls are unlocked and can be dragged: click to lock them all'
+                        : `${open} of ${all.length} walls are unlocked: click to lock them all`}
+                    aria-label={state === 'locked' ? 'Unlock all walls' : 'Lock all walls'}>
+                    {state === 'locked' ? <Lock size={15} /> : state === 'unlocked' ? <LockOpen size={15} /> : <LockMixed size={15} />}
+                  </button>
+                );
+              })()}
+              <button type="button" className={`ew-icon-btn pt-grip${grip ? ' is-on' : ''}`} onClick={() => setGrip((g) => !g)} aria-pressed={grip}
+                title={grip ? 'Grip adjacent walls: on. Walls meeting a moved wall stretch or shrink with it. Click to move walls on their own' : 'Grip adjacent walls: off. A moved wall goes alone. Click so the walls meeting it follow'}
+                aria-label="Grip adjacent walls">
+                {grip ? <GripOn size={15} /> : <GripOff size={15} />}
+              </button>
               <button type="button" className={`ew-btn${tool === 'add' ? ' is-on' : ''}`} onClick={() => setTool('add')} title="Draw a wall the detection missed" disabled={!plan.ptPerFt}><PenLine size={14} /> Add wall</button>
               <button type="button" className={`ew-btn${tool === 'opening' ? ' is-on' : ''}`} onClick={() => setTool('opening')} title="Mark a window or door the detection missed: click both sides of it on a wall" disabled={!plan.ptPerFt}><DoorOpen size={14} /> Add opening</button>
               {tool === 'opening' ? (
@@ -1078,6 +1218,9 @@ export default function PlanTakeoffView() {
               onAddGap={(i) => setPlan((p) => placeFrom(addStructWalls(p, [p.structural?.gaps?.[i]].filter(Boolean), newId), p.structural))}
               onAddWall={addWall}
               onAddOpening={addOpening}
+              grip={grip}
+              onMoveWall={moveWallBy}
+              onMoveOpening={(wallId, i, atFt) => patchOpenings(wallId, (list) => list.map((x, j) => (j === i ? { ...x, atFt } : x)))}
               onAddPost={addPost}
               onAddHardware={addHardware}
               onAddFloorHole={addFloorHole}
@@ -1103,6 +1246,7 @@ export default function PlanTakeoffView() {
                     patchWalls(sel.map((w) => w.id), (w) => (patch.double && !w.double ? { ...patch, kind2: w.kind2 || 'partition', size2: w.size } : patch));
                   }}
                   onDelete={() => deleteWalls(sel.map((w) => w.id))}
+                  onLock={(on) => setUnlocked(sel.map((w) => w.id), on)}
                   onOpenings={(fn) => sel.length === 1 && patchOpenings(sel[0].id, fn)}
                   openingTypes={plan.openingTypes || []}
                   postTypes={plan.postTypes || []}
@@ -1328,7 +1472,7 @@ function ThickField({ wall, onPatch }) {
   );
 }
 
-function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
+function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onLock, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
   const one = walls.length === 1 ? walls[0] : null;
   const isExterior = one ? normWall(one).kind === 'exterior' : false;
   const norm = walls.map(normWall);
@@ -1358,6 +1502,18 @@ function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onSimi
       <div className="pt-facts">
         <span><strong>{walls.length}</strong> wall{walls.length > 1 ? 's' : ''} selected</span>
         <span><strong>{one ? ftIn(lf) : `${fmtLF(lf)} LF`}</strong></span>
+        {(() => {
+          const open = walls.filter((w) => w.unlocked).length;
+          const state = !open ? 'locked' : open === walls.length ? 'unlocked' : 'mixed';
+          const label = one ? 'this wall' : 'these walls';
+          return (
+            <button type="button" className={`ew-icon-btn pt-lock is-${state}`} onClick={() => onLock(state !== 'unlocked')}
+              title={state === 'locked' ? `Locked: click to unlock ${label} so ${one ? 'it' : 'they'} can be dragged` : state === 'unlocked' ? `Unlocked: drag ${one ? 'it' : 'them'} on the drawing. Click to lock` : 'Some locked, some unlocked: click to unlock them all'}
+              aria-label={state === 'unlocked' ? `Lock ${label}` : `Unlock ${label}`}>
+              {state === 'locked' ? <Lock size={15} /> : state === 'unlocked' ? <LockOpen size={15} /> : <LockMixed size={15} />}
+            </button>
+          );
+        })()}
       </div>
       <label className="fld" title="A double wall is two walls side by side (e.g. a shear wall and a bearing wall). Each counts the full length with its own type and studs; the shear wall carries the sheathing between them.">
         <span>Wall</span>
@@ -1405,6 +1561,7 @@ function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onSimi
             </div>
             {(one.openings || []).length ? (
               <table className="pt-ops__tbl">
+                <colgroup><col style={{ width: '25%' }} /><col style={{ width: '29%' }} /><col style={{ width: '18%' }} /><col style={{ width: '18%' }} /><col style={{ width: 26 }} /></colgroup>
                 <thead><tr><th>Type</th><th title="Window / door type (W1, D1…): sets its header">Class</th><th className="num" title="From the wall start, ft">At (ft)</th><th className="num" title="Rough opening width, in">Width (in)</th><th /></tr></thead>
                 <tbody>
                   {one.openings.map((o, i) => (
@@ -1420,7 +1577,21 @@ function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onSimi
                           <select className="ew-select ot-class" value={o.typeManual ? o.typeId || '' : ''} onChange={(e) => {
                             const v = e.target.value;
                             if (v === '__new') onNewType(i);
-                            else onOpenings((list) => list.map((x, j) => (j !== i ? x : v ? { ...x, typeId: v, typeManual: true } : { ...x, typeManual: false })));
+                            else {
+                              // a chosen type brings its width; the opening stays centred where it was, inside the wall
+                              const t = v ? openingTypes.find((y) => y.id === v) : null;
+                              const wIn = Number(t?.widthIn);
+                              onOpenings((list) => list.map((x, j) => {
+                                if (j !== i) return x;
+                                if (!v) return { ...x, typeManual: false };
+                                if (!(wIn > 0)) return { ...x, typeId: v, typeManual: true };
+                                const wd = wIn / 12;
+                                const L = wallLengthFt(one, ptPerFt);
+                                const mid = (Number(x.atFt) || 0) + (Number(x.widthFt) || 0) / 2;
+                                const at = Math.max(0, Math.min(Math.max(0, L - wd), mid - wd / 2));
+                                return { ...x, typeId: v, typeManual: true, widthFt: Math.round(wd * 10000) / 10000, atFt: Math.round(at * 100) / 100 };
+                              }));
+                            }
                           }} title={o.typeManual ? 'Chosen by hand' : 'Automatic (by width)'}>
                             <option value="">{o.typeId ? `${o.typeId} (auto)` : 'Auto'}</option>
                             {openingTypes.filter((t) => t.kind === (o.type === 'door' ? 'door' : 'window') && (t.scope === 'interior') === !isExterior).map((t) => <option key={t.id} value={t.id}>{t.id} · {t.widthIn}&quot;</option>)}

@@ -2,15 +2,60 @@
 // The assistant, docked on the right like an IDE's side panel. It works on
 // the page that registered with it (src/context/AssistantContext.jsx) and
 // proposes changes the user applies or discards.
+// Opening and closing use springs like the sidebar: on desktop the panel's
+// width grows from 0 (the page makes room as it opens) while its content
+// slides in; on narrow screens it rises as a bottom sheet.
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { Sparkles, X, ArrowUp, Check, Eraser } from 'lucide-react';
 import { useAssistant } from '@/context/AssistantContext';
 import { goTo } from '@/lib/nav';
 
+const ASIDE_W = 360; // keep in sync with --aside-w in globals.css
+const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
+const SOFT_SPRING = { type: 'spring', stiffness: 260, damping: 28 };
+const NARROW = '(max-width: 900px)';
+
+function useNarrow() {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW);
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
 export default function AssistantPanel() {
   const a = useAssistant();
+  const narrow = useNarrow();
+  const open = !!a?.open;
+  const frame = narrow
+    ? { initial: { y: '100%' }, animate: { y: 0 }, exit: { y: '100%' }, transition: SOFT_SPRING }
+    : { initial: { width: 0 }, animate: { width: ASIDE_W }, exit: { width: 0 }, transition: SOFT_SPRING };
+  const body = narrow
+    ? { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.15 } }, exit: { opacity: 0, transition: { duration: 0.1 } } }
+    : { initial: { opacity: 0, x: 28 }, animate: { opacity: 1, x: 0, transition: { ...SPRING, delay: 0.04 } }, exit: { opacity: 0, x: 28, transition: { duration: 0.12 } } };
+  return (
+    <MotionConfig reducedMotion="user">
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.aside key={narrow ? 'sheet' : 'side'} className="as-panel no-print" aria-label="Assistant" {...frame}>
+            <motion.div className="as-panel__inner" {...body}>
+              <PanelBody a={a} />
+            </motion.div>
+          </motion.aside>
+        ) : null}
+      </AnimatePresence>
+    </MotionConfig>
+  );
+}
+
+function PanelBody({ a }) {
   const [text, setText] = useState('');
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -21,7 +66,6 @@ export default function AssistantPanel() {
   }, [a?.messages, a?.pending, a?.busy]);
   useEffect(() => { if (a?.open && a?.page) inputRef.current?.focus(); }, [a?.open, a?.page]);
 
-  if (!a?.open) return null;
   const { page, messages, pending, busy } = a;
 
   const submit = (e) => {
@@ -32,7 +76,7 @@ export default function AssistantPanel() {
   };
 
   return (
-    <aside className="as-panel no-print" aria-label="Assistant">
+    <>
       <header className="as-head">
         <Sparkles size={16} aria-hidden="true" />
         <div className="as-head__title">
@@ -93,7 +137,7 @@ export default function AssistantPanel() {
         />
         <button type="submit" className="as-send" disabled={!page || busy || !text.trim()} aria-label="Send"><ArrowUp size={16} /></button>
       </form>
-    </aside>
+    </>
   );
 }
 

@@ -22,11 +22,11 @@ import {
 const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 };
 const SOFT_SPRING = { type: 'spring', stiffness: 260, damping: 28 };
 
+// A Fink (W) roof truss, drawn like the lucide set (24 grid, 2px stroke).
 const TrussIcon = ({ size = 18, ...props }) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 4 2 20h20L12 4z" />
-    <path d="M12 11v9" />
-    <path d="M7 20l5-9 5 9" />
+    <path d="M2 18 12 6l10 12z" />
+    <path d="M8.7 18 7 12M8.7 18 12 6M15.3 18 12 6M15.3 18 17 12" />
   </svg>
 );
 

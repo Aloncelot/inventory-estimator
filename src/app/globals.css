@@ -2019,9 +2019,11 @@ tr.sm-out td { color: var(--text-300); }
 .app-container { --aside-w: 360px; }
 .as-panel {
   flex: none; width: var(--aside-w); height: 100vh; position: sticky; top: 0;
-  display: flex; flex-direction: column;
+  overflow: hidden;
   background: var(--bg-800); border-left: 1px solid var(--border-strong);
 }
+/* the content keeps its full width while the panel's width springs open */
+.as-panel__inner { width: var(--aside-w); height: 100%; display: flex; flex-direction: column; }
 .as-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 14px; border-bottom: 1px solid var(--border); color: var(--accent); }
 .as-head__title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
 .as-head__title strong { font-family: var(--font-titles); font-size: 0.92rem; color: var(--text-100); }
@@ -2098,8 +2100,23 @@ tr.sm-out td { color: var(--text-300); }
   .as-fab:hover::before, .as-fab:focus-visible::before { animation: none; }
 }
 .as-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.help-fab { transition: right 0.35s cubic-bezier(0.22, 1.2, 0.36, 1); }
 .has-aside .help-fab { right: calc(var(--aside-w) + 18px); }
+@media (prefers-reduced-motion: reduce) { .help-fab { transition: none; } }
 @media (max-width: 900px) {
+  .as-panel__inner { width: 100%; }
   .as-panel { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; height: 70vh; z-index: 60; border-left: 0; border-top: 1px solid var(--border-strong); border-radius: 12px 12px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18); }
   .has-aside .help-fab { right: 18px; }
 }
+.pt-ophit{cursor:grab}
+.pt-hit.is-free{cursor:move}
+.pt-lock.is-unlocked,.pt-lock.is-mixed{color:#c2410c}
+.pt-grip.is-on{color:#c2410c}
+.pt-facts .pt-lock{margin-left:auto}
+/* the selected wall panel is narrow: fields stack their label above and fill their column */
+.pt-dims{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px 8px;align-items:end}
+.pt-dims .fld{flex-direction:column;align-items:stretch;gap:2px}
+.pt-dims .fld .ew-input,.pt-dims .fld .ew-select{width:100% !important;min-width:0}
+.pt-ops__tbl{table-layout:fixed}
+.pt-ops__tbl th:last-child{width:26px}
+.pt-ops__tbl select,.pt-ops__tbl .ew-select,.pt-ops__tbl .ew-input{width:100% !important;min-width:0;box-sizing:border-box}
