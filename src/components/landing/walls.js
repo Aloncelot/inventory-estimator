@@ -6,6 +6,8 @@
 // Everything is in inches: x along the wall, y up, z through it (sheathing
 // on +z). The same members give the material list shown beside the model.
 
+import { frameStair, stairTakeoff } from './stairs';
+
 const T = 1.5;            // lumber thickness
 const OSB = 7 / 16;
 const DEPTH = { 4: 3.5, 6: 5.5, 8: 7.25, 10: 9.25, 12: 11.25 };
@@ -191,3 +193,7 @@ export const WALLS = [
   framed.rakeWall = !!w.spec.rake;
   return { ...w, framed, size: `${ftIn(w.spec.length)} by ${ftIn(framed.height)}`, list: takeoff(framed) };
 });
+
+// the sixth model: a U-shaped stair with its landing
+const stair = frameStair();
+WALLS.push({ key: 'stair', name: 'U-shaped stair with landing', framed: stair, face: 0.85, size: `${ftIn(stair.height)} rise, two 3'-0" flights`, list: stairTakeoff(stair) });

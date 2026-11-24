@@ -5,6 +5,7 @@
 // the right on its centre line, and the pointer brushes grains off it where it
 // touches (hover-particle-dissolve). The material list beside it is the
 // takeoff of the members on screen.
+// The cycle has six models: five walls and a U-shaped stair with its landing.
 // Reduced motion: one still wall; the buttons change it at once.
 'use client';
 
@@ -19,6 +20,7 @@ const GONE_AT = 5.7;           // the wall starts to come apart
 const MORPH_AT = 6.5;          // the grains travel to the next wall
 const YAW = 0.3;               // the slow turn: from -YAW to +YAW while it stands
 const FACE = Math.PI + 0.42;   // framing side to the viewer, at three-quarters
+const faceOf = (i) => WALLS[i].face ?? FACE;
 const HALF = 9.5;              // half the widest wall (ft), the sweep's frame
 
 const ease = (t) => t * t * (3 - 2 * t);
@@ -104,7 +106,7 @@ export default function HeroWall() {
         meshA.geometry = geos[i]; meshA.visible = true; meshB.visible = false;
         G.value = 0; B.value = 2; grainsMat.uniforms.uMorph.value = 0;
         setHomes('A', i); fitShadow(i); setShown(i);
-        turn.rotation.y = FACE - 0.18;
+        turn.rotation.y = faceOf(i) - 0.18;
       };
       if (staticMode) showStill(0);
       setStill(staticMode);
@@ -118,7 +120,7 @@ export default function HeroWall() {
         camera.aspect = W / H;
         const wide = W >= 900;
         // the model sits right of the copy on wide screens, above it on narrow ones
-        const dx = wide ? W * 0.16 : 0; const dy = wide ? H * 0.13 : H * 0.12;
+        const dx = wide ? W * 0.1 : 0; const dy = wide ? H * 0.13 : H * 0.12;
         camera.setViewOffset(W + 2 * dx, H + 2 * dy, 0, 2 * dy, W, H);
         const fov = (camera.fov * Math.PI) / 180;
         const vis = (d) => 2 * d * Math.tan(fov / 2);
@@ -193,11 +195,15 @@ export default function HeroWall() {
         }
 
         // the slow turn to the right, and back while the grains travel
-        let yaw;
+        let yaw; let face = faceOf(cur);
         if (c < MORPH_AT) yaw = -YAW + (2 * YAW * c) / MORPH_AT;
-        else yaw = YAW - 2 * YAW * ease((c - MORPH_AT) / (PERIOD - MORPH_AT));
+        else {
+          const k = ease((c - MORPH_AT) / (PERIOD - MORPH_AT));
+          yaw = YAW - 2 * YAW * k;
+          face += (faceOf(next) - face) * k;           // each model has its own best angle
+        }
         yawPointer += (yawTarget - yawPointer) * (1 - Math.exp(-6 * dt));
-        turn.rotation.y = FACE + yaw + yawPointer;
+        turn.rotation.y = face + yaw + yawPointer;
       };
       let shownRef = 0;
 
@@ -286,10 +292,11 @@ export default function HeroWall() {
   const wall = WALLS[shown];
   return (
     <div className={`lp-stage${ready ? ' is-ready' : ''}`}>
+      <div className="lp-stage__haze" aria-hidden="true" />
       <canvas ref={canvasRef} className="lp-stage__canvas" aria-hidden="true" />
       <figure className="lp-takeoff" aria-labelledby="takeoff-name">
         <figcaption>
-          <span className="lp-takeoff__count">Wall {shown + 1} of {WALLS.length}</span>
+          <span className="lp-takeoff__count">{shown + 1} of {WALLS.length}</span>
           <span id="takeoff-name" className="lp-takeoff__name" aria-live="polite">{wall.name}</span>
           <span className="lp-takeoff__size">{wall.size}</span>
         </figcaption>

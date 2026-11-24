@@ -2,7 +2,8 @@
 // The public page at /: what Nebula Estimator does, how a job goes through it,
 // what each plan costs. The estimator itself lives at /app.
 // The hero is a wall panel in three.js (HeroWall); "how it works" puts a
-// house together as you scroll (HouseAssembly).
+// house together on its own (HouseAssembly); behind everything, a forest
+// and its mountains turn slightly as you scroll (ForestBackdrop).
 'use client';
 
 import { useState } from 'react';
@@ -10,6 +11,7 @@ import { Nav, Footer } from './Chrome';
 import HeroWall from './HeroWall';
 import HouseAssembly from './HouseAssembly';
 import CookieConsent from './CookieConsent';
+import ForestBackdrop from './ForestBackdrop';
 import { PLANS, ANNUAL_DISCOUNT, TRIAL_DAYS, priceFor } from './plans';
 
 const STEPS = [
@@ -100,7 +102,8 @@ function Pricing() {
 
 export default function Landing() {
   return (
-    <div className="lp">
+    <div className="lp lp--forest">
+      <ForestBackdrop />
       <Nav />
       <main>
         <section className="lp-hero" aria-labelledby="hero-h">
@@ -119,6 +122,7 @@ export default function Landing() {
         </section>
 
         <HouseAssembly steps={STEPS} />
+        <div className="lp-vista" aria-hidden="true" />
 
         <section className="lp-sec lp-features" id="features" aria-labelledby="features-h">
           <div className="lp-wrap">
@@ -140,6 +144,7 @@ export default function Landing() {
         </section>
 
         <Pricing />
+        <div className="lp-vista" aria-hidden="true" />
 
         <section className="lp-sec lp-faq" id="faq" aria-labelledby="faq-h">
           <div className="lp-wrap lp-faq__in">

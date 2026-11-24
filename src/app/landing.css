@@ -34,6 +34,20 @@
   --lp-3d-grain: #e4ead9;
   --lp-3d-spark: #f3e6c4;
   --lp-3d-grid: #26322c;
+  --lp-3d-pt: #7d8f6a;
+
+  /* the forest backdrop, read by ForestBackdrop.jsx: cold, dark, little saturation */
+  --lp-forest-sky-top: #0a0f0f;
+  --lp-forest-sky-low: #2e3a39;
+  --lp-forest-fog: #212c2a;
+  --lp-forest-far: #2d3938;
+  --lp-forest-mid: #212b2a;
+  --lp-forest-near: #151e1c;
+  --lp-forest-tree-1: #19261f;
+  --lp-forest-tree-2: #1f2d27;
+  --lp-forest-tree-3: #16221d;
+  --lp-forest-mist: #a3b5b0;
+  --lp-forest-light: #b6c6c3;
 
 }
 
@@ -52,7 +66,7 @@
   /* space and measure */
   --lp-nav-h: 76px;
   --lp-gutter: clamp(18px, 4vw, 56px);
-  --lp-maxw: 1240px;
+  --lp-maxw: 1600px;
   --lp-sec: clamp(88px, 12vw, 168px);
   --lp-radius: 6px;
   --lp-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -139,17 +153,17 @@
   display: flex; align-items: flex-end;
   background:
     radial-gradient(60% 55% at 68% 48%, var(--lp-glow), transparent 70%),
-    radial-gradient(120% 60% at 50% 110%, var(--lp-moss), transparent 60%),
-    var(--lp-ground);
+    linear-gradient(to bottom, transparent 55%, color-mix(in srgb, var(--lp-ground) 55%, transparent));
 }
 .lp-hero__in { position: relative; z-index: 2; padding-top: 140px; padding-bottom: clamp(48px, 9vh, 96px); pointer-events: none; }
-.lp-hero__copy { max-width: 600px; pointer-events: auto; }
+.lp-hero__copy { max-width: 640px; pointer-events: auto; }
 .lp-hero h1 { font-size: var(--lp-fs-h1); max-width: 14ch; }
 .lp-lead { margin-top: 28px; font-size: var(--lp-fs-l); color: var(--lp-ink-2); max-width: 30em; }
 .lp-cta { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 12px; }
 .lp-note { margin-top: 16px; font-size: var(--lp-fs-s); color: var(--lp-ink-3); }
 
 .lp-stage { position: absolute; inset: 0; z-index: 1; }
+.lp-stage__haze { position: absolute; left: 34%; right: -4%; top: -2%; bottom: -6%; }
 .lp-stage__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 600ms var(--lp-ease); touch-action: pan-y; }
 .lp-stage.is-ready .lp-stage__canvas { opacity: 1; }
 
@@ -158,12 +172,12 @@
   position: absolute; z-index: 3;
   right: max(var(--lp-gutter), calc((100% - var(--lp-maxw)) / 2 + var(--lp-gutter)));
   bottom: clamp(48px, 9vh, 96px);
-  width: 280px;
+  width: 320px;
   padding: 16px 16px 12px;
   border: 1px solid var(--lp-rule);
   border-radius: var(--lp-radius);
-  background: color-mix(in srgb, var(--lp-ground-2) 86%, transparent);
-  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--lp-ground-2) 72%, transparent);
+  backdrop-filter: blur(14px);
   font-size: var(--lp-fs-s);
 }
 .lp-takeoff figcaption { display: grid; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid var(--lp-rule); }
@@ -200,45 +214,67 @@
 .lp-sec__head h2, .lp-raise h2, .lp-faq h2, .lp-close h2 { font-size: var(--lp-fs-h2); }
 .lp-sec__head p { color: var(--lp-ink-2); max-width: 36em; }
 
-/* ---- how it works: the house going up -------------------------------------- */
-.lp-raise { position: relative; border-top: 1px solid var(--lp-rule); background: radial-gradient(70% 60% at 70% 55%, var(--lp-glow), transparent 70%), var(--lp-ground); }
-.lp-raise__pin { position: relative; }
-.lp-raise__canvas { display: none; }
-.lp-raise__copy { padding-block: var(--lp-sec); }
-.lp-raise__copy > p { margin-top: 20px; color: var(--lp-ink-2); max-width: 30em; }
-.lp-raise__steps { list-style: none; padding: 0; margin-top: 40px; display: grid; gap: 0; max-width: 480px; }
+/* ---- how it works: the house going up on its own ----------------------------- */
+.lp-raise { position: relative; isolation: isolate; min-height: max(680px, 100svh); display: flex; align-items: center; border-top: 1px solid var(--lp-rule); }
+.lp-raise__canvas { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; display: block; }
+.lp-raise__haze { position: absolute; left: 30%; right: -4%; top: -4%; bottom: -4%; }
+.lp-raise__copy { position: relative; z-index: 2; padding-block: 96px; pointer-events: none; }
+.lp-raise__copy .lp-glass { max-width: 500px; pointer-events: auto; }
+.lp-raise__copy p { color: var(--lp-ink-2); }
+.lp-glass > p { margin-top: 20px; max-width: 30em; }
+.lp-raise__steps { list-style: none; padding: 0; margin-top: 40px; display: grid; gap: 0; }
 .lp-raise__steps li { padding: 20px 0 20px 48px; border-top: 1px solid var(--lp-rule); position: relative; }
 .lp-raise__n { position: absolute; left: 0; top: 16px; font: 600 26px/1 var(--lp-f-display); color: var(--lp-ink-3); }
-.lp-raise__steps p { margin-top: 8px; color: var(--lp-ink-2); font-size: 16px; }
-
-/* with script and motion: the section is a tall track, the stage stays pinned */
-.lp-raise.is-live { height: 460vh; }
-.lp-raise.is-live .lp-raise__pin { position: sticky; top: var(--lp-nav-h); height: calc(100svh - var(--lp-nav-h)); overflow: hidden; }
-.lp-raise.is-live .lp-raise__canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
-.lp-raise.is-live .lp-raise__copy { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; justify-content: center; padding-block: 32px 48px; pointer-events: none; }
-.lp-raise.is-live .lp-raise__copy > * { max-width: 470px; }
-.lp-raise.is-live .lp-raise__steps li { transition: opacity 400ms var(--lp-ease), transform 400ms var(--lp-ease); opacity: 0.32; }
-.lp-raise.is-live .lp-raise__steps li.is-done { opacity: 0.55; }
-.lp-raise.is-live .lp-raise__steps li.is-on { opacity: 1; transform: translateX(6px); }
+.lp-raise__steps p { margin-top: 8px; font-size: 16px; }
+.lp-raise.is-live .lp-raise__steps li { transition: opacity 400ms var(--lp-ease), transform 400ms var(--lp-ease); opacity: 0.4; }
+.lp-raise.is-live .lp-raise__steps li.is-done { opacity: 0.6; }
+.lp-raise.is-live .lp-raise__steps li.is-on { opacity: 1; transform: translateX(8px); }
 .lp-raise.is-live .lp-raise__steps li.is-on .lp-raise__n { color: var(--lp-accent); }
 .lp-raise.is-live .lp-raise__steps li:not(.is-on) p { display: none; }
 @media (max-width: 899px) {
-  .lp-raise.is-live { height: 380vh; }
-  .lp-raise.is-live .lp-raise__copy { justify-content: flex-end; padding-block: 24px 28px; }
-  .lp-raise.is-live .lp-raise__copy > p { display: none; }
-  .lp-raise.is-live .lp-raise__copy h2 { font-size: clamp(2.1rem, 9vw, 2.8rem); }
-  .lp-raise.is-live .lp-raise__steps { margin-top: 20px; }
-  .lp-raise.is-live .lp-raise__steps li:not(.is-on) { display: none; }
-  .lp-raise.is-live .lp-raise__steps li { background: color-mix(in srgb, var(--lp-ground) 70%, transparent); }
+  .lp-raise { flex-direction: column; align-items: stretch; }
+  .lp-raise__canvas { position: relative; inset: auto; height: 52svh; min-height: 320px; }
+  .lp-raise__haze { left: 4%; right: 4%; top: 2%; bottom: auto; height: 48svh; }
+  .lp-raise__copy { padding-block: 8px 64px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lp-raise.is-live .lp-raise__steps li { transition: none; transform: none; }
 }
 
+/* ---- glass: the backdrop blurs behind text and 3D, sharp everywhere else -------- */
+.lp-glass, .lp-hero__copy { position: relative; isolation: isolate; }
+.lp-glass::before, .lp-hero__copy::before, .lp-stage__haze, .lp-raise__haze {
+  content: ""; pointer-events: none;
+  backdrop-filter: blur(16px) saturate(0.85);
+  -webkit-backdrop-filter: blur(16px) saturate(0.85);
+  background: color-mix(in srgb, var(--lp-ground) 24%, transparent);
+  mask-image: radial-gradient(closest-side, var(--lp-ground) 30%, transparent);
+  -webkit-mask-image: radial-gradient(closest-side, var(--lp-ground) 30%, transparent);
+}
+.lp-glass::before, .lp-hero__copy::before { position: absolute; inset: -120px -180px; z-index: -1; }
+@media (max-width: 899px) { .lp-glass::before, .lp-hero__copy::before { inset: -40px calc(-1 * var(--lp-gutter)); } }
+
+/* sections of text sit on frosted bands; between them, windows onto the valley */
+.lp--forest .lp-sec, .lp--forest .lp-close, .lp--forest .lp-foot {
+  position: relative;
+  background: color-mix(in srgb, var(--lp-ground) 58%, transparent);
+  backdrop-filter: blur(18px) saturate(0.85);
+  -webkit-backdrop-filter: blur(18px) saturate(0.85);
+}
+.lp--forest .lp-pricing { background: color-mix(in srgb, var(--lp-ground-2) 70%, transparent); }
+.lp-vista { height: 36vh; border-top: 1px solid var(--lp-rule); }
+
+/* the backdrop itself */
+.lp-forest { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; pointer-events: none; opacity: 0; transition: opacity 900ms var(--lp-ease); }
+.lp-forest.is-ready { opacity: 1; }
+.lp--forest > main, .lp--forest > .lp-foot { position: relative; z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .lp-forest { transition: none; } }
+
 /* ---- features ------------------------------------------------------------------ */
 .lp-fgroup { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 32px; padding: 40px 0; border-top: 1px solid var(--lp-rule); }
 .lp-fgroup h3 { font: 600 clamp(1.7rem, 2.6vw, 2.3rem)/1.05 var(--lp-f-display); color: var(--lp-sage); position: sticky; top: 96px; align-self: start; }
 .lp-fgroup dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 40px; }
+@media (min-width: 1360px) { .lp-fgroup dl { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .lp-fgroup dt { font-weight: 600; color: var(--lp-ink); }
 .lp-fgroup dd { margin-top: 8px; color: var(--lp-ink-2); font-size: 16px; }
 @media (max-width: 860px) {
@@ -295,7 +331,7 @@
 @media (max-width: 860px) { .lp-faq__in { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---- close ---------------------------------------------------------------------------------- */
-.lp-close { padding-block: var(--lp-sec); border-top: 1px solid var(--lp-rule); background: radial-gradient(80% 90% at 20% 100%, var(--lp-moss), transparent 70%), var(--lp-ground); }
+.lp-close { padding-block: var(--lp-sec); border-top: 1px solid var(--lp-rule); background: var(--lp-ground); }
 .lp-close__in { display: grid; gap: 32px; justify-items: start; }
 .lp-close h2 { font-size: clamp(3rem, 7vw, 6.5rem); max-width: 16ch; }
 

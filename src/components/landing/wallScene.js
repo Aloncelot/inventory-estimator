@@ -16,6 +16,7 @@ export function sceneColors(el) {
     lumber: read('--lp-3d-lumber', '#d6cfb9'),
     osb: read('--lp-3d-osb', '#8f8c76'),
     steel: read('--lp-3d-steel', '#4c5450'),
+    pt: read('--lp-3d-pt', '#7d8f6a'),
     grain: read('--lp-3d-grain', '#e4ead9'),
     spark: read('--lp-3d-spark', '#f3e6c4'),
     ground: read('--lp-ground', '#0c100e'),
@@ -45,6 +46,7 @@ export function wallGeometry(THREE, framed, colors) {
   const cLumber = new THREE.Color(colors.lumber);
   const cOsb = new THREE.Color(colors.osb);
   const cSteel = new THREE.Color(colors.steel);
+  const cPt = new THREE.Color(colors.pt);
   const ox = framed.length / 2; const oz = framed.depth / 2;
   const tmp = new THREE.Color();
   framed.members.forEach((m, i) => {
@@ -53,6 +55,7 @@ export function wallGeometry(THREE, framed, colors) {
     const v = m.kind === 'steel' ? 0 : (hash(i) - 0.5) * (m.kind === 'osb' ? 0.06 : 0.1);
     tmp.copy(base).offsetHSL(0, 0, v);
     if (m.kind === 'header') tmp.offsetHSL(0, -0.03, -0.05);
+    if (m.note === 'PT') tmp.lerp(cPt, 0.45);           // pressure treated: a greener cast
     const cx = (m.x + m.w / 2 - ox) * FT; const cy = (m.y + m.h / 2) * FT; const cz = (m.z + m.d / 2 - oz) * FT;
     const hx = (m.w / 2) * FT; const hy = (m.h / 2) * FT; const hz = (m.d / 2) * FT;
     const c = Math.cos(m.rot || 0); const s = Math.sin(m.rot || 0);
@@ -183,6 +186,9 @@ export function grainsMaterial(THREE, uniforms, colors, pixelRatio) {
       ...uniforms,
       uMorph: { value: 0 },
       uTime: { value: 0 },
+      uFade: { value: 1 },
+      uLift: { value: 0 },
+      uReach: { value: 1 },
       uSize: { value: 0.075 * pixelRatio },
       uScale: { value: 600 },
       uInk: { value: new THREE.Color(colors.grain) },
@@ -190,7 +196,7 @@ export function grainsMaterial(THREE, uniforms, colors, pixelRatio) {
     },
     vertexShader: /* glsl */ `
       ${EROSION_GLSL}
-      uniform float uMorph; uniform float uTime; uniform float uSize; uniform float uScale;
+      uniform float uMorph; uniform float uTime; uniform float uSize; uniform float uScale; uniform float uLift; uniform float uReach; uniform float uFade;
       attribute vec3 aHomeA; attribute vec3 aNormA; attribute vec3 aHomeB; attribute vec3 aNormB; attribute vec4 aSeed;
       varying float vAlpha; varying float vSpark;
       void main() {
@@ -205,14 +211,15 @@ export function grainsMaterial(THREE, uniforms, colors, pixelRatio) {
         else if (uMorph < 1.0) e = 1.0;
         else e = lpExposure(aHomeB);
         // 65% stay close, 26% drift a little, 9% travel farther
-        float reach = far < 0.65 ? 0.18 : far < 0.91 ? 0.55 : 1.5;
+        float reach = (far < 0.65 ? 0.18 : far < 0.91 ? 0.55 : 1.5) * uReach;
         vec3 flow = vec3(sin(home.y * 1.7 + uTime * 0.6 + seed * 6.28), sin(home.x * 1.3 - uTime * 0.5), cos(home.x * 0.9 + home.y + uTime * 0.4)) ;
         vec3 p = home + (nrm * 0.12 + flow * 0.22) * reach * e;
         p += vec3(0.0, 0.9 + far * 1.6, (seed - 0.5) * 3.2) * sin(3.14159 * m) * step(0.0001, uMorph) * step(uMorph, 0.9999);
+        p.y += uLift * (0.4 + far) * e;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
         gl_PointSize = uSize * uScale / -mv.z * (0.6 + seed * 0.8);
-        vAlpha = smoothstep(0.32, 0.62, e);
+        vAlpha = smoothstep(0.32, 0.62, e) * uFade;
         vSpark = step(0.94, aSeed.z);
       }
     `,
@@ -285,7 +292,7 @@ export function floorGrid(THREE, colors) {
 
 /** Key, cool rim and low fill: one recipe for both scenes. */
 export function addLights(THREE, scene) {
-  scene.add(new THREE.HemisphereLight('#c9d4cc', '#0b0f0d', 0.55));
+  scene.add(new THREE.HemisphereLight('#c9d4cc', '#3a443e', 0.6));   // lit undersides, so a sheet in flight never goes black
   const key = new THREE.DirectionalLight('#fff4e2', 2.1);
   key.position.set(6, 10, 9);
   scene.add(key);
@@ -295,4 +302,38 @@ export function addLights(THREE, scene) {
   const fill = new THREE.DirectionalLight('#7f9188', 0.35);
   fill.position.set(-4, 1, 10);
   scene.add(fill);
+}
+
+/** Give a geometry a flat vertex colour and make it non-indexed, ready to merge. */
+export function colorize(THREE, geometry, color) {
+  const g = geometry.index ? geometry.toNonIndexed() : geometry;
+  if (!g.attributes.normal) g.computeVertexNormals();
+  const c = new THREE.Color(color);
+  const n = g.attributes.position.count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k);
+  return g;
+}
+
+/** Merge non-indexed geometries (position, normal, colour), each moved by its matrix. */
+export function mergeAt(THREE, parts) {
+  const out = { position: [], normal: [], color: [] };
+  for (const { geometry, matrix } of parts) {
+    const g = geometry.clone();
+    g.applyMatrix4(matrix);
+    for (const k of Object.keys(out)) out[k].push(g.attributes[k].array);
+    g.dispose();
+  }
+  const merged = new THREE.BufferGeometry();
+  for (const [k, arrays] of Object.entries(out)) {
+    const len = arrays.reduce((t, a) => t + a.length, 0);
+    const buf = new Float32Array(len);
+    let at = 0;
+    for (const a of arrays) { buf.set(a, at); at += a.length; }
+    merged.setAttribute(k, new THREE.BufferAttribute(buf, 3));
+  }
+  merged.computeBoundingSphere();
+  return merged;
 }
