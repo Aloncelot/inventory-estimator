@@ -17,6 +17,9 @@ export function sceneColors(el) {
     osb: read('--lp-3d-osb', '#8f8c76'),
     steel: read('--lp-3d-steel', '#4c5450'),
     pt: read('--lp-3d-pt', '#7d8f6a'),
+    zip: read('--lp-3d-zip', '#4f7a4a'),
+    zipFoam: read('--lp-3d-zip-foam', '#cfd3c8'),
+    tape: read('--lp-3d-tape', '#33383a'),
     grain: read('--lp-3d-grain', '#e4ead9'),
     spark: read('--lp-3d-spark', '#f3e6c4'),
     ground: read('--lp-ground', '#0c100e'),
@@ -47,6 +50,8 @@ export function wallGeometry(THREE, framed, colors) {
   const cOsb = new THREE.Color(colors.osb);
   const cSteel = new THREE.Color(colors.steel);
   const cPt = new THREE.Color(colors.pt);
+  const cZip = new THREE.Color(colors.zip); const cFoam = new THREE.Color(colors.zipFoam); const cTape = new THREE.Color(colors.tape);
+  const BASE = { osb: cOsb, steel: cSteel, zip: cZip, zipfoam: cFoam, tape: cTape };
   const ox = framed.length / 2; const oz = framed.depth / 2;
   const tmp = new THREE.Color();
   // an outline [[x, y], ...] (inches) extruded d along z: a cut stringer, a gable sheet
@@ -69,9 +74,9 @@ export function wallGeometry(THREE, framed, colors) {
     }
   };
   framed.members.forEach((m, i) => {
-    const base = m.kind === 'osb' ? cOsb : m.kind === 'steel' ? cSteel : cLumber;
-    // a little variation between boards, none on steel
-    const v = m.kind === 'steel' ? 0 : (hash(i) - 0.5) * (m.kind === 'osb' ? 0.06 : 0.1);
+    const base = BASE[m.kind] || cLumber;
+    // a little variation between boards, none on steel, foam or tape
+    const v = ['steel', 'tape', 'zipfoam'].includes(m.kind) ? 0 : (hash(i) - 0.5) * (m.kind === 'osb' || m.kind === 'zip' ? 0.05 : 0.1);
     tmp.copy(base).offsetHSL(0, 0, v);
     if (m.kind === 'header') tmp.offsetHSL(0, -0.03, -0.05);
     if (m.note === 'PT') tmp.lerp(cPt, 0.45);           // pressure treated: a greener cast

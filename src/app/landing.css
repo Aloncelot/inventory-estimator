@@ -35,6 +35,9 @@
   --lp-3d-spark: #f3e6c4;
   --lp-3d-grid: #26322c;
   --lp-3d-pt: #7d8f6a;
+  --lp-3d-zip: #4f7a4a;        /* ZIP System R-sheathing: green face */
+  --lp-3d-zip-foam: #cfd3c8;   /* its foam backing */
+  --lp-3d-tape: #33383a;       /* ZIP tape: dark grey */
 
   /* the forest backdrop, read by ForestBackdrop.jsx: cold, dark, little saturation */
   --lp-forest-sky-top: #0a0f0f;

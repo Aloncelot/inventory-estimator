@@ -13,6 +13,8 @@ const OSB = 7 / 16;
 const DEPTH = { 4: 3.5, 6: 5.5, 8: 7.25, 10: 9.25, 12: 11.25 };
 const SHEET_W = 48;       // OSB sheets are 4x8
 const SHEET_H = 96;
+const ZIP_FOAM = 1;       // ZIP System R-6: 1" of foam behind the 7/16" panel
+const TAPE = 3.75;        // ZIP System tape width
 
 /** Feet and inches, the way a cut list writes them: 9'-1 1/8", 104 5/8". */
 export function ftIn(inches, { feet = true } = {}) {
@@ -33,7 +35,7 @@ export function ftIn(inches, { feet = true } = {}) {
  * an outline [[x, y], ...] in inches extruded d from z, in place of a box).
  */
 export function frameWall(spec) {
-  const { length: L, height: H, size = 6, oc = 16, openings = [], sheath = 'none', rake = 0, hardware = false, blocking = 0, bearing = false } = spec;
+  const { length: L, height: H, size = 6, oc = 16, openings = [], sheath = 'none', rake = 0, hardware = false, blocking = 0, bearing = false, zip = false } = spec;
   const D = DEPTH[size];
   const members = [];
   const add = (m) => members.push({ z: 0, d: D, ...m });
@@ -119,7 +121,14 @@ export function frameWall(spec) {
   }
 
   // sheathing: 4x8 sheets standing up, a strip ripped from more sheets above
-  // them on a wall taller than 8', all cut around the openings
+  // them on a wall taller than 8', all cut around the openings. OSB, or ZIP
+  // System R-6: a 7/16" green structural panel over 1" of foam, its seams
+  // covered with 3-3/4" ZIP tape.
+  const sheet = (piece) => {
+    if (!zip) { add({ ...piece, kind: 'osb', z: D, d: OSB, nominal: 'OSB' }); return; }
+    add({ ...piece, kind: 'zipfoam', z: D, d: ZIP_FOAM, nominal: 'ZIP R-6' });
+    add({ ...piece, kind: 'zip', z: D + ZIP_FOAM, d: OSB, nominal: 'ZIP R-6' });
+  };
   if (sheath !== 'none' && !rake) {
     const upTo = sheath === 'partial' ? Math.min(L, spec.sheathTo || 96) : L;
     const gap = 1 / 8;
@@ -138,14 +147,29 @@ export function frameWall(spec) {
           for (const [s0, s1] of spans) {
             const y0 = Math.max(s0, b0); const y1 = Math.min(s1, b1);
             if (y1 - y0 < 1) continue;
-            add({ kind: 'osb', x: a + (a === x0 ? gap : 0), y: y0, w: b - a - (a === x0 ? gap : 0) - (b === x1 ? gap : 0), h: y1 - y0, z: D, d: OSB, nominal: 'OSB', len: 0, sheet: x0, strip: band === 1 });
+            sheet({ x: a + (a === x0 ? gap : 0), y: y0, w: b - a - (a === x0 ? gap : 0) - (b === x1 ? gap : 0), h: y1 - y0, len: 0, sheet: x0, strip: band === 1 });
           }
         });
       }
     }
+    // ZIP tape over every seam: the joints between sheets and the strip's
+    // joint, never across an opening
+    if (zip) {
+      const face = D + ZIP_FOAM + OSB;
+      const minus = (lo, hi, holes) => holes.sort((p, q) => p[0] - q[0]).reduce((segs, [h0, h1]) => segs.flatMap(([s0, s1]) => (h1 <= s0 || h0 >= s1 ? [[s0, s1]] : [[s0, h0], [h1, s1]])), [[lo, hi]]).filter(([s0, s1]) => s1 - s0 > 1);
+      for (let sx = SHEET_W; sx < upTo - 1; sx += SHEET_W) {
+        const holes = openings.filter((o) => sx >= o.x && sx <= o.x + o.w).map((o) => [o.sill, o.sill + o.h]);
+        for (const [y0, y1] of minus(0, H, holes)) add({ kind: 'tape', x: sx - TAPE / 2, y: y0, w: TAPE, h: y1 - y0, z: face, d: 0.05, nominal: 'ZIP tape', len: y1 - y0 });
+      }
+      if (H > SHEET_H) {
+        const holes = openings.filter((o) => SHEET_H >= o.sill && SHEET_H <= o.sill + o.h).map((o) => [o.x, o.x + o.w]);
+        for (const [x0, x1] of minus(0, upTo, holes)) add({ kind: 'tape', x: x0, y: SHEET_H - TAPE / 2, w: x1 - x0, h: TAPE, z: face + 0.05, d: 0.05, nominal: 'ZIP tape', len: x1 - x0 });
+      }
+    }
   }
 
-  return { members, length: L, height: rake ? eave + rake * half : H, eave, size, depth: D + (sheath !== 'none' && !rake ? OSB : 0) };
+  const skin = sheath === 'none' || rake ? 0 : zip ? ZIP_FOAM + OSB + 0.1 : OSB;
+  return { members, length: L, height: rake ? eave + rake * half : H, eave, size, depth: D + skin };
 }
 
 const studLabel = (n, len) => `2x${n} stud ${ftIn(len, { feet: false })}`;
@@ -164,20 +188,25 @@ export function takeoff(wall) {
     else if (m.kind === 'steel') bump('Hold-down with anchor');
   }
   // whole sheets standing up, plus the sheets the strips above them are ripped from
-  const osb = wall.members.filter((m) => m.kind === 'osb');
+  const zipWall = wall.members.some((m) => m.kind === 'zip');
+  const osb = wall.members.filter((m) => m.kind === (zipWall ? 'zip' : 'osb'));
   const whole = new Set(osb.filter((m) => !m.strip).map((m) => m.sheet)).size;
   const stripArea = osb.filter((m) => m.strip).reduce((t, m) => t + m.w * m.h, 0);
   const sheets = whole + Math.ceil(stripArea / (SHEET_W * SHEET_H) - 1e-6);
-  if (sheets) bump('7/16" OSB 4x8', sheets);
-  const rank = (d) => (/stud/.test(d) ? 0 : /header|OSB|Hold-down/.test(d) ? 1 : /block|plate/.test(d) ? 2 : 3);
-  return [...rows.entries()].map(([desc, qty]) => [qty, desc]).sort((a, b) => rank(a[1]) - rank(b[1]) || b[0] - a[0]).slice(0, 7);
+  if (sheets) bump(zipWall ? 'ZIP System R-6 sheathing 4x8' : '7/16" OSB 4x8', sheets);
+  const tapeIn = wall.members.filter((m) => m.kind === 'tape').reduce((t, m) => t + m.len, 0);
+  if (tapeIn) bump('LF ZIP System tape, 3-3/4"', Math.ceil(tapeIn / 12));
+  const rank = (d) => (/stud/.test(d) ? 0 : /header|OSB|ZIP|Hold-down/.test(d) ? 1 : /block|plate/.test(d) ? 2 : 3);
+  return [...rows.entries()].map(([desc, qty]) => [qty, desc]).sort((a, b) => rank(a[1]) - rank(b[1]) || b[0] - a[0]).slice(0, 9);
 }
 
 export const WALLS = [
   {
     key: 'ext',
     name: 'Exterior wall, 2x6',
-    spec: { length: 192, height: 109.125, size: 6, oc: 16, sheath: 'full', openings: [{ x: 64, w: 36, h: 48, sill: 36, header: 10 }] },
+    // usually bearing too: blocked every 4'; ZIP R-6 on the first 12', framing left bare past it
+    spec: { length: 192, height: 109.125, size: 6, oc: 16, bearing: true, zip: true, sheath: 'partial', sheathTo: 144, openings: [{ x: 64, w: 36, h: 48, sill: 36, header: 10 }] },
+    face: 0.5,
   },
   {
     key: 'partition',
