@@ -1,7 +1,8 @@
 // src/components/landing/HouseAssembly.jsx
 // "From the plans to the jobsite": a house goes up on its own, panel by
-// panel (deck, exterior walls, partitions, gables, trusses, gable and roof
-// sheathing) while the five steps of a job light up. Finished, it stands for
+// panel (deck, 8' exterior wall panels one at a time, partitions, gables,
+// trusses, then OSB sheet by sheet on the walls, gables and roof) while the
+// five steps of a job light up. Finished, it stands for
 // 10 seconds, comes apart into grains and starts again. It runs only while
 // the section is on screen. The steps are an ordinary list: without script,
 // or with reduced motion, the finished house and every step are simply there.
@@ -62,15 +63,14 @@ export default function HouseAssembly({ steps }) {
       const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.02 });
       const cache = new Map();
       const geometryOf = (p) => {
-        const key = p.framed || (p.box ? `box:${p.box.join(',')}` : `gable:${p.gable.half}`);
+        const key = p.framed || (p.box ? `box:${p.box.join(',')}` : `poly:${JSON.stringify(p.poly)}`);
         if (cache.has(key)) return cache.get(key);
         let g;
         if (p.framed) g = wallGeometry(THREE, p.framed, colors);
         else if (p.box) g = colorize(THREE, new THREE.BoxGeometry(...p.box), colors.osb);
         else {
-          const { half, eave, peak } = p.gable;
-          const shape = new THREE.Shape();
-          shape.moveTo(-half, 0); shape.lineTo(half, 0); shape.lineTo(half, eave); shape.lineTo(0, peak); shape.lineTo(-half, eave); shape.closePath();
+          // a sheet cut to the gable's rake, extruded to 7/16"
+          const shape = new THREE.Shape(p.poly.map(([x, y]) => new THREE.Vector2(x, y)));
           g = colorize(THREE, new THREE.ExtrudeGeometry(shape, { depth: 7 / 16 / 12, bevelEnabled: false }), colors.osb);
         }
         cache.set(key, g);

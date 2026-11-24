@@ -192,6 +192,12 @@
 .lp-takeoff__list td { padding: 4px 0; border-bottom: 1px solid var(--lp-rule); color: var(--lp-ink-2); vertical-align: top; }
 .lp-takeoff__list td:first-child { width: 34px; color: var(--lp-ink); font-weight: 600; }
 .lp-takeoff__list tr:last-child td { border-bottom: 0; }
+.lp-takeoff__more { display: none; }
+.lp-takeoff__more td { color: var(--lp-ink-3); }
+@media (max-width: 1399px) {
+  .lp-takeoff__list tr.is-extra { display: none; }
+  .lp-takeoff__more { display: table-row; }
+}
 .lp-takeoff__ctl { display: flex; gap: 8px; margin-top: 12px; }
 .lp-round {
   display: grid; place-items: center; width: 40px; height: 40px;

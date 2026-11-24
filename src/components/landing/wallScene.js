@@ -49,6 +49,25 @@ export function wallGeometry(THREE, framed, colors) {
   const cPt = new THREE.Color(colors.pt);
   const ox = framed.length / 2; const oz = framed.depth / 2;
   const tmp = new THREE.Color();
+  // an outline [[x, y], ...] (inches) extruded d along z: a cut stringer, a gable sheet
+  const pushPrism = (m, color) => {
+    const pts = m.poly.map(([x, y]) => new THREE.Vector2((x - ox) * FT, y * FT));
+    if (THREE.ShapeUtils.isClockWise(pts)) pts.reverse();
+    const z0 = (m.z - oz) * FT; const z1 = (m.z + m.d - oz) * FT;
+    const tri = (a, b, c, n) => { for (const v of [a, b, c]) { pos.push(...v); nor.push(...n); col.push(color.r, color.g, color.b); } };
+    for (const [i0, i1, i2] of THREE.ShapeUtils.triangulateShape(pts, [])) {
+      const [a, b, c] = [pts[i0], pts[i1], pts[i2]];
+      tri([a.x, a.y, z1], [b.x, b.y, z1], [c.x, c.y, z1], [0, 0, 1]);
+      tri([a.x, a.y, z0], [c.x, c.y, z0], [b.x, b.y, z0], [0, 0, -1]);
+    }
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i]; const b = pts[(i + 1) % pts.length];
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const n = [(b.y - a.y) / len, -(b.x - a.x) / len, 0];
+      tri([a.x, a.y, z0], [b.x, b.y, z0], [b.x, b.y, z1], n);
+      tri([a.x, a.y, z0], [b.x, b.y, z1], [a.x, a.y, z1], n);
+    }
+  };
   framed.members.forEach((m, i) => {
     const base = m.kind === 'osb' ? cOsb : m.kind === 'steel' ? cSteel : cLumber;
     // a little variation between boards, none on steel
@@ -56,6 +75,7 @@ export function wallGeometry(THREE, framed, colors) {
     tmp.copy(base).offsetHSL(0, 0, v);
     if (m.kind === 'header') tmp.offsetHSL(0, -0.03, -0.05);
     if (m.note === 'PT') tmp.lerp(cPt, 0.45);           // pressure treated: a greener cast
+    if (m.poly) { pushPrism(m, tmp); return; }
     const cx = (m.x + m.w / 2 - ox) * FT; const cy = (m.y + m.h / 2) * FT; const cz = (m.z + m.d / 2 - oz) * FT;
     const hx = (m.w / 2) * FT; const hy = (m.h / 2) * FT; const hz = (m.d / 2) * FT;
     const c = Math.cos(m.rot || 0); const s = Math.sin(m.rot || 0);

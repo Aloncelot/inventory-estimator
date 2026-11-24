@@ -28,11 +28,12 @@ export function ftIn(inches, { feet = true } = {}) {
 
 /**
  * Frame one wall. Returns { members, length, height, size } where each member
- * is { kind, x, y, z, w, h, d, rot?, len, nominal } (x/y/z = min corner,
- * w/h/d = size; rot = rotation about z through the member's centre).
+ * is { kind, x, y, z, w, h, d, rot?, poly?, len, nominal } (x/y/z = min corner,
+ * w/h/d = size; rot = rotation about z through the member's centre; poly =
+ * an outline [[x, y], ...] in inches extruded d from z, in place of a box).
  */
 export function frameWall(spec) {
-  const { length: L, height: H, size = 6, oc = 16, openings = [], sheath = 'none', rake = 0, hardware = false, blocking = 0 } = spec;
+  const { length: L, height: H, size = 6, oc = 16, openings = [], sheath = 'none', rake = 0, hardware = false, blocking = 0, bearing = false } = spec;
   const D = DEPTH[size];
   const members = [];
   const add = (m) => members.push({ z: 0, d: D, ...m });
@@ -93,12 +94,22 @@ export function frameWall(spec) {
     if (o.sill > 0) lumber('plate', o.x, o.sill - T, o.w, T, { role: 'sill' });
   }
 
-  // a row of blocking at mid height (shear walls)
-  if (blocking) {
-    const studs = members.filter((m) => m.kind === 'stud').map((m) => m.x).sort((a, b) => a - b);
-    for (let i = 0; i < studs.length - 1; i++) {
-      const w = studs[i + 1] - studs[i] - T;
-      if (w > 2) lumber('block', studs[i] + T, blocking - T / 2, w, T, { len: w });
+  // horizontal blocking: a row every 4' of height on a bearing wall (always)
+  // and on any wall over 10' (gables included, measured to the peak), plus
+  // any row the spec asks for (a shear wall's mid-height row)
+  const tallest = rake ? eave + rake * half : H;
+  const rows = new Set(typeof blocking === 'number' && blocking ? [blocking] : Array.isArray(blocking) ? blocking : []);
+  if (bearing || tallest > 120) for (let y = 48; y < tallest - 2 * T - 4; y += 48) rows.add(y);
+  const verticals = members.filter((m) => m.kind === 'stud' || m.kind === 'cripple');
+  for (const row of [...rows].sort((a, b) => a - b)) {
+    const y = row - T / 2;
+    const at = verticals.filter((m) => m.y < y && m.y + m.h > y + T).map((m) => m.x).sort((a, b) => a - b);
+    for (let i = 0; i < at.length - 1; i++) {
+      const x = at[i] + T; const w = at[i + 1] - x;
+      if (w <= 2) continue;
+      // never across an opening
+      const blocked = openings.some((o) => x < o.x + o.w + T && x + w > o.x - T && y + T > o.sill - 2 * T && y < o.sill + o.h + DEPTH[o.header]);
+      if (!blocked) lumber('block', x, y, w, T, { len: w });
     }
   }
 
@@ -158,8 +169,8 @@ export function takeoff(wall) {
   const stripArea = osb.filter((m) => m.strip).reduce((t, m) => t + m.w * m.h, 0);
   const sheets = whole + Math.ceil(stripArea / (SHEET_W * SHEET_H) - 1e-6);
   if (sheets) bump('7/16" OSB 4x8', sheets);
-  const rank = (d) => (/stud/.test(d) ? 0 : /header|OSB|Hold-down/.test(d) ? 1 : /plate/.test(d) ? 2 : 3);
-  return [...rows.entries()].map(([desc, qty]) => [qty, desc]).sort((a, b) => rank(a[1]) - rank(b[1]) || b[0] - a[0]).slice(0, 6);
+  const rank = (d) => (/stud/.test(d) ? 0 : /header|OSB|Hold-down/.test(d) ? 1 : /block|plate/.test(d) ? 2 : 3);
+  return [...rows.entries()].map(([desc, qty]) => [qty, desc]).sort((a, b) => rank(a[1]) - rank(b[1]) || b[0] - a[0]).slice(0, 7);
 }
 
 export const WALLS = [
@@ -186,7 +197,7 @@ export const WALLS = [
   {
     key: 'bearing',
     name: 'Bearing wall, 2x6 at 24" o.c.',
-    spec: { length: 216, height: 121.125, size: 6, oc: 24, sheath: 'partial', sheathTo: 144, openings: [{ x: 30, w: 48, h: 60, sill: 30, header: 12 }, { x: 138, w: 48, h: 60, sill: 30, header: 12 }] },
+    spec: { length: 216, height: 121.125, size: 6, oc: 24, bearing: true, sheath: 'partial', sheathTo: 144, openings: [{ x: 30, w: 48, h: 60, sill: 30, header: 12 }, { x: 138, w: 48, h: 60, sill: 30, header: 12 }] },
   },
 ].map((w) => {
   const framed = frameWall(w.spec);

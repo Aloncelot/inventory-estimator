@@ -1,14 +1,14 @@
 // src/components/landing/stairs.js
 // A U-shaped stair with a landing, framed the way a framer builds it, for the
-// hero's cycle of models: two flights of 2x12 stringers (a PT 2x4 nailer at
-// the foot, hangers at the top), a landing of 2x10 joists in hangers between a
+// hero's cycle of models: two flights of cut 2x12 stringers (a PT 2x4 nailer
+// at the foot, hangers at the top), a landing of 2x10 joists in hangers, decked
+// with 3/4" CDX, between a
 // two-ply 2x10 beam and a 2x10 ledger, 4x4 posts on post bases with post caps,
 // and a two-ply beam at the upper floor. Inches: x along the run, y up, z
 // across the stair. Same member shape as frameWall (src/components/landing/walls.js).
 
 const T = 1.5;
 const D10 = 9.25;
-const D12 = 11.25;
 const POST = 3.5;
 
 /** Frame the stair. Returns { members, length, depth, height } like frameWall. */
@@ -52,21 +52,32 @@ export function frameStair({ rise = 108, flightW = 36, gap = 4, treads = 6, trea
   add({ kind: 'header', label: '2x10 beam, 2 ply', x: -2 * T, y: upBot, w: 2 * T, h: D10, z: z2, d: flightW });
   for (const pz of [z2, W - POST]) post(-T - POST / 2, pz, upBot);
 
-  // stringers: three per flight, sloped boards under the treads
-  const slope = Math.atan2(half, run);
-  const len = Math.hypot(run, half) - 6;
-  const drop = 3.2;                            // centre line below the nosing line
-  const stringers = (zs, up) => {
-    for (const z of zs) {
-      const cx = run / 2 + Math.sin(slope) * drop * (up ? 1 : -1);
-      const cy = (up ? half / 2 : half + half / 2) - Math.cos(slope) * drop;
-      add({ kind: 'plate', label: '2x12 stringer', x: cx - len / 2, y: cy - D12 / 2, w: len, h: D12, z, d: T, rot: up ? slope : -slope });
-    }
+  // stringers: three per flight, 2x12s cut to the sawtooth the treads and
+  // risers sit on, leaving a 5" throat under the notches
+  const R = half / (treads + 1);               // riser height
+  const slope = Math.atan2(R, tread);
+  const off = 5 / Math.cos(slope);             // the throat, measured plumb
+  const profile = () => {
+    const pts = [[0, 0]];
+    for (let k = 1; k <= treads; k++) { pts.push([tread * (k - 1), k * R], [tread * k, k * R]); }
+    const footX = off * tread / R;
+    pts.push([run, run * R / tread - off], [footX, 0]);
+    return pts;
+  };
+  const up = profile();
+  const stringers = (zs, flip, y0) => {
+    // flight 2 runs back the other way, from the landing deck to the upper floor
+    const poly = flip ? up.map(([x, y]) => [run - x, y + y0]).reverse() : up;
+    for (const z of zs) add({ kind: 'plate', label: '2x12 stringer', poly, x: 0, y: 0, w: run, h: half, z, d: T });
   };
   const zs1 = [0, flightW / 2 - T / 2, flightW - T];
   const zs2 = zs1.map((z) => z + z2);
-  stringers(zs1, true);
-  stringers(zs2, false);
+  stringers(zs1, false, 0);
+  stringers(zs2, true, top + 0.75);
+
+  // 3/4" CDX on the landing joists
+  const cdxSheets = Math.ceil(((x1 - x0) * W) / (48 * 96));
+  add({ kind: 'osb', label: '3/4" CDX plywood 4x8', count: cdxSheets, x: x0, y: top, w: x1 - x0, h: 0.75, z: 0, d: W });
 
   // hangers at the top of each flight: on the landing beam, on the upper beam
   for (const z of zs1) add({ kind: 'steel', label: 'Stringer hanger', x: x0 - 1.6, y: bot - 1, w: 1.6, h: 8, z: z - 0.25, d: T + 0.5 });
@@ -77,15 +88,15 @@ export function frameStair({ rise = 108, flightW = 36, gap = 4, treads = 6, trea
 
   // shift so x starts at 0 (the upper beam sits at x < 0)
   const shift = 2 * T + POST;
-  for (const m of members) m.x += shift;
+  for (const m of members) { m.x += shift; if (m.poly) m.poly = m.poly.map(([x, y]) => [x + shift, y]); }
   return { members, length: x1 + shift, depth: W, height: rise };
 }
 
-const ORDER = ['2x12 stringer', '2x10 landing joist', 'Joist hanger, 2x10', '2x10 ledger', '2x10 beam, 2 ply', '4x4 post', 'Post base', 'Post cap', 'Stringer hanger', '2x4 nailer, pressure treated'];
+const ORDER = ['2x12 stringer', '2x10 landing joist', 'Joist hanger, 2x10', '2x10 ledger', '3/4" CDX plywood 4x8', '2x10 beam, 2 ply', '4x4 post', 'Post base', 'Post cap', 'Stringer hanger', '2x4 nailer, pressure treated'];
 
 /** The material list in the order a framer reads it: [qty, description]. */
 export function stairTakeoff(stair) {
   const rows = new Map();
-  for (const m of stair.members) if (m.label) rows.set(m.label, (rows.get(m.label) || 0) + 1);
+  for (const m of stair.members) if (m.label) rows.set(m.label, (rows.get(m.label) || 0) + (m.count || 1));
   return ORDER.filter((k) => rows.has(k)).map((k) => [rows.get(k), k]);
 }

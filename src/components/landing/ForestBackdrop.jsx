@@ -228,8 +228,8 @@ export default function ForestBackdrop() {
         const depth = 80 + r() * 1100;
         const x = (r() - 0.5) * (400 + depth * 2);
         const m = new THREE.Mesh(mistGeo, mistMat);
-        m.rotation.x = -Math.PI / 2 + 0.25;
-        m.position.set(x, hills(x, -depth) + 10 + r() * 22, -depth);
+        m.rotation.x = -Math.PI / 2 + 0.12;
+        m.position.set(x, hills(x, -depth) + 1 + r() * 7, -depth);   // low, in the valleys, among the trunks
         m.scale.set(260 + r() * 420, 90 + r() * 120, 1);
         m.userData.speed = 1.5 + r() * 3;
         m.userData.x0 = x;

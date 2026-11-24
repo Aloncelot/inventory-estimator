@@ -303,9 +303,12 @@ export default function HeroWall() {
         <table className="lp-takeoff__list">
           <caption className="lp-sr">Materials for this wall</caption>
           <tbody>
-            {wall.list.map(([q, d]) => (
-              <tr key={d}><td>{q}</td><td>{d}</td></tr>
+            {wall.list.map(([q, d], i) => (
+              <tr key={d} className={i >= 7 ? 'is-extra' : undefined}><td>{q}</td><td>{d}</td></tr>
             ))}
+            {wall.list.length > 7 ? (
+              <tr className="lp-takeoff__more"><td /><td>and {wall.list.length - 7} more items</td></tr>
+            ) : null}
           </tbody>
         </table>
         <div className="lp-takeoff__ctl">
