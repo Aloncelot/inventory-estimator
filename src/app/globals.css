@@ -1372,6 +1372,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 13px; height: 13px;
 .plan-lf { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); }
 .pt-double { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 8px; border: 1px dashed var(--border-strong); border-radius: 6px; }
 .pt-double__head { grid-column: 1 / -1; font-size: var(--fs-s); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-300); }
+.pt-double__swap { grid-column: 1 / -1; justify-self: start; display: inline-flex; align-items: center; gap: 6px; }
 
 /* ── Layout check from the plan ───────────────────────────────────────── */
 .bv-k-exterior { --anatomy-top:#f1d3cf; --anatomy-shade-0:#c98a82; --anatomy-shade-1:#d59c95; --anatomy-shade-2:#e0aea8; --anatomy-shade-3:#eac1bb; }

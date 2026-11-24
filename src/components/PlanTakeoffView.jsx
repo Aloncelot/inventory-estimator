@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScanLine, Upload, MousePointer2, PenLine, Ruler, Trash2, ZoomIn, ZoomOut, Maximize2,
   Link2, Unlink, RefreshCw, TriangleAlert, CopyCheck, DoorOpen, X, Plus, Columns2, Copy, Anchor, Minus, SquareDashed,
-  Lock, LockOpen,
+  Lock, LockOpen, ArrowLeftRight,
 } from 'lucide-react';
 import { LockMixed, GripOn, GripOff } from '@/components/PlanIcons';
 import { moveWall, setEnd } from '@/domain/plans/move';
@@ -37,7 +37,7 @@ import { extractSheet } from '@/lib/pdflib';
 import { alignSheets, readStructural, placeStructural, removeStructural, addStructWalls, UNLABELED_POSTS, SHEAR_DEFAULTS } from '@/domain/plans/structural';
 import { SHEAR_TYPES } from '@/domain/plans/hardware';
 import { onConcrete as isOnConcrete } from '@/domain/plans/loose';
-import { PLAN_KINDS, WALL_SIZES, KIND_LABEL, normWall, isDoubleWall, standardThick, thickSize, followThick, planGroups, groupKeysOf, wallLengthFt, storeWalls, mergeRedetect, planJunctions } from '@/domain/plans/sync';
+import { PLAN_KINDS, WALL_SIZES, KIND_LABEL, normWall, isDoubleWall, standardThick, thickSize, followThick, planGroups, groupKeysOf, wallLengthFt, storeWalls, mergeRedetect, planJunctions, firstWallSide, doubleWallBands } from '@/domain/plans/sync';
 import { JUNCTION_DEFAULTS } from '@/domain/plans/junctions';
 
 const COMMON_SCALES = [`1/16" = 1'-0"`, `3/32" = 1'-0"`, `1/8" = 1'-0"`, `3/16" = 1'-0"`, `1/4" = 1'-0"`, `3/8" = 1'-0"`, `1/2" = 1'-0"`, `3/4" = 1'-0"`, `1" = 1'-0"`];
@@ -440,8 +440,18 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, grip, onSelect, onM
             const ux = (w.x2 - w.x1) / L, uy = (w.y2 - w.y1) / L;
             return (
               <g key={w.id} data-wall={w.id} onPointerEnter={() => setHover(w.id)} onPointerLeave={() => setHover((h) => (h === w.id ? null : h))}>
-                <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke={on ? '#ff7a00' : colors[w.kind] || '#555'} strokeOpacity={on ? 0.95 : 0.6} strokeWidth={t} />
-                {isDoubleWall(w) ? <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke={colors[w.kind2 || 'partition']} strokeOpacity={0.9} strokeWidth={t * 0.4} /> : null}
+                {isDoubleWall(w) ? (
+                  // a double wall: two bands side by side, each as wide as its studs, gap between
+                  <>
+                    <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke="transparent" strokeWidth={t} />
+                    {doubleWallBands(w, firstWallSide(w, walls, k), t).map((b, i) => (hidden[b.kind] && !on ? null : (
+                      <line key={i} x1={w.x1 + uy * b.off} y1={w.y1 - ux * b.off} x2={w.x2 + uy * b.off} y2={w.y2 - ux * b.off}
+                        stroke={on ? '#ff7a00' : colors[b.kind] || '#555'} strokeOpacity={on ? 0.95 : 0.75} strokeWidth={b.width} />
+                    )))}
+                  </>
+                ) : (
+                  <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke={on ? '#ff7a00' : colors[w.kind] || '#555'} strokeOpacity={on ? 0.95 : 0.6} strokeWidth={t} />
+                )}
                 {(w.openings || []).map((o, i) => {
                   if (hidden[o.type === 'door' ? 'door' : 'window']) return null;
                   const od = opDrag.current;
@@ -839,7 +849,7 @@ export default function PlanTakeoffView() {
         const cur = { ...w, ...normWall(w) }; // older '(2)2x4' sizes become double + two sizes
         const p2 = typeof patch === 'function' ? patch(cur) : patch;
         let next = { ...cur, ...p2, auto: false };
-        if (!next.double) { delete next.kind2; delete next.size2; }
+        if (!next.double) { delete next.kind2; delete next.size2; delete next.sidesFlip; }
         // a new type or studs redraws a wall drawn at its standard thickness
         if (['kind', 'size', 'kind2', 'size2', 'double'].some((k) => k in p2)) next = followThick(cur, next);
         return next;
@@ -1245,6 +1255,7 @@ export default function PlanTakeoffView() {
                     // turning a wall double: the 2nd wall starts as a partition with the same studs
                     patchWalls(sel.map((w) => w.id), (w) => (patch.double && !w.double ? { ...patch, kind2: w.kind2 || 'partition', size2: w.size } : patch));
                   }}
+                  onSwapSides={() => patchWalls(sel.map((w) => w.id), (w) => (w.sidesFlip ? { sidesFlip: false } : { sidesFlip: true }))}
                   onDelete={() => deleteWalls(sel.map((w) => w.id))}
                   onLock={(on) => setUnlocked(sel.map((w) => w.id), on)}
                   onOpenings={(fn) => sel.length === 1 && patchOpenings(sel[0].id, fn)}
@@ -1472,7 +1483,7 @@ function ThickField({ wall, onPatch }) {
   );
 }
 
-function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onLock, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
+function SelectionPanel({ walls, ptPerFt, onPatch, onSwapSides, onSetLength, onDelete, onLock, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
   const one = walls.length === 1 ? walls[0] : null;
   const isExterior = one ? normWall(one).kind === 'exterior' : false;
   const norm = walls.map(normWall);
@@ -1531,6 +1542,10 @@ function SelectionPanel({ walls, ptPerFt, onPatch, onSetLength, onDelete, onLock
           <span className="pt-double__head">2nd wall</span>
           <label className="fld"><span>Type</span>{typeSelect(kind2, 'kind2', false)}</label>
           <label className="fld"><span>Studs</span>{studSelect(size2, 'size2')}</label>
+          <button type="button" className="ew-btn ew-btn--ghost pt-double__swap" onClick={onSwapSides}
+            title="Puts the 1st wall on the other side, on the drawing and in Layout check. Exterior walls start with the 1st wall outside; interior ones, on the left of the direction the wall was drawn">
+            <ArrowLeftRight size={14} /> Swap sides
+          </button>
         </div>
       ) : (
         <>

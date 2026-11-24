@@ -24,7 +24,7 @@
 import { panelize, studPositions, sheetLayout } from '../estimate/layout';
 import { computeWallSection, pieceLength } from '../estimate';
 import { cutLinear, cutSheets } from '../lib/cutting';
-import { normWall, wallLengthFt, KIND_LABEL, groupRank, postWidthIn, planJunctions } from './sync';
+import { normWall, wallLengthFt, KIND_LABEL, groupRank, postWidthIn, planJunctions, firstWallSide } from './sync';
 import { JUNCTION_DEFAULTS } from './junctions';
 
 const n = (v) => Number(v) || 0;
@@ -322,6 +322,8 @@ export function planModel(level, { panelLenFt = 8, sheathing = 'vertical' } = {}
     const list = nw.double ? [{ kind: nw.kind, size: nw.size }, { kind: nw.kind2, size: nw.size2 }] : [{ kind: nw.kind, size: nw.size }];
     const depths = list.map((p) => STUD_DEPTH[p.size] || 3.5);
     const total = depths.reduce((a, b) => a + b, 0) + (list.length - 1) * DOUBLE_GAP;
+    // the 1st wall's side (the sheet's left normal is nrm here): the same side Plan takeoff draws it on
+    const first = nw.double ? firstWallSide(w, walls, k) : 1;
     const types = new Map((plan.openingTypes || []).map((t) => [t.id, t]));
     const pTypes = new Map((plan.postTypes || []).map((t) => [t.id, t]));
     const wallPosts = (w.posts || []).map((p) => {
@@ -335,9 +337,9 @@ export function planModel(level, { panelLenFt = 8, sheathing = 'vertical' } = {}
       const key = keyOf(p.kind, p.size);
       const sec = sections[key];
       const depth = depths[i];
-      const off = list.length === 1 ? 0 : i === 0 ? -total / 2 + depth / 2 : total / 2 - depth / 2;
+      const off = list.length === 1 ? 0 : i === 0 ? first * (total / 2 - depth / 2) : -first * (total / 2 - depth / 2);
       // double wall: the shear wall's sheets go between the two walls (flip: on its outer face)
-      const between = i === 0 ? 1 : -1;
+      const between = i === 0 ? -first : first;
       const otherSide = list.length === 1 ? outside : w.sheathFlip ? -between : between;
       const sheathed = p.kind === 'exterior' || p.kind === 'shear';
       const heightIn = (n(sec?.heightFt) || 12) * 12;

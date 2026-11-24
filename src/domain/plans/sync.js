@@ -78,6 +78,62 @@ export function standardThick(w = {}) {
   return n.double ? depth(n.size) + depth(n.size2) + finish + DOUBLE_GAP_IN : depth(n.size) + finish;
 }
 
+/* ── double walls: which side each of the two walls is on ── */
+
+function rayHits(ax, ay, bx, by, o) {
+  const den = (bx - ax) * (o.y2 - o.y1) - (by - ay) * (o.x2 - o.x1);
+  if (Math.abs(den) < 1e-9) return false;
+  const t = ((o.x1 - ax) * (o.y2 - o.y1) - (o.y1 - ay) * (o.x2 - o.x1)) / den;
+  const u = ((o.x1 - ax) * (by - ay) - (o.y1 - ay) * (bx - ax)) / den;
+  return t > 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+/**
+ * Side of a double wall's 1st wall, along the wall's left normal on the sheet
+ * (+1: left of the direction it was drawn in, −1: right). On an exterior wall
+ * it goes outside the building: the side where rays from the wall meet no other
+ * wall (if both or neither do, the side away from the middle of the plan).
+ * Inside the building it goes left. `sidesFlip` swaps the two walls.
+ * Plan takeoff draws with it and Layout check frames with it, so both agree.
+ */
+export function firstWallSide(w, walls = [], ptPerFt = 12) {
+  const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
+  const ux = (w.x2 - w.x1) / L, uy = (w.y2 - w.y1) / L;
+  const nx = uy, ny = -ux; // left normal on the sheet (y points down)
+  let side = 1;
+  if (normWall(w).kind === 'exterior') {
+    const pts = walls.flatMap((o) => [[o.x1, o.y1], [o.x2, o.y2]]);
+    const cx = pts.reduce((a, q) => a + q[0], 0) / (pts.length || 1);
+    const cy = pts.reduce((a, q) => a + q[1], 0) / (pts.length || 1);
+    const far = Math.max(1, ...pts.map((q) => Math.hypot(q[0] - cx, q[1] - cy))) * 4 + L;
+    const off = Math.max(1, Number(ptPerFt) || 12);
+    const free = [1, -1].map((sg) => [0.25, 0.5, 0.75].every((f) => {
+      const x = w.x1 + ux * L * f + nx * sg * off, y = w.y1 + uy * L * f + ny * sg * off;
+      return !walls.some((o) => o.id !== w.id && rayHits(x, y, x + nx * sg * far, y + ny * sg * far, o));
+    }));
+    const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
+    side = nx * (cx - mx) + ny * (cy - my) > 0 ? -1 : 1;
+    if (free[0] !== free[1]) side = free[0] ? 1 : -1;
+  }
+  return w.sidesFlip ? -side : side;
+}
+
+/**
+ * The two walls of a double wall as bands across its drawn thickness `t`: each
+ * as wide as its studs, with the gap between them. `off` is the band's centre
+ * along the wall's left normal, in the same units as `t`.
+ */
+export function doubleWallBands(w, side, t) {
+  const n = normWall(w);
+  const d1 = STUD_DEPTH_IN[n.size] || STUD_DEPTH_IN['2x4'];
+  const d2 = STUD_DEPTH_IN[n.size2] || STUD_DEPTH_IN['2x4'];
+  const s = t / (d1 + d2 + DOUBLE_GAP_IN);
+  return [
+    { kind: n.kind, width: d1 * s, off: side * (t / 2 - (d1 * s) / 2) },
+    { kind: n.kind2, width: d2 * s, off: -side * (t / 2 - (d2 * s) / 2) },
+  ];
+}
+
 /**
  * Stud size whose standard thickness the wall is drawn at (within ½"), for a
  * single wall; '' when it is drawn at some other thickness.
@@ -250,7 +306,7 @@ export function mergeRedetect(oldWalls = [], removed = [], fresh = [], ptPerFt) 
     if (e) {
       usedEdits.add(e.id);
       out.push({
-        ...w, kind: e.kind, size: e.size, double: e.double, kind2: e.kind2, size2: e.size2, lenFt: e.lenFt, sheathFlip: e.sheathFlip, auto: false,
+        ...w, kind: e.kind, size: e.size, double: e.double, kind2: e.kind2, size2: e.size2, sidesFlip: e.sidesFlip, lenFt: e.lenFt, sheathFlip: e.sheathFlip, auto: false,
         ...(e.openingsEdited ? { openings: e.openings, openingsEdited: true } : {}),
         ...(e.posts?.length ? { posts: e.posts } : {}),
         ...(e.hardware?.length ? { hardware: e.hardware } : {}),
