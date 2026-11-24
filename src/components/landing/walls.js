@@ -1,0 +1,181 @@
+// src/components/landing/walls.js
+// The five wall panels the landing hero cycles through, framed the way a
+// panel shop builds them: plates, studs on layout, king and jack studs, a
+// header and cripples at each opening, OSB in 4x8 / 4x9 / 4x10 sheets.
+// Everything is in inches: x along the wall, y up, z through it (sheathing
+// on +z). The same members give the material list shown beside the model.
+
+const T = 1.5;            // lumber thickness
+const OSB = 7 / 16;
+const DEPTH = { 4: 3.5, 6: 5.5, 8: 7.25, 10: 9.25, 12: 11.25 };
+
+/** Feet and inches, the way a cut list writes them: 9'-1 1/8", 104 5/8". */
+export function ftIn(inches, { feet = true } = {}) {
+  const r = Math.round(inches * 8) / 8;
+  const whole = Math.floor(r + 1e-6);
+  const frac = Math.round((r - whole) * 8);
+  const f = frac ? ` ${frac % 2 ? frac : frac % 4 ? frac / 2 : frac / 4}/${frac % 2 ? 8 : frac % 4 ? 4 : 2}` : '';
+  if (!feet) return `${whole}${f}"`;
+  const ft = Math.floor(whole / 12);
+  const inch = whole % 12;
+  return `${ft}'-${inch}${f}"`;
+}
+
+/**
+ * Frame one wall. Returns { members, length, height, size } where each member
+ * is { kind, x, y, z, w, h, d, rot?, len, nominal } (x/y/z = min corner,
+ * w/h/d = size; rot = rotation about z through the member's centre).
+ */
+export function frameWall(spec) {
+  const { length: L, height: H, size = 6, oc = 16, openings = [], sheath = 'none', rake = 0, hardware = false, blocking = 0 } = spec;
+  const D = DEPTH[size];
+  const members = [];
+  const add = (m) => members.push({ z: 0, d: D, ...m });
+  const lumber = (kind, x, y, w, h, extra = {}) => add({ kind, x, y, w, h, nominal: `2x${size}`, len: Math.max(w, h), ...extra });
+
+  const eave = H;                              // top of the top plates at the ends
+  const top = (x) => eave + (rake ? rake * Math.min(x, L - x) : 0); // top of plates at x
+  const half = L / 2;
+
+  // plates: one bottom plate (pressure treated), a double top plate (sloped on a rake wall)
+  lumber('plate', 0, 0, L, T, { note: 'PT' });
+  if (!rake) {
+    lumber('plate', 0, H - 2 * T, L, T);
+    lumber('plate', 0, H - T, L, T);
+  } else {
+    const run = Math.hypot(half, half * rake);
+    const ang = Math.atan2(half * rake, half);
+    for (const side of [0, 1]) {
+      const cx = side ? half + half / 2 : half / 2;
+      const cy = eave + (half * rake) / 2 - T / (2 * Math.cos(ang));
+      add({ kind: 'plate', x: cx - run / 2, y: cy - T / 2, w: run, h: T, rot: side ? -ang : ang, nominal: `2x${size}`, len: run });
+    }
+  }
+  const studTop = (x) => (rake ? top(x + T / 2) - T / Math.cos(Math.atan(rake)) : H - 2 * T);
+
+  // the layout: studs on centre from the left end, plus the end stud
+  const layout = [];
+  for (let x = 0; x <= L - T; x += oc) layout.push(x === 0 ? 0 : x - T / 2);
+  if (layout[layout.length - 1] < L - T - 0.01) layout.push(L - T);
+
+  const inOpening = (x) => openings.find((o) => x + T > o.x - 2 * T && x < o.x + o.w + 2 * T);
+  for (const x of layout) {
+    const o = inOpening(x);
+    if (!o) { lumber('stud', x, T, T, studTop(x) - T, { len: studTop(x) - T }); continue; }
+    // a layout stud inside an opening becomes cripples above the header and under the sill
+    if (x >= o.x && x + T <= o.x + o.w) {
+      const hTop = o.sill + o.h + DEPTH[o.header];
+      const above = studTop(x) - hTop;
+      if (above > 1) lumber('cripple', x, hTop, T, above, { len: above });
+      if (o.sill > 0) {
+        const below = o.sill - 2 * T;
+        if (below > 1) lumber('cripple', x, T, T, below, { len: below });
+      }
+    }
+  }
+
+  for (const o of openings) {
+    const hd = DEPTH[o.header];
+    const headY = o.sill + o.h;
+    // king studs full height, jack studs to the header
+    lumber('stud', o.x - 2 * T, T, T, studTop(o.x - 2 * T) - T, { len: studTop(o.x - 2 * T) - T, role: 'king' });
+    lumber('stud', o.x + o.w + T, T, T, studTop(o.x + o.w + T) - T, { len: studTop(o.x + o.w + T) - T, role: 'king' });
+    lumber('stud', o.x - T, T, T, headY - T, { len: headY - T, role: 'jack' });
+    lumber('stud', o.x + o.w, T, T, headY - T, { len: headY - T, role: 'jack' });
+    // header: two plies on edge, full wall depth
+    add({ kind: 'header', x: o.x - T, y: headY, w: o.w + 2 * T, h: hd, nominal: `2x${o.header}`, len: o.w + 2 * T, plies: size === 6 ? 3 : 2 });
+    // sill: a flat 2x under a window
+    if (o.sill > 0) lumber('plate', o.x, o.sill - T, o.w, T, { role: 'sill' });
+  }
+
+  // a row of blocking at mid height (shear walls)
+  if (blocking) {
+    const studs = members.filter((m) => m.kind === 'stud').map((m) => m.x).sort((a, b) => a - b);
+    for (let i = 0; i < studs.length - 1; i++) {
+      const w = studs[i + 1] - studs[i] - T;
+      if (w > 2) lumber('block', studs[i] + T, blocking - T / 2, w, T, { len: w });
+    }
+  }
+
+  // hold-downs at both ends
+  if (hardware) {
+    for (const x of [T + 0.1, L - T - 3.1]) add({ kind: 'steel', x, y: T, w: 3, h: 18, z: -0.25, d: D + 0.5, nominal: 'HDU', len: 18 });
+  }
+
+  // sheathing: 4' wide sheets as tall as the wall, cut around the openings
+  if (sheath !== 'none' && !rake) {
+    const upTo = sheath === 'partial' ? Math.min(L, spec.sheathTo || 96) : L;
+    const gap = 1 / 8;
+    for (let sx = 0; sx < upTo; sx += 48) {
+      const x0 = sx; const x1 = Math.min(sx + 48, upTo);
+      // split the sheet at opening edges, then cut the opening out of each strip
+      const cuts = [x0, x1];
+      for (const o of openings) for (const e of [o.x, o.x + o.w]) if (e > x0 && e < x1) cuts.push(e);
+      cuts.sort((a, b) => a - b);
+      for (let i = 0; i < cuts.length - 1; i++) {
+        const a = cuts[i]; const b = cuts[i + 1];
+        const o = openings.find((op) => a >= op.x - 0.01 && b <= op.x + op.w + 0.01);
+        const spans = o ? [[0, o.sill], [o.sill + o.h, H]] : [[0, H]];
+        for (const [y0, y1] of spans) {
+          if (y1 - y0 < 1) continue;
+          add({ kind: 'osb', x: a + (a === x0 ? gap : 0), y: y0, w: b - a - (a === x0 ? gap : 0) - (b === x1 ? gap : 0), h: y1 - y0, z: D, d: OSB, nominal: 'OSB', len: 0, sheet: x0 });
+        }
+      }
+    }
+  }
+
+  return { members, length: L, height: rake ? eave + rake * half : H, eave, size, depth: D + (sheath !== 'none' && !rake ? OSB : 0) };
+}
+
+const studLabel = (n, len) => `2x${n} stud ${ftIn(len, { feet: false })}`;
+
+/** The material list for a framed wall: [qty, description] rows. */
+export function takeoff(wall) {
+  const rows = new Map();
+  const bump = (key, qty = 1) => rows.set(key, (rows.get(key) || 0) + qty);
+  const n = wall.size;
+  for (const m of wall.members) {
+    if (m.kind === 'stud' && !wall.rakeWall) bump(studLabel(n, Math.round(m.len * 8) / 8));
+    else if (m.kind === 'stud' || m.kind === 'cripple') bump(m.kind === 'stud' ? `2x${n} stud, cut to the rake` : `2x${n} cripple`);
+    else if (m.kind === 'plate') bump(m.note === 'PT' ? `2x${n} plate, pressure treated` : m.role === 'sill' ? `2x${n} sill` : `2x${n} plate`);
+    else if (m.kind === 'header') bump(`${m.nominal} header, ${m.plies} ply, ${ftIn(m.len)}`);
+    else if (m.kind === 'block') bump(`2x${n} block`);
+    else if (m.kind === 'steel') bump('Hold-down with anchor');
+  }
+  const sheets = new Set(wall.members.filter((m) => m.kind === 'osb').map((m) => m.sheet)).size;
+  if (sheets) bump(`7/16" OSB 4x${wall.height <= 97.5 ? 8 : wall.height <= 109.5 ? 9 : 10}`, sheets);
+  const rank = (d) => (/stud/.test(d) ? 0 : /header|OSB|Hold-down/.test(d) ? 1 : /plate/.test(d) ? 2 : 3);
+  return [...rows.entries()].map(([desc, qty]) => [qty, desc]).sort((a, b) => rank(a[1]) - rank(b[1]) || b[0] - a[0]).slice(0, 6);
+}
+
+export const WALLS = [
+  {
+    key: 'ext',
+    name: 'Exterior wall, 2x6',
+    spec: { length: 192, height: 109.125, size: 6, oc: 16, sheath: 'full', openings: [{ x: 64, w: 36, h: 48, sill: 36, header: 10 }] },
+  },
+  {
+    key: 'partition',
+    name: 'Interior partition, 2x4',
+    spec: { length: 120, height: 97.125, size: 4, oc: 16, openings: [{ x: 40, w: 38, h: 82.5, sill: 0, header: 6 }] },
+  },
+  {
+    key: 'shear',
+    name: 'Shear wall, 2x6',
+    spec: { length: 96, height: 109.125, size: 6, oc: 16, sheath: 'full', hardware: true, blocking: 48 },
+  },
+  {
+    key: 'gable',
+    name: 'Gable end, 2x4',
+    spec: { length: 168, height: 97.125, size: 4, oc: 16, rake: 6 / 12 },
+  },
+  {
+    key: 'bearing',
+    name: 'Bearing wall, 2x6 at 24" o.c.',
+    spec: { length: 216, height: 121.125, size: 6, oc: 24, sheath: 'partial', sheathTo: 144, openings: [{ x: 30, w: 48, h: 60, sill: 30, header: 12 }, { x: 138, w: 48, h: 60, sill: 30, header: 12 }] },
+  },
+].map((w) => {
+  const framed = frameWall(w.spec);
+  framed.rakeWall = !!w.spec.rake;
+  return { ...w, framed, size: `${ftIn(w.spec.length)} by ${ftIn(framed.height)}`, list: takeoff(framed) };
+});

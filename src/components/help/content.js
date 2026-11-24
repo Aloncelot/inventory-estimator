@@ -6,7 +6,7 @@
 export const HELP = [
   {
     id: 'start', title: 'Getting started',
-    intro: 'Estimate Hub takes a framing job from the plan PDFs to a quote, and then to the warehouse that supplies it.',
+    intro: 'Nebula Estimator takes a framing job from the plan PDFs to a quote, and then to the warehouse that supplies it.',
     sections: [
       { id: 'flow', title: 'How a job goes through it', body: [
         { ol: [
@@ -304,17 +304,17 @@ export const HELP = [
         'A person can hold more than one role. Anyone without a role can see projects but not change them.',
       ] },
       { id: 'invite', title: 'Inviting people', body: [
-        'Admins invite by email. The invitation links to Estimate Hub; the person signs in with that email and joins the company.',
+        'Admins invite by email. The invitation links to Nebula Estimator; the person signs in with that email and joins the company.',
       ] },
     ],
   },
   {
     id: 'about', title: 'About',
-    intro: 'Estimate Hub is built and maintained by QuasarDevs.',
+    intro: 'Nebula Estimator is built and maintained by QuasarDevs.',
     sections: [
       { id: 'who', title: 'Who made it', body: [
         { about: true },
-        'QuasarDevs is the studio of Alonso Correa, a full-stack developer who spent years estimating wall panels for residential framing. Estimate Hub follows the way that work is really done: from the plans to the takeoff, the quote, and the warehouse that supplies the job.',
+        'QuasarDevs is the studio of Alonso Correa, a full-stack developer who spent years estimating wall panels for residential framing. Nebula Estimator follows the way that work is really done: from the plans to the takeoff, the quote, and the warehouse that supplies the job.',
       ] },
       { id: 'contact', title: 'Contact and feedback', body: [
         'Found a mistake, or missing something your shop needs? Send it over; requests from people who use it every day shape what comes next.',

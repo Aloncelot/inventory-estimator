@@ -4,7 +4,7 @@ import './landing.css';
 import { landingFontVars } from './fonts';
 
 export const metadata = {
-  title: 'Estimate Hub: framing estimates from the plans to the warehouse',
+  title: 'Nebula Estimator: framing estimates from the plans to the warehouse',
   description: 'Takeoff from plan PDFs, wall panels, loose material, labor, quotes, change orders, inventory and purchase orders for framing and panel shops.',
 };
 

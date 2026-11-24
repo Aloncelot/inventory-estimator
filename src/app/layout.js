@@ -4,7 +4,7 @@ import { AuthProvider } from "@/AuthContext";
 import { appFontVars } from "./fonts";
 
 export const metadata = {
-  title: "Estimate Hub",
+  title: "Nebula Estimator",
   description: "Framing estimates from the plans: wall panels, loose material, labor, quotes, and the warehouse that supplies them.",
 };
 

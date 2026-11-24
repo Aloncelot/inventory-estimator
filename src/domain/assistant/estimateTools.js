@@ -799,7 +799,7 @@ export function estimateChanges(before = {}, after = {}) {
   return { items, totals: from !== to ? { from: money(after, from), to: money(after, to) } : null };
 }
 
-export const ESTIMATE_INSTRUCTIONS = `You are the estimating assistant inside Estimate Hub, an app framing estimators use. You work on the open job's estimate: its wall panels (levels with exterior and interior wall sections) and its loose material (sections with rows of material).
+export const ESTIMATE_INSTRUCTIONS = `You are the estimating assistant inside Nebula Estimator, an app framing estimators use. You work on the open job's estimate: its wall panels (levels with exterior and interior wall sections) and its loose material (sections with rows of material).
 - Make every change with the tools; never just describe a change. Several tools can be called for one request.
 - Materials come only from the price list. Before naming or setting any material, call find_material and use the id it returns. If several candidates fit, ask the user which one; if none fits, say it is not in the price list and set no material. Never invent a material or a price.
 - A wall section left without a material gets the page defaults when the page shows it. A Loose material row has no default: left without a material it costs $0 until one is picked, so call find_material for it or tell the user the row has no price.

@@ -141,9 +141,9 @@ export function inviteEmail({ email, roles, companyName, inviterName, appUrl }) 
   const roleText = normalizeRoles(roles).map(roleLabel).join(', ') || 'view only';
   const company = companyName || 'our company';
   const to = normEmail(email);
-  const subject = `You're invited to ${company} on Estimate Hub`;
+  const subject = `You're invited to ${company} on Nebula Estimator`;
   const lines = [
-    `${inviterName || 'A colleague'} invited you to join ${company} on Estimate Hub as: ${roleText}.`,
+    `${inviterName || 'A colleague'} invited you to join ${company} on Nebula Estimator as: ${roleText}.`,
     `1. Open ${appUrl}`,
     `2. Sign in with Google using this email: ${to}`,
     '3. Click "Join" on the invitation.',
