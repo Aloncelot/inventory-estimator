@@ -48,6 +48,10 @@
   --lp-forest-tree-3: #16221d;
   --lp-forest-mist: #a3b5b0;
   --lp-forest-light: #b6c6c3;
+  --lp-forest-needle-lit: #5d6f66;
+  --lp-forest-needle: #2f3f37;
+  --lp-forest-needle-dark: #141d19;
+  --lp-forest-trunk: #2a2621;
 
 }
 
@@ -153,7 +157,7 @@
   display: flex; align-items: flex-end;
   background:
     radial-gradient(60% 55% at 68% 48%, var(--lp-glow), transparent 70%),
-    linear-gradient(to bottom, transparent 55%, color-mix(in srgb, var(--lp-ground) 55%, transparent));
+    linear-gradient(to bottom, transparent 45%, color-mix(in srgb, var(--lp-ground) 45%, transparent) 82%, transparent);
 }
 .lp-hero__in { position: relative; z-index: 2; padding-top: 140px; padding-bottom: clamp(48px, 9vh, 96px); pointer-events: none; }
 .lp-hero__copy { max-width: 640px; pointer-events: auto; }
