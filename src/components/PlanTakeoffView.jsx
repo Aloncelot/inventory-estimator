@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScanLine, Upload, MousePointer2, PenLine, Ruler, Trash2, ZoomIn, ZoomOut, Maximize2,
   Link2, Unlink, RefreshCw, TriangleAlert, CopyCheck, DoorOpen, X, Plus, Columns2, Copy, Anchor, Minus, SquareDashed,
-  Lock, LockOpen, ArrowLeftRight,
+  Lock, LockOpen, ArrowLeftRight, Eye, EyeOff,
 } from 'lucide-react';
 import { LockMixed, GripOn, GripOff } from '@/components/PlanIcons';
 import { moveWall, setEnd } from '@/domain/plans/move';
@@ -68,7 +68,7 @@ const fmtLF = (v) => Math.round(Number(v) || 0).toLocaleString('en-US');
 
 /* ───────────────────────── drawing ───────────────────────── */
 
-function PlanCanvas({ plan, imgUrl, selected, tool, display, grip, onSelect, onMoveEnd, onMoveOpening, onMoveWall, onAddGap, onAddWall, onAddOpening, onAddPost, onAddHardware, onAddFloorHole, onAddBlocking, onCalibrate, onDeleteSelected }) {
+function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, tool, display, grip, onSelect, onMoveEnd, onMoveOpening, onMoveWall, onAddGap, onAddWall, onAddOpening, onAddPost, onAddHardware, onAddFloorHole, onAddBlocking, onCalibrate, onDeleteSelected }) {
   const W = plan.w || 2592;
   const H = plan.h || 1728;
   const k = plan.ptPerFt || 0;
@@ -358,6 +358,7 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, grip, onSelect, onM
     if (e.key === '+' || e.key === '=') zoomAt(1.25);
     if (e.key === '-') zoomAt(0.8);
     if (e.key === '0') setView({ x: 0, y: 0, w: W, h: H });
+    if ((e.key === 'p' || e.key === 'P') && imgUrl && onToggleSheet) onToggleSheet();
   };
 
   // while a wall is dragged, it and the walls it grips are drawn where they will go
@@ -393,6 +394,12 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, grip, onSelect, onM
         <span className="ew-subtle">{hint}</span>
         <span className="pt-readout">{readout}</span>
         <span className="pt-zoom">
+          {imgUrl ? (
+            <button type="button" className={`ew-icon-btn pt-sheet-toggle${showSheet ? ' is-on' : ''}`} onClick={onToggleSheet} aria-pressed={showSheet}
+              title={showSheet ? 'Hide the plan sheet (P)' : 'Show the plan sheet (P)'} aria-label={showSheet ? 'Hide the plan sheet' : 'Show the plan sheet'}>
+              {showSheet ? <Eye size={14} /> : <EyeOff size={14} />}
+            </button>
+          ) : null}
           <button type="button" className="ew-icon-btn" onClick={() => zoomAt(0.8)} title="Zoom out (−)" aria-label="Zoom out"><ZoomOut size={14} /></button>
           <span className="lc-tools__val">{Math.round((W / view.w) * 100)}%</span>
           <button type="button" className="ew-icon-btn" onClick={() => zoomAt(1.25)} title="Zoom in (+)" aria-label="Zoom in"><ZoomIn size={14} /></button>
@@ -415,7 +422,7 @@ function PlanCanvas({ plan, imgUrl, selected, tool, display, grip, onSelect, onM
         onKeyDown={onKeyDown}
       >
         <rect x={0} y={0} width={W} height={H} fill="#fff" />
-        {imgUrl ? <image href={imgUrl} x={0} y={0} width={W} height={H} style={{ opacity: 0.55 }} /> : null}
+        {imgUrl && showSheet ? <image href={imgUrl} x={0} y={0} width={W} height={H} style={{ opacity: 0.55 }} /> : null}
         {plan.area ? (
           <path
             d={`M0 0H${W}V${H}H0Z M${plan.area.x0} ${plan.area.y0}V${plan.area.y1}H${plan.area.x1}V${plan.area.y0}Z`}
@@ -623,6 +630,16 @@ export default function PlanTakeoffView() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [imgUrl, setImgUrl] = useState(null);
+  // bumps whenever a PDF is attached again under the same key, so the sheet is drawn again
+  const [sheetRev, setSheetRev] = useState(0);
+  // the plan sheet behind the walls: shown or hidden (remembered in this browser)
+  const [showSheet, setShowSheet] = useState(() => {
+    try { return localStorage.getItem('pt-show-sheet') !== '0'; } catch { return true; }
+  });
+  const toggleSheet = useCallback(() => setShowSheet((v) => {
+    try { localStorage.setItem('pt-show-sheet', v ? '0' : '1'); } catch { /* private mode */ }
+    return !v;
+  }), []);
   const [fileMissing, setFileMissing] = useState(false);
   const [calib, setCalib] = useState(null); // { distPt, ft, inch }
   const pageCache = useRef(new Map()); // fileKey|page → extracted page
@@ -690,7 +707,7 @@ export default function PlanTakeoffView() {
       }
     })();
     return () => { cancelled = true; if (made) URL.revokeObjectURL(made); };
-  }, [plan?.fileKey, plan?.page, openPdf, renderPage]);
+  }, [plan?.fileKey, plan?.page, sheetRev, openPdf, renderPage]);
 
   const extracted = useCallback(async (key, pageNo) => {
     const ck = `${key}|${pageNo}`;
@@ -779,6 +796,7 @@ export default function PlanTakeoffView() {
       const key = `${projectId || 'project'}:${level.id}`;
       await savePlanFile(key, file);
       pageCache.current.clear();
+      setSheetRev((r) => r + 1);
       const pdfjs = await loadPdfjs();
       const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
       setPlan(() => ({ fileName: file.name, fileKey: key, page: 1, pageCount: doc.numPages, linked: Boolean(plan?.linked), walls: [] }));
@@ -794,6 +812,7 @@ export default function PlanTakeoffView() {
     await savePlanFile(plan.fileKey, file);
     pageCache.current.clear();
     setFileMissing(false);
+    setSheetRev((r) => r + 1);
     setPlan((p) => ({ ...p, fileName: file.name }));
   }, [plan?.fileKey, setPlan]);
 
@@ -1221,6 +1240,8 @@ export default function PlanTakeoffView() {
             <PlanCanvas
               plan={plan}
               imgUrl={imgUrl}
+              showSheet={showSheet}
+              onToggleSheet={toggleSheet}
               selected={selected}
               tool={tool}
               onSelect={onSelect}

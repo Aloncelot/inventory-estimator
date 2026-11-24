@@ -1350,6 +1350,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 13px; height: 13px;
 .pt-canvas__bar { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); min-height: 34px; }
 .pt-readout { margin-left: auto; font-weight: 600; color: var(--text-100); white-space: nowrap; }
 .pt-zoom { display: inline-flex; align-items: center; gap: 2px; }
+.pt-sheet-toggle { margin-right: 6px; }
+.pt-sheet-toggle.is-on { color: var(--accent); }
 .pt-svg { display: block; width: 100%; height: min(72vh, 760px); background: #f4f2ef; touch-action: none; outline: none; cursor: grab; }
 .pt-svg:active { cursor: grabbing; }
 .pt-svg.is-add, .pt-svg.is-calibrate { cursor: crosshair; }
