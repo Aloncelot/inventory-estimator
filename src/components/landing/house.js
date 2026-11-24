@@ -75,6 +75,11 @@ const SHEET_L = 96;   // a 4x8 sheet laid horizontally: 8' along the wall
 const SHEET_H = 48;   // and 4' up
 const OSB = 7 / 16;
 const D6 = 5.5; const D4 = 3.5;
+// the roof: 6/12, its sheathing sits on the truss top chords, 64" over the wall
+// plates at the ridge. The gables are framed to stay under that plane, 3/4" clear.
+const PITCH = 6 / 12;
+const ROOF_SEAT = 64;
+const GABLE_EAVE = ROOF_SEAT - (WID / 2) * PITCH - 0.75;
 
 /**
  * The pieces in arrival order. from: where it flies in from (offset in ft);
@@ -137,7 +142,7 @@ export function housePieces() {
 
   const part1 = frameWall({ length: 200, height: WALL_H, size: 4, oc: 16, openings: [{ x: 120, w: 32, h: 82.5, sill: 0, header: 6 }] });
   const part2 = frameWall({ length: 96, height: WALL_H, size: 4, oc: 16, openings: [{ x: 30, w: 32, h: 82.5, sill: 0, header: 6 }] });
-  const gable = frameWall({ length: WID, height: 4.5, size: 4, oc: 16, rake: 6 / 12 });
+  const gable = frameWall({ length: WID, height: GABLE_EAVE, size: 4, oc: 16, rake: PITCH });
   const tr = truss(WID, 6 / 12);
   const dIn = ft(D6 + OSB);
   const gableX = hx - ft(OSB) - ft(D4) / 2;
@@ -161,10 +166,10 @@ export function housePieces() {
 
   // the gables' OSB: horizontal sheets cut to the rake
   const half = WID / 2 - OSB;
-  const outline = [[-half, 0], [half, 0], [half, 4.5], [0, 4.5 + (WID / 2) * 0.5], [-half, 4.5]];
+  const outline = [[-half, 0], [half, 0], [half, GABLE_EAVE], [0, GABLE_EAVE + (WID / 2) * PITCH], [-half, GABLE_EAVE]];
   const gSheets = [];
   for (const side of [-1, 1]) {
-    for (let r0 = 0; r0 < 4.5 + WID / 4; r0 += SHEET_H) {
+    for (let r0 = 0; r0 < GABLE_EAVE + (WID / 2) * PITCH; r0 += SHEET_H) {
       for (let c0 = -half; c0 < half - 0.5; c0 += SHEET_L) {
         const poly = clipToRect(outline, [c0 + 1 / 16, r0 + 1 / 16, Math.min(half, c0 + SHEET_L) - 1 / 16, r0 + SHEET_H - 1 / 16]);
         if (poly.length >= 3) gSheets.push({ key: `gosb${side}${r0}${c0}`, poly: poly.map(([x, y]) => [ft(x), ft(y)]), pos: [side * (hx - ft(OSB)), yTop, 0], ry: (side * Math.PI) / 2, from: [side * 6, 3, 0] });
@@ -175,7 +180,7 @@ export function housePieces() {
 
   // 4x8 OSB on the roof, with a 1' overhang: 4 sheets along the ridge, 3 rows down each side
   const pitch = Math.atan(0.5);
-  const ridge = yTop + ft(60) + ft(4);       // top of the truss top chords at the ridge
+  const ridge = yTop + ft(ROOF_SEAT);        // top of the truss top chords at the ridge
   const slopeLen = (hz + 1) / Math.cos(pitch);
   const cols = [[-15, -7], [-7, 1], [1, 9], [9, 15]];
   const rows = [[0, 4], [4, 8], [8, slopeLen]];
