@@ -124,15 +124,25 @@ export function frameWall(spec) {
   // them on a wall taller than 8', all cut around the openings. OSB, or ZIP
   // System R-6: a 7/16" green structural panel over 1" of foam, its seams
   // covered with 3-3/4" ZIP tape.
-  const sheet = (piece) => {
+  // a gable is sheathed the same way, every sheet and strip cut to the rake
+  const outline = rake ? [[0, 0], [L, 0], [L, eave], [half, eave + rake * half], [0, eave]] : null;
+  const fit = (piece) => {
+    if (!outline) return piece;
+    const poly = clipToRect(outline, [piece.x, piece.y, piece.x + piece.w, piece.y + piece.h]);
+    return poly.length >= 3 ? { ...piece, poly, area: polyArea(poly) } : null;
+  };
+  const sheet = (raw) => {
+    const piece = fit(raw);
+    if (!piece) return;
     if (!zip) { add({ ...piece, kind: 'osb', z: D, d: OSB, nominal: 'OSB' }); return; }
     add({ ...piece, kind: 'zipfoam', z: D, d: ZIP_FOAM, nominal: 'ZIP R-6' });
     add({ ...piece, kind: 'zip', z: D + ZIP_FOAM, d: OSB, nominal: 'ZIP R-6' });
   };
-  if (sheath !== 'none' && !rake) {
+  const sheathTop = rake ? eave + rake * half : H; // highest point the sheathing reaches
+  if (sheath !== 'none') {
     const upTo = sheath === 'partial' ? Math.min(L, spec.sheathTo || 96) : L;
     const gap = 1 / 8;
-    const bands = H > SHEET_H ? [[0, SHEET_H - gap], [SHEET_H, H]] : [[0, H]];
+    const bands = sheathTop > SHEET_H ? [[0, SHEET_H - gap], [SHEET_H, sheathTop]] : [[0, sheathTop]];
     for (let sx = 0; sx < upTo; sx += SHEET_W) {
       const x0 = sx; const x1 = Math.min(sx + SHEET_W, upTo);
       // split the sheet at opening edges, then cut the opening out of each strip
@@ -142,7 +152,7 @@ export function frameWall(spec) {
       for (let i = 0; i < cuts.length - 1; i++) {
         const a = cuts[i]; const b = cuts[i + 1];
         const o = openings.find((op) => a >= op.x - 0.01 && b <= op.x + op.w + 0.01);
-        const spans = o ? [[0, o.sill], [o.sill + o.h, H]] : [[0, H]];
+        const spans = o ? [[0, o.sill], [o.sill + o.h, sheathTop]] : [[0, sheathTop]];
         bands.forEach(([b0, b1], band) => {
           for (const [s0, s1] of spans) {
             const y0 = Math.max(s0, b0); const y1 = Math.min(s1, b1);
@@ -157,20 +167,45 @@ export function frameWall(spec) {
     if (zip) {
       const face = D + ZIP_FOAM + OSB;
       const minus = (lo, hi, holes) => holes.sort((p, q) => p[0] - q[0]).reduce((segs, [h0, h1]) => segs.flatMap(([s0, s1]) => (h1 <= s0 || h0 >= s1 ? [[s0, s1]] : [[s0, h0], [h1, s1]])), [[lo, hi]]).filter(([s0, s1]) => s1 - s0 > 1);
+      const tape = (piece) => { const p = fit(piece); if (p) add({ ...p, kind: 'tape', d: 0.05, nominal: 'ZIP tape' }); };
+      const topAt = (x) => (rake ? eave + rake * Math.min(x, L - x) : H);
       for (let sx = SHEET_W; sx < upTo - 1; sx += SHEET_W) {
         const holes = openings.filter((o) => sx >= o.x && sx <= o.x + o.w).map((o) => [o.sill, o.sill + o.h]);
-        for (const [y0, y1] of minus(0, H, holes)) add({ kind: 'tape', x: sx - TAPE / 2, y: y0, w: TAPE, h: y1 - y0, z: face, d: 0.05, nominal: 'ZIP tape', len: y1 - y0 });
+        for (const [y0, y1] of minus(0, topAt(sx), holes)) tape({ x: sx - TAPE / 2, y: y0, w: TAPE, h: y1 - y0, z: face, len: y1 - y0 });
       }
-      if (H > SHEET_H) {
+      if (sheathTop > SHEET_H) {
         const holes = openings.filter((o) => SHEET_H >= o.sill && SHEET_H <= o.sill + o.h).map((o) => [o.x, o.x + o.w]);
-        for (const [x0, x1] of minus(0, upTo, holes)) add({ kind: 'tape', x: x0, y: SHEET_H - TAPE / 2, w: x1 - x0, h: TAPE, z: face + 0.05, d: 0.05, nominal: 'ZIP tape', len: x1 - x0 });
+        for (const [x0, x1] of minus(0, upTo, holes)) tape({ x: x0, y: SHEET_H - TAPE / 2, w: x1 - x0, h: TAPE, z: face + 0.05, len: x1 - x0 });
       }
     }
   }
 
-  const skin = sheath === 'none' || rake ? 0 : zip ? ZIP_FOAM + OSB + 0.1 : OSB;
+  const skin = sheath === 'none' ? 0 : zip ? ZIP_FOAM + OSB + 0.1 : OSB;
   return { members, length: L, height: rake ? eave + rake * half : H, eave, size, depth: D + skin };
 }
+
+/** Clip a convex polygon to a rectangle (Sutherland-Hodgman). */
+export function clipToRect(poly, [x0, y0, x1, y1]) {
+  const edges = [
+    [(p) => p[0] >= x0, (a, b) => [x0, a[1] + ((b[1] - a[1]) * (x0 - a[0])) / (b[0] - a[0])]],
+    [(p) => p[0] <= x1, (a, b) => [x1, a[1] + ((b[1] - a[1]) * (x1 - a[0])) / (b[0] - a[0])]],
+    [(p) => p[1] >= y0, (a, b) => [a[0] + ((b[0] - a[0]) * (y0 - a[1])) / (b[1] - a[1]), y0]],
+    [(p) => p[1] <= y1, (a, b) => [a[0] + ((b[0] - a[0]) * (y1 - a[1])) / (b[1] - a[1]), y1]],
+  ];
+  let out = poly;
+  for (const [inside, cross] of edges) {
+    const src = out; out = [];
+    for (let i = 0; i < src.length; i++) {
+      const a = src[i]; const b = src[(i + 1) % src.length];
+      if (inside(b)) { if (!inside(a)) out.push(cross(a, b)); out.push(b); } else if (inside(a)) out.push(cross(a, b));
+    }
+    if (!out.length) break;
+  }
+  return out;
+}
+
+/** Area of a polygon [[x, y], ...]. */
+const polyArea = (pts) => Math.abs(pts.reduce((t, [x, y], i) => { const [x2, y2] = pts[(i + 1) % pts.length]; return t + x * y2 - x2 * y; }, 0)) / 2;
 
 const studLabel = (n, len) => `2x${n} stud ${ftIn(len, { feet: false })}`;
 
@@ -191,7 +226,7 @@ export function takeoff(wall) {
   const zipWall = wall.members.some((m) => m.kind === 'zip');
   const osb = wall.members.filter((m) => m.kind === (zipWall ? 'zip' : 'osb'));
   const whole = new Set(osb.filter((m) => !m.strip).map((m) => m.sheet)).size;
-  const stripArea = osb.filter((m) => m.strip).reduce((t, m) => t + m.w * m.h, 0);
+  const stripArea = osb.filter((m) => m.strip).reduce((t, m) => t + (m.area ?? m.w * m.h), 0);
   const sheets = whole + Math.ceil(stripArea / (SHEET_W * SHEET_H) - 1e-6);
   if (sheets) bump(zipWall ? 'ZIP System R-6 sheathing 4x8' : '7/16" OSB 4x8', sheets);
   const tapeIn = wall.members.filter((m) => m.kind === 'tape').reduce((t, m) => t + m.len, 0);
@@ -221,7 +256,9 @@ export const WALLS = [
   {
     key: 'gable',
     name: 'Gable end, 2x4',
-    spec: { length: 168, height: 97.125, size: 4, oc: 16, rake: 6 / 12 },
+    // the same ZIP R-6 and tape as the exterior wall, framing left bare past 10'
+    spec: { length: 168, height: 97.125, size: 4, oc: 16, rake: 6 / 12, zip: true, sheath: 'partial', sheathTo: 120 },
+    face: 0.5,
   },
   {
     key: 'bearing',

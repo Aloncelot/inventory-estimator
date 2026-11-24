@@ -8,7 +8,7 @@
 // and the slice of the build (0 to 1) in which it arrives. A piece is a framed
 // panel (framed), a box (box: [w, h, d], a sheet) or an outline extruded to
 // sheathing thickness (poly: [[x, y], ...] in feet, a sheet cut to a gable).
-import { frameWall } from './walls';
+import { frameWall, clipToRect } from './walls';
 
 const T = 1.5;
 const LEN = 336;      // 28'
@@ -49,26 +49,6 @@ function cutOut(rect, holes) {
     parts = next;
   }
   return parts.filter(([x0, y0, x1, y1]) => x1 - x0 > 1 && y1 - y0 > 1);
-}
-
-/** Clip a convex polygon to a rectangle (Sutherland-Hodgman). */
-function clipToRect(poly, [x0, y0, x1, y1]) {
-  const edges = [
-    [(p) => p[0] >= x0, (a, b) => [x0, a[1] + ((b[1] - a[1]) * (x0 - a[0])) / (b[0] - a[0])]],
-    [(p) => p[0] <= x1, (a, b) => [x1, a[1] + ((b[1] - a[1]) * (x1 - a[0])) / (b[0] - a[0])]],
-    [(p) => p[1] >= y0, (a, b) => [a[0] + ((b[0] - a[0]) * (y0 - a[1])) / (b[1] - a[1]), y0]],
-    [(p) => p[1] <= y1, (a, b) => [a[0] + ((b[0] - a[0]) * (y1 - a[1])) / (b[1] - a[1]), y1]],
-  ];
-  let out = poly;
-  for (const [inside, cross] of edges) {
-    const src = out; out = [];
-    for (let i = 0; i < src.length; i++) {
-      const a = src[i]; const b = src[(i + 1) % src.length];
-      if (inside(b)) { if (!inside(a)) out.push(cross(a, b)); out.push(b); } else if (inside(a)) out.push(cross(a, b));
-    }
-    if (!out.length) break;
-  }
-  return out;
 }
 
 const SHEET_L = 96;   // a 4x8 sheet laid horizontally: 8' along the wall
