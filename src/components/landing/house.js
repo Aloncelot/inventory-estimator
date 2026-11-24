@@ -90,17 +90,22 @@ export function housePieces() {
   const y0 = 1;                               // top of the deck
   const yTop = y0 + ft(WALL_H);
   const hx = ft(LEN) / 2; const hz = ft(WID) / 2;
+  // corners, as a framer laps them: the front and back walls are framed
+  // 7/16" short of the house's length so the side walls' sheathing fits
+  // outside them; the front and back sheathing runs the full length over the
+  // side sheathing's edge, and the side sheathing stops against it.
+  const longLen = LEN - 2 * OSB;
   const sideLen = WID - 2 * (D6 + OSB);
 
   // exterior walls: where the outer face is, which way it faces, its openings (inches from its start)
   const walls = [
-    { key: 'front', len: LEN, ry: 0, face: hz, bearing: true, sheath: [0, LEN],
+    { key: 'front', len: longLen, ry: 0, face: hz, bearing: true, sheath: [-OSB, longLen + OSB],
       openings: [{ x: 40, w: 36, h: 48, sill: 36, header: 10 }, { x: 140, w: 38, h: 82.5, sill: 0, header: 10 }, { x: 214, w: 48, h: 48, sill: 36, header: 10 }] },
-    { key: 'right', len: sideLen, ry: Math.PI / 2, face: hx, bearing: false, sheath: [-(D6 + OSB), sideLen + D6 + OSB],
+    { key: 'right', len: sideLen, ry: Math.PI / 2, face: hx, bearing: false, sheath: [-D6, sideLen + D6],
       openings: [{ x: 110, w: 36, h: 48, sill: 36, header: 10 }] },
-    { key: 'back', len: LEN, ry: Math.PI, face: hz, bearing: true, sheath: [0, LEN],
+    { key: 'back', len: longLen, ry: Math.PI, face: hz, bearing: true, sheath: [-OSB, longLen + OSB],
       openings: [{ x: 30, w: 36, h: 48, sill: 36, header: 10 }, { x: 214, w: 60, h: 48, sill: 36, header: 12 }] },
-    { key: 'left', len: sideLen, ry: -Math.PI / 2, face: hx, bearing: false, sheath: [-(D6 + OSB), sideLen + D6 + OSB],
+    { key: 'left', len: sideLen, ry: -Math.PI / 2, face: hx, bearing: false, sheath: [-D6, sideLen + D6],
       openings: [{ x: 110, w: 36, h: 48, sill: 36, header: 10 }] },
   ];
   // the wall's own x axis and its outward normal, in the house's xz plane
