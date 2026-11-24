@@ -10,7 +10,7 @@
 import { wallPanelsOf, looseOf, trussesOf, sectionKind } from './index';
 import { computeLabor } from '../labor';
 import { taxFor } from '../lib/tax';
-import { scoped, scopeOf } from '../scope';
+import { scoped, scopeOf, buildMethodOf } from '../scope';
 import { materialMarkupOf, markupFactor, bufferPctOf } from '../markup';
 
 const n = (v) => Number(v) || 0;
@@ -42,7 +42,7 @@ function wallPanelsBlock(est, f = 1) {
     }
     const lines = [
       ...KIND_ORDER.filter((k) => byKind.has(k)).map((k) => ({ key: k, label: KIND_LABEL[k], detail: lf(byKind.get(k).lf), amount: round2(byKind.get(k).amount) })),
-      { key: 'nails', label: 'Panel nails & fasteners', detail: L.panelNails.onConcrete ? 'Incl. drive pins and epoxy' : '', amount: round2(L.panelNails.total * f) },
+      { key: 'nails', label: wp.stick.structural && wp.stick.partitions ? 'Nails & fasteners' : 'Panel nails & fasteners', detail: L.panelNails.onConcrete ? 'Incl. drive pins and epoxy' : '', amount: round2(L.panelNails.total * f) },
       { key: 'loosePanel', label: 'Loose plates, band & blocking', detail: '', amount: round2(L.loose.subtotal * f) },
     ].filter((x) => n(x.amount) !== 0);
     return { id: L.id, title: nameOf[L.id] || 'Level', lines, subtotal: round2(L.total * f) };
@@ -51,13 +51,15 @@ function wallPanelsBlock(est, f = 1) {
   const panels = mfLines.reduce((s, x) => s + n(x.panels), 0);
   const panelLF = mfLines.reduce((s, x) => s + n(x.lf), 0);
   const general = [
-    { key: 'bracing', label: 'Temporary bracing', detail: `${num(wp.bracing.panels)} panels`, amount: round2(wp.bracing.total * f) },
+    { key: 'bracing', label: 'Temporary bracing', detail: [wp.bracing.panels ? `${num(wp.bracing.panels)} panels` : '', wp.bracing.stickLF ? `${lf(wp.bracing.stickLF)} stick framed` : ''].filter(Boolean).join(' · '), amount: round2(wp.bracing.total * f) },
     { key: 'manufacture', label: 'Panels manufacture', detail: `${num(panels)} panels · ${lf(panelLF)}`, amount: round2(wp.manufacture.total) },
     { key: 'trucking', label: 'Panel delivery', detail: `${num(wp.trucking.trucks)} truck${wp.trucking.trucks === 1 ? '' : 's'} · ${num(wp.trucking.milesCharged)} mi each`, amount: round2(wp.trucking.total) },
   ].filter((x) => n(x.amount) !== 0);
   if (general.length) groups.push({ id: 'wp-all', title: 'All levels', lines: general, subtotal: round2(general.reduce((a, x) => a + x.amount, 0)) });
   const total = round2((wp.total - wp.manufacture.total - wp.trucking.total) * f + wp.manufacture.total + wp.trucking.total);
-  return { key: 'wallPanels', title: 'Wall panels', groups, total, material: true };
+  const bm = buildMethodOf(est);
+  const title = bm.structural === 'stick' && bm.partitions === 'stick' ? 'Wall framing' : bm.structural === 'stick' || bm.partitions === 'stick' ? 'Wall panels and framing' : 'Wall panels';
+  return { key: 'wallPanels', title, groups, total, material: true };
 }
 
 function looseBlock(est, f = 1) {
@@ -134,7 +136,7 @@ export function computeQuote(full = {}, { shipping, include, detail = 'detail', 
     for (const b of blocks) b.groups = [{ id: b.key, title: '', lines: [{ key: b.key, label: b.title, detail: b.note || '', amount: b.total }], subtotal: b.total }];
   }
   const wpBlock = blocks.find((b) => b.key === 'wallPanels');
-  if (wpBlock && !include && sc.structural !== sc.partitions) wpBlock.title = sc.structural ? 'Wall panels · structural' : 'Wall panels · partitions';
+  if (wpBlock && !include && sc.structural !== sc.partitions) wpBlock.title = `${wpBlock.title} · ${sc.structural ? 'structural' : 'partitions'}`;
   const info = est.summaryInfo || {};
   const { state, rate, exempt, country, label } = taxFor(info);
   const materials = round2(blocks.filter((b) => b.material).reduce((a, b) => a + b.total, 0));

@@ -46,3 +46,34 @@ export function scoped(est = {}) {
   cache.set(est, out);
   return out;
 }
+
+/* ── How the walls are built ───────────────────────────────────────────────
+   Each wall group (structural: exterior, bearing, shear; partitions:
+   partition and knee) is built as wall panels in the shop or stick framed on
+   site. The material is the same; what changes is what the project pays for
+   around it: panels have manufacture, panel delivery and labor per panel set;
+   stick framing has none of that and labor per foot of wall framed in place. */
+
+export const BUILD_METHODS = [
+  { key: 'panels', label: 'Wall panels', hint: 'Built in the shop, delivered and set' },
+  { key: 'stick', label: 'Stick framing', hint: 'Framed on site, piece by piece' },
+];
+export const BUILD_GROUPS = [
+  { key: 'structural', label: 'Structural walls', hint: 'Exterior, bearing and shear walls' },
+  { key: 'partitions', label: 'Partitions', hint: 'Partition and knee walls' },
+];
+
+/** The project's build method per wall group: wall panels unless set to stick framing. */
+export function buildMethodOf(est = {}) {
+  const b = est?.buildMethod || {};
+  return { structural: b.structural === 'stick' ? 'stick' : 'panels', partitions: b.partitions === 'stick' ? 'stick' : 'panels' };
+}
+/** The wall group a wall kind belongs to ('exterior' and the interior kinds). */
+export const groupOfKind = (kind) => (STRUCTURAL.has(kind) ? 'structural' : 'partitions');
+/** Whether walls of this kind are stick framed in the project. */
+export const isStick = (est, kind) => buildMethodOf(est)[groupOfKind(kind)] === 'stick';
+/** Whether any wall of the project is built as panels. */
+export const anyPanels = (est) => Object.values(buildMethodOf(est)).includes('panels');
+/** Panel length that means "no panel joints": a stick-framed wall is one run. */
+export const STICK_RUN_FT = 1000;
+

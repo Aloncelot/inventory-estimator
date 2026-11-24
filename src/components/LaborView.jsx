@@ -20,11 +20,12 @@ const num = (v) => (Math.round(v * 10) / 10).toLocaleString('en-US');
 const TIMES = [
   ['Walls', [
     ['panel', 'Panel, plain', 'crew min / panel', 'Up to the height below, no sheathing'],
-    ['sheathedPct', 'Sheathed panel', '+ %', 'Exterior and shear walls'],
-    ['tallFromFt', 'Taller than', 'ft', 'Panels above this height take longer'],
+    ['stickFrame', 'Stick framed wall, plain', 'crew min / 10 LF', 'Framed on site (Summary → how the walls are built): plates, studs, headers, stand it up'],
+    ['sheathedPct', 'Sheathed wall', '+ %', 'Exterior and shear walls, panel or stick framed'],
+    ['tallFromFt', 'Taller than', 'ft', 'Walls above this height take longer'],
     ['tallPctPerFt', 'Each foot above it', '+ %', ''],
     ['hardware', 'Hold-down / strap', 'crew min / pc', 'Hardware placed on the plan'],
-    ['plumbBrace', 'Plumb, line, brace', 'crew min / panel', ''],
+    ['plumbBrace', 'Plumb, line, brace', 'crew min / panel', "Stick-framed walls: one every 8'"],
     ['topPlate', 'Loose top plate', 'crew min / 10 LF', 'Lap and tie the panels'],
     ['sillPlate', 'Sill plate on concrete', 'crew min / 10 LF', 'Sealer, anchors, plate'],
     ['blocking', 'Loose blocking', 'crew min / 10 LF', ''],

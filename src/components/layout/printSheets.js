@@ -81,7 +81,7 @@ export function printPlanSheets({ model, check, wallParts = [], levelName, proje
     </tbody></table>
     <div style="color:#7a746c">Openings: ${g.counts.kings || 0} kings, ${g.counts.jacks || 0} jacks, ${g.counts.headers || 0} headers (${g.openings.headerLF.toFixed(1)} LF), ${g.counts.cripples || 0} cripples, ${g.counts.sills || 0} sills</div>
   </div>`).join('');
-  pages.push({ title: `Material check · panels up to ${panelLenFt}'`, body: `<div class="draw" style="display:block;overflow:visible"><div class="cols">${tables}</div></div>` });
+  pages.push({ title: panelLenFt >= 1000 ? 'Material check · stick framed' : `Material check · panels up to ${panelLenFt}'`, body: `<div class="draw" style="display:block;overflow:visible"><div class="cols">${tables}</div></div>` });
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(projectName || 'Plan')} · ${esc(levelName)}</title>
     <style>${ISO_CSS}${SHEET_CSS}</style></head><body class="iso" data-theme="light">

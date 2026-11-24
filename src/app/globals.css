@@ -1583,6 +1583,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 13px; height: 13px;
 .sm-scope { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; margin-bottom: 12px; }
 .sm-scope__grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
 .sm-scope__lbl { font-weight: 600; min-width: 90px; }
+.sm-build { display: inline-flex; align-items: center; gap: 6px; }
+.sm-build .ew-select { width: auto; min-width: 130px; }
+.wp-stick { padding: 10px 14px; margin-bottom: 12px; color: var(--text-300); font-size: var(--fs-m); }
 tr.sm-out td { color: var(--text-300); }
 .sp-beams { margin-top: 12px; }
 .sp-btbl .sp-bgrp { cursor: pointer; }

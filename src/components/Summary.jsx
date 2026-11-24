@@ -13,7 +13,7 @@ import { useConfirm } from '@/components/ui/confirm';
 
 import { US_STATES, CA_PROVINCES, NO_TAX, SOURCES, regionOf, taxFor } from '@/domain/lib/tax';
 import { CURRENCIES, currencyOf } from '@/domain/lib/currency';
-import { SCOPE_PARTS, scopeOf } from '@/domain/scope';
+import { SCOPE_PARTS, scopeOf, BUILD_METHODS, BUILD_GROUPS, buildMethodOf } from '@/domain/scope';
 import { useCompany } from '@/context/CompanyContext';
 import { computeLabor } from '@/domain/labor';
 import { goTo } from '@/lib/nav';
@@ -86,6 +86,8 @@ export default function Summary() {
 
   const sc = scopeOf(est);
   const setScope = (key, v) => updateProject((prev) => ({ ...prev, scope: { ...(prev.scope || {}), [key]: v } }));
+  const bm = buildMethodOf(est);
+  const setBuildMethod = (key, v) => updateProject((prev) => ({ ...prev, buildMethod: { ...(prev.buildMethod || {}), [key]: v } }));
   const wpLabel = sc.structural && sc.partitions ? 'Wall panels' : sc.structural ? 'Wall panels · structural' : sc.partitions ? 'Wall panels · partitions' : 'Wall panels';
   // each line: [label, current total, total in the contract, part of the scope]
   const lines = [
@@ -153,7 +155,18 @@ export default function Summary() {
             <label key={p.key} className="pv-check"><input type="checkbox" checked={sc[p.key]} onChange={(e) => setScope(p.key, e.target.checked)} /> {p.label}</label>
           ))}
         </div>
-        <span className="ew-subtle">What the price covers: Summary, Labor, the Takeoff list and the Quote leave out the rest.</span>
+        <div className="sm-scope__grp">
+          <span className="sm-scope__lbl" title="Wall panels are built in the shop, delivered and set; stick framing is built on site piece by piece. The material is the same: panels add manufacture and delivery, and labor changes.">Built as</span>
+          {BUILD_GROUPS.map((g) => (
+            <label key={g.key} className="sm-build" title={g.hint}>
+              <span>{g.label}</span>
+              <select className="ew-select" value={bm[g.key]} onChange={(e) => setBuildMethod(g.key, e.target.value)} aria-label={`How ${g.label.toLowerCase()} are built`}>
+                {BUILD_METHODS.map((m) => <option key={m.key} value={m.key} title={m.hint}>{m.label}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+        <span className="ew-subtle">What the price covers: Summary, Labor, the Takeoff list and the Quote leave out the rest. Stick-framed walls have no panel manufacture or delivery, and Labor counts them by the foot.</span>
       </div>
 
       <div className="ew-card" style={{ maxWidth: 820 }}>

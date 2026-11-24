@@ -16,6 +16,7 @@ import PlanLayout from '@/components/PlanLayout';
 import { commitPlan } from '@/domain/plans/openingTypes';
 import { scheduleOpts } from '@/domain/plans/headerSchedule';
 import { withPlanLoose } from '@/domain/plans/loose';
+import { isStick, STICK_RUN_FT } from '@/domain/scope';
 
 const ftIn = (inches) => {
   const total = Math.round(n(inches) * 8) / 8;
@@ -235,7 +236,8 @@ export default function LayoutView() {
   const sheathNear = Boolean(layout.sheathNear);
   const sheathing = layout.sheathing === 'horizontal' ? 'horizontal' : 'vertical';
   const setLayout = (patch) => updateProject((prev) => ({ ...prev, layout: { ...(prev.layout || {}), ...patch } }));
-  const panelLenFt = n(est.manufactureEstimate?.panelLenByKey?.exteriorWalls) || 8;
+  // stick-framed walls have no panel joints: each wall is framed as one run
+  const panelLenFt = isStick(est, 'exterior') ? STICK_RUN_FT : n(est.manufactureEstimate?.panelLenByKey?.exteriorWalls) || 8;
 
   const check = useMemo(
     () => (level ? layoutCheck(level, dims, { panelLenFt, sheathing }) : null),

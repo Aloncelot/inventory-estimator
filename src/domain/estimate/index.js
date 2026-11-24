@@ -22,6 +22,7 @@ import { getItem, getUnit, getSize, getFamily, isPTFamily, priceDateOf } from '.
 import { IRC, BLOCK_NAILS, nailsPerSheet, alongRun, nailsPerDoubledStud, perBoxFromSize, rollLengthFromSize } from '../lib/fastening';
 import { headerOpenings, defaultPlies, studDepthIn } from './openings';
 import { trussEstimate } from './trusses';
+import { isStick } from '../scope';
 import { windowFlashing } from '../plans/loose';
 
 const n = (v) => Number(v) || 0;
@@ -356,7 +357,7 @@ export function computePanelNails(data = {}, { sections = [], plates = {}, isGro
    the same pieces get reused on site. */
 
 export const BRACING_ROWS = [
-  { key: 'panels', label: 'Temporary bracing — wall panels', unit: 'pcs', waste: 0 },
+  { key: 'panels', label: 'Temporary bracing — walls', unit: 'pcs', waste: 0 },
   { key: 'trusses', label: 'Temporary bracing — trusses', unit: 'pcs', waste: 0 },
 ];
 // Trusses: about 2 bundles of 2×4-16' (≈ 600 pcs) brace ~5,000 sq ft. On large
@@ -370,13 +371,22 @@ export const BRACING_INPUTS = {
   piecesPerBundle: 294,     // standard 2×4 unit
 };
 
-export function computeBracing(data = {}, { panels = 0, roofAreaSqFt = 0 } = {}) {
+// a stick-framed wall is braced like a run of panels: one station every 8'
+export const STICK_BRACE_EVERY_FT = 8;
+
+export function computeBracing(data = {}, { panels = 0, stickLF = 0, roofAreaSqFt = 0 } = {}) {
   const sel = data.sel || {};
   const waste = data.waste || {};
   const inputs = { ...BRACING_INPUTS, ...(data.inputs || {}) };
   const per = Math.max(0, n(inputs.bracesPerPanel));
   const counts = {
-    panels: { qty: n(panels) * per, hint: `${fmtN(panels)} panels (from Panels manufacture) × ${per} braces` },
+    panels: (() => {
+      const stations = n(stickLF) > 0 ? Math.ceil(n(stickLF) / STICK_BRACE_EVERY_FT) : 0;
+      const parts = [];
+      if (n(panels)) parts.push(`${fmtN(panels)} panels (from Panels manufacture)`);
+      if (stations) parts.push(`${fmtN(stickLF)} LF stick framed (1 every ${STICK_BRACE_EVERY_FT}' = ${fmtN(stations)})`);
+      return { qty: (n(panels) + stations) * per, hint: `${parts.join(' + ') || '0 panels'} × ${per} braces` };
+    })(),
     trusses: trussBracing(inputs, roofAreaSqFt),
   };
   const baseRows = BRACING_ROWS.map((d) => {
@@ -387,7 +397,7 @@ export function computeBracing(data = {}, { panels = 0, roofAreaSqFt = 0 } = {})
     const unitPrice = unitPriceFrom(getItem(s));
     return { key: d.key, label: d.label, hint: counts[d.key].hint, qtyRaw, wastePct, qtyFinal, unit: getUnit(s, d.unit), unitPrice, subtotal: qtyFinal * (unitPrice || 0), priceDate: priceDateOf(s) };
   });
-  return { inputs, baseRows, panels: n(panels), roofAreaSqFt: n(roofAreaSqFt), total: sum(baseRows) };
+  return { inputs, baseRows, panels: n(panels), stickLF: n(stickLF), roofAreaSqFt: n(roofAreaSqFt), total: sum(baseRows) };
 }
 
 function trussBracing(inputs, roofAreaSqFt) {
@@ -416,7 +426,7 @@ export const LOOSE_PANEL_WASTE = {
 export const LOOSE_TOP_PLATE_KEYS = ['extTopPlate', 'int2x6Plate', 'int2x4Plate'];
 const LOOSE_PT_KEYS = ['extBottomPT', 'int2x6PT', 'int2x4PT'];
 
-export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, int2x4LF = 0, extZipSheets = 0, panelLenFt = 8, windows = null } = {}) {
+export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, int2x4LF = 0, extZipSheets = 0, panelLenFt = 8, windows = null, stick = {} } = {}) {
   const sel = data.sel || {};
   const include = data.include || {};
   const extInputs = data.extInputs || {};
@@ -469,7 +479,9 @@ export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, in
   // optional rows count only when included
   const finish = (r0) => {
     const r = { ...r0, wastePct: r0.noWaste ? null : waste[r0.key] };
-    if (LOOSE_TOP_PLATE_KEYS.includes(r.key) && n(r.piece?.lf) > 0 && pieceLength(sel[r.key]) <= n(panelLenFt)) {
+    // (stick-framed walls have no panel joints to lap)
+    const stickGroup = r.key === 'extTopPlate' ? stick.structural : stick.partitions;
+    if (LOOSE_TOP_PLATE_KEYS.includes(r.key) && !stickGroup && n(r.piece?.lf) > 0 && pieceLength(sel[r.key]) <= n(panelLenFt)) {
       r.warn = `Loose top plates lap over the panel joints: use pieces longer than the ${n(panelLenFt)}' panels (10', 12' or 16').`;
     }
     return withPrice(r.optional && !include[r.key] ? { ...r, excluded: true, qtyFinal: 0, subtotal: 0 } : r, sel[r.key]);
@@ -509,8 +521,8 @@ export function computeLoosePanel(data = {}, { extLengthLF = 0, int2x6LF = 0, in
 
 /* ───────────────────────── Level ───────────────────────── */
 
-/** ctx: isGround (lowest level), panelLenFt (manufacture panel length) */
-export function computeLevel(level = {}, { isGround = false, panelLenFt = 8 } = {}) {
+/** ctx: isGround (lowest level), panelLenFt (manufacture panel length), stick ({ structural, partitions }: stick framed) */
+export function computeLevel(level = {}, { isGround = false, panelLenFt = 8, stick = {} } = {}) {
   const exterior = (level.exteriorSections || []).filter(Boolean).map((s) => ({ id: s.id, ...computeWallSection(s, 'exterior') }));
   const interior = (level.interiorSections || []).filter(Boolean).map((s) => ({ id: s.id, ...computeWallSection(s, 'interior') }));
 
@@ -534,7 +546,7 @@ export function computeLevel(level = {}, { isGround = false, panelLenFt = 8 } = 
   }
 
   const loose = computeLoosePanel(level.looseMaterials, {
-    extLengthLF: d.extLengthSum, int2x6LF: d.int2x6LF, int2x4LF: d.int2x4LF, extZipSheets: d.extZipSheetsFinal, panelLenFt,
+    extLengthLF: d.extLengthSum, int2x6LF: d.int2x6LF, int2x4LF: d.int2x4LF, extZipSheets: d.extZipSheetsFinal, panelLenFt, stick,
     windows: level.plan?.walls?.length ? windowFlashing(level.plan) : null,
   });
   const panelNails = computePanelNails(level.panelNails, {
@@ -577,7 +589,7 @@ export function sectionAddonPerLF(stats = {}) {
   return extraStuds * STUD_MULTIPLIER_ADDON_PER_LF + tall;
 }
 
-export function computeManufacture(data = {}, lf = {}, addons = {}, rates = MANUFACTURE_RATES, counts = {}) {
+export function computeManufacture(data = {}, lf = {}, addons = {}, rates = MANUFACTURE_RATES, counts = {}, stick = {}) {
   const rateByKey = data.rateByKey || {};
   const panelLenByKey = data.panelLenByKey || {};
   const manual = data.manualInputByKey || {};
@@ -592,9 +604,10 @@ export function computeManufacture(data = {}, lf = {}, addons = {}, rates = MANU
     lines.push({ label, key, lf: qty, panelLenFt: len, panels: Math.ceil((qty / Math.max(1, len)) * 1.1), baseRate, addonPerLF, ratePerLF, ratePerPanel: len * ratePerLF, total: qty * ratePerLF, isQtyBased: false });
   };
   const pushQty = (label, key, cfg) => {
-    // window / door counts come from the openings unless typed in
+    // window / door counts come from the openings unless typed in; none when
+    // every wall they sit in is stick framed (they go in on site)
     const auto = counts[key];
-    const typed = manual[key] !== undefined && manual[key] !== null && manual[key] !== '';
+    const typed = !stick.structural && manual[key] !== undefined && manual[key] !== null && manual[key] !== '';
     const qty = typed ? n(manual[key]) : n(auto);
     const rate = n(rateByKey[key] ?? cfg?.each ?? 0);
     lines.push({ label, key, qty, auto: auto ?? null, typed, lf: 0, panelLenFt: null, panels: null, baseRate: rate, addonPerLF: 0, ratePerLF: rate, ratePerPanel: null, total: qty * rate, isQtyBased: true });
@@ -619,11 +632,14 @@ const PANEL_KEYS = ['exteriorWalls', 'interiorBlockingOnly', 'interiorShear', 'i
 
 export function computeWallPanels(est = {}) {
   const panelLenFt = n(est.manufactureEstimate?.panelLenByKey?.exteriorWalls) || 8;
-  const levels = (est.levels || []).filter(Boolean).map((l, i) => computeLevel(l, { isGround: i === 0, panelLenFt }));
+  // stick-framed wall groups: no manufacture, no panel delivery, braced by the foot
+  const stick = { structural: isStick(est, 'exterior'), partitions: isStick(est, 'partition') };
+  const levels = (est.levels || []).filter(Boolean).map((l, i) => computeLevel(l, { isGround: i === 0, panelLenFt, stick }));
   const t = {
     panelsAll: 0, platePiecesAll: 0, ptPiecesAll: 0, sheetsExtAll: 0, sheetsBandAll: 0, sheetsExtraAll: 0, levelsCount: levels.length,
   };
   const lf = { exteriorWalls: 0, interiorShear: 0, interiorBlockingOnly: 0, interiorNonLoad: 0, kneeWall: 0, blocking2x10: 0 };
+  const stickLF = { structural: 0, partitions: 0 };
   const addons = {};
   const addAddon = (key, s) => {
     const a = addons[key] || (addons[key] = { lf: 0, addon: 0 });
@@ -632,11 +648,13 @@ export function computeWallPanels(est = {}) {
   };
   for (const L of levels) {
     for (const s of L.exterior) {
+      t.sheetsExtAll += s.stats.zipSheetsFinal;
+      if (stick.structural) { stickLF.structural += s.stats.lengthLF; continue; }
       lf.exteriorWalls += s.stats.lengthLF;
       addAddon('exteriorWalls', s);
-      t.sheetsExtAll += s.stats.zipSheetsFinal;
     }
     for (const s of L.interior) {
+      if (isStick(est, s.kind)) { stickLF[s.kind === 'shear' || s.kind === 'bearing' ? 'structural' : 'partitions'] += s.stats.lengthLF; continue; }
       const key = s.kind === 'shear' ? 'interiorShear' : s.kind === 'bearing' ? 'interiorBlockingOnly' : s.kind === 'knee' ? 'kneeWall' : 'interiorNonLoad';
       lf[key] += s.stats.lengthLF;
       addAddon(key, s);
@@ -646,22 +664,32 @@ export function computeWallPanels(est = {}) {
       t.platePiecesAll += s.stats.platePieces;
       t.ptPiecesAll += s.stats.panelPtBoards;
     }
-    lf.blocking2x10 += L.loose.stats.blockingLF;
+    // bath / kitchen blocking is built into partition panels; framed on site otherwise
+    if (!stick.partitions) lf.blocking2x10 += L.loose.stats.blockingLF;
     t.platePiecesAll += L.loose.stats.platePiecesTotal;
     t.ptPiecesAll += L.loose.stats.ptPieces;
     t.sheetsBandAll += L.loose.stats.sheetsBand;
     t.sheetsExtraAll += L.loose.stats.sheetsExtra;
   }
   const counts = { windows: 0, exteriorDoors: 0 };
-  for (const L of levels) for (const s of [...L.exterior, ...L.interior]) { counts.windows += n(s.stats.windows); counts.exteriorDoors += L.exterior.includes(s) ? n(s.stats.doors) : 0; }
-  const manufacture = computeManufacture(est.manufactureEstimate, lf, addons, MANUFACTURE_RATES, counts);
+  // windows and doors are set in the panels only on walls built as panels
+  for (const L of levels) {
+    for (const s of [...L.exterior, ...L.interior]) {
+      const ext = L.exterior.includes(s);
+      if (isStick(est, ext ? 'exterior' : s.kind)) continue;
+      counts.windows += n(s.stats.windows);
+      counts.exteriorDoors += ext ? n(s.stats.doors) : 0;
+    }
+  }
+  const manufacture = computeManufacture(est.manufactureEstimate, lf, addons, MANUFACTURE_RATES, counts, stick);
   const panelCount = manufacture.lines.filter((x) => PANEL_KEYS.includes(x.key)).reduce((acc, x) => acc + n(x.panels), 0);
   const roof = (est.looseList || []).find((x) => x && sectionKind(x) === 'roof');
-  const bracing = computeBracing(est.bracing, { panels: panelCount, roofAreaSqFt: n(roof?.inputs?.roofArea) });
+  const bracing = computeBracing(est.bracing, { panels: panelCount, stickLF: stickLF.structural + stickLF.partitions, roofAreaSqFt: n(roof?.inputs?.roofArea) });
   // delivering the panels to the job
-  const trucking = computeTrucking(est.trucking, panelCount);
+  // (nothing to deliver when every wall is stick framed, even with a typed panel count)
+  const trucking = computeTrucking(stick.structural && stick.partitions ? {} : est.trucking, panelCount);
   const total = round2(sum(levels, 'total') + bracing.total + manufacture.total + trucking.total);
-  return { levels, totals: t, lf, addons, bracing, manufacture, trucking, total };
+  return { levels, totals: t, lf, addons, bracing, manufacture, trucking, total, stick, stickLF };
 }
 
 /* ───────────────────────── Loose material page ───────────────────────── */

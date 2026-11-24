@@ -16,6 +16,7 @@
 import { wallPanelsOf, looseOf, sectionKind } from './estimate';
 import { hardwareCounts } from './plans/hardware';
 import { levelAreas } from './estimate/trusses';
+import { isStick } from './scope';
 
 const n = (v) => Number(v) || 0;
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -37,7 +38,8 @@ export const LABOR_DEFAULTS = {
   roofExtra: 0.1, // the roof: the top level's factor plus this
   times: {
     panel: 8, // crew min per panel up to the height below, no sheathing
-    sheathedPct: 25, // + % for a sheathed panel (exterior and shear walls)
+    stickFrame: 16, // crew min per 10 LF of wall stick framed on site (plates, studs, headers, stand it up), up to the height below, no sheathing: about 210 LF a day for 5 at 70%
+    sheathedPct: 25, // + % for a sheathed panel or stick-framed wall (exterior and shear walls)
     tallFromFt: 10,
     tallPctPerFt: 10, // + % per foot of wall above that height
     windowInstallers: 30, // min per window, dedicated installers (their team)
@@ -52,7 +54,7 @@ export const LABOR_DEFAULTS = {
     roofSheet: 4, // crew min per roof sheathing sheet
     sillPlate: 6, // crew min per 10 LF of sill plate on concrete (sealer, anchors, plate)
     topPlate: 2, // crew min per 10 LF of loose top plate (lap and tie the panels)
-    plumbBrace: 3, // crew min per panel to plumb, line and brace
+    plumbBrace: 3, // crew min per panel (or every 8' of stick-framed wall) to plumb, line and brace
     blocking: 4, // crew min per 10 LF of loose blocking
     post: 10, // crew min per post / column on the plan
     beam: 8, // crew min per 10 LF of beam (LVL, built-up)
@@ -125,28 +127,42 @@ function computeLaborNow(est = {}) {
     const name = lvl.name || `Level ${i + 1}`;
     const factor = levelFactor(s, i);
     const byKind = new Map();
+    const stickByKind = new Map();
     for (const sec of [...L.exterior, ...L.interior]) {
       const st = sec.stats || {};
       const lf = n(st.lengthLF);
       if (!lf) continue;
       const kind = st.kind || 'partition';
-      const len = n(lens[PANEL_LEN_KEY[kind]]) || 8;
-      const count = Math.ceil(lf / Math.max(1, len));
       const sheathed = kind === 'exterior' || kind === 'shear';
       const tall = Math.max(0, n(st.heightFt) - n(t.tallFromFt));
-      const each = n(t.panel) * (1 + (sheathed ? n(t.sheathedPct) / 100 : 0)) * (1 + (tall * n(t.tallPctPerFt)) / 100);
+      const more = (1 + (sheathed ? n(t.sheathedPct) / 100 : 0)) * (1 + (tall * n(t.tallPctPerFt)) / 100);
+      if (isStick(est, kind)) {
+        // framed in place: time per 10 LF of wall instead of per panel set
+        const g = stickByKind.get(kind) || { mins: 0, lf: 0 };
+        g.mins += (lf / 10) * n(t.stickFrame) * more; g.lf += lf;
+        stickByKind.set(kind, g);
+        continue;
+      }
+      const len = n(lens[PANEL_LEN_KEY[kind]]) || 8;
+      const count = Math.ceil(lf / Math.max(1, len));
+      const each = n(t.panel) * more;
       const g = byKind.get(kind) || { count: 0, mins: 0, lf: 0 };
       g.count += count; g.mins += count * each; g.lf += lf;
       byKind.set(kind, g);
     }
-    let lvlPanels = 0, lvlLF = 0;
+    let lvlPanels = 0, lvlLF = 0, lvlStations = 0;
     for (const [kind, g] of byKind) {
       panels += g.count; wallLF += g.lf; lvlPanels += g.count; lvlLF += g.lf;
       add({ key: `panels|${lvl.id || i}|${kind}`, group: 'Walls', level: name, levelIndex: i, label: `${KIND_NAME[kind] || kind} panels`, unit: 'panels', auto: g.count, min: g.count ? g.mins / g.count : n(t.panel), factor, hint: `${Math.round(g.lf)} LF` });
     }
+    for (const [kind, g] of stickByKind) {
+      const units = Math.ceil(g.lf / 10);
+      wallLF += g.lf; lvlLF += g.lf; lvlStations += Math.ceil(g.lf / 8);
+      add({ key: `stick|${lvl.id || i}|${kind}`, group: 'Walls', level: name, levelIndex: i, label: `${KIND_NAME[kind] || kind} walls, stick framed`, unit: '10 LF', auto: units, min: units ? g.mins / units : n(t.stickFrame), factor, hint: `${Math.round(g.lf)} LF` });
+    }
     const id = lvl.id || i;
-    if (lvlPanels) {
-      add({ key: `plumb|${id}`, group: 'Walls', level: name, levelIndex: i, label: 'Plumb, line and brace', unit: 'panels', auto: lvlPanels, min: t.plumbBrace, factor });
+    if (lvlPanels || lvlStations) {
+      add({ key: `plumb|${id}`, group: 'Walls', level: name, levelIndex: i, label: 'Plumb, line and brace', unit: lvlPanels ? 'panels' : 'stations', auto: lvlPanels + lvlStations, min: t.plumbBrace, factor, hint: lvlStations ? `${lvlPanels ? `${lvlPanels} panels + ` : ''}${lvlStations} stations on stick-framed walls (one every 8')` : undefined });
       add({ key: `topPlate|${id}`, group: 'Walls', level: name, levelIndex: i, label: 'Loose top plate', unit: '10 LF', auto: Math.ceil(lvlLF / 10), min: t.topPlate, factor });
     }
     const blkLF = n(L.loose?.stats?.blockingLF);

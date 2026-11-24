@@ -15,6 +15,8 @@ import PanelTrucking from '@/components/PanelTrucking';
 import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader, AddRowButton, SortableList, SortableBlock, reorderById } from '@/components/ui/mat';
 import { wallPanelsOf } from '@/domain/estimate';
+import { buildMethodOf, BUILD_GROUPS } from '@/domain/scope';
+import { goTo } from '@/lib/nav';
 import { useEstimateAssistant } from '@/components/assistant/useEstimateAssistant';
 
 // active: this is the page on screen (the view stays mounted while hidden)
@@ -95,6 +97,10 @@ export default function WallPanelsView({ active = true }) {
     );
   }
 
+  const bm = buildMethodOf(estimateData);
+  const stickGroups = BUILD_GROUPS.filter((g) => bm[g.key] === 'stick').map((g) => g.label);
+  const allStick = stickGroups.length === BUILD_GROUPS.length;
+
   return (
     <div className="app-content">
       <PageHeader
@@ -140,9 +146,18 @@ export default function WallPanelsView({ active = true }) {
 
       <Bracing data={bracing} calc={calc.bracing} onChange={handleBracingChange} />
 
-      <PanelsManufactureEstimate data={manufactureEstimate} calc={calc.manufacture} onChange={handleManufactureChange} />
+      {stickGroups.length ? (
+        <div className="ew-card wp-stick">
+          {allStick
+            ? 'Every wall is stick framed on site: no panel manufacture and no panel delivery.'
+            : `${stickGroups.join(' and ')} are stick framed on site: left out of manufacture and delivery below.`}
+          {' '}<button type="button" className="ew-link" onClick={() => goTo('summary')}>Change it in Summary</button>
+        </div>
+      ) : null}
 
-      <PanelTrucking data={estimateData.trucking} calc={calc.trucking} onChange={handleTruckingChange} />
+      {!allStick ? <PanelsManufactureEstimate data={manufactureEstimate} calc={calc.manufacture} onChange={handleManufactureChange} /> : null}
+
+      {!allStick ? <PanelTrucking data={estimateData.trucking} calc={calc.trucking} onChange={handleTruckingChange} /> : null}
     </div>
   );
 }

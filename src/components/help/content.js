@@ -69,6 +69,10 @@ export const HELP = [
       { id: 'buffer', title: 'Error buffer', body: [
         'A percentage added to the material to cover waste and takeoff error. It starts at 10% and is set separately for wall panels and for loose material.',
       ] },
+      { id: 'built-as', title: 'Wall panels or stick framing', body: [
+        'Built as sets how each wall group goes up: structural walls (exterior, bearing, shear) and partitions (partition, knee). Wall panels are built in the shop, delivered and set; stick framing is built on site, piece by piece.',
+        'The material of the walls is the same either way. Stick-framed walls leave out panel manufacture and panel delivery, are braced one station every 8 feet, and Labor counts them by the foot (Stick framed wall, in the times) instead of by the panel. The Layout check frames stick-framed exterior walls as one run, without panel joints.',
+      ] },
     ],
   },
   {

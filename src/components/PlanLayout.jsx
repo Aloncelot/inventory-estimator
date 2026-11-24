@@ -6,6 +6,7 @@
 // plan section. Print / PDF lays the same drawings out as SVG sheets.
 'use client';
 
+import { STICK_RUN_FT } from '@/domain/scope';
 import { useCallback, useMemo, useState } from 'react';
 import { TriangleAlert, Printer, FlipHorizontal2 } from 'lucide-react';
 import PlanLegend from '@/components/PlanLegend';
@@ -73,7 +74,7 @@ export default function PlanLayout({ level, levelName, projectName, panelLenFt, 
       <div className="lc-facts">
         <span>Walls <strong>{model.parts.length}</strong>{model.parts.length !== (level.plan?.walls || []).length ? ` (${(level.plan?.walls || []).length} on the plan)` : ''}</span>
         <span>Length <strong>{fmt(totals.lf)} LF</strong></span>
-        <span>Panels <strong>{fmt(totals.panels)}</strong> × up to {panelLenFt}&apos;</span>
+        {panelLenFt >= STICK_RUN_FT ? <span>Stick framed</span> : <span>Panels <strong>{fmt(totals.panels)}</strong> × up to {panelLenFt}&apos;</span>}
         <span>Studs <strong>{fmt(totals.studs)}</strong></span>
         <span>Kings / jacks <strong>{fmt(totals.kings)} / {fmt(totals.jacks)}</strong></span>
         <span>Headers <strong>{fmt(totals.headers)}</strong></span>
