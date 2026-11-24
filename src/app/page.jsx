@@ -1,6 +1,7 @@
 // src/app/page.jsx — the public landing page; the estimator is at /app
 import Landing from '@/components/landing/Landing';
 import './landing.css';
+import { landingFontVars } from './fonts';
 
 export const metadata = {
   title: 'Estimate Hub: framing estimates from the plans to the warehouse',
@@ -8,5 +9,6 @@ export const metadata = {
 };
 
 export default function Home() {
-  return <Landing />;
+  // display: contents keeps the wrapper out of layout; it only carries the font variables
+  return <div className={landingFontVars} style={{ display: 'contents' }}><Landing /></div>;
 }

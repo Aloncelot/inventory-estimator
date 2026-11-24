@@ -91,7 +91,7 @@ function ListColumn({ title, items, selectedValue, onSelect, loading, headerActi
       
       <div className="material-scroll">
         {loading && <div style={{padding: 12}}>Loading...</div>}
-        {!loading && items.length === 0 && <div style={{padding: 12, color: 'var(--text-300)', fontSize: '0.8rem'}}>No items.</div>}
+        {!loading && items.length === 0 && <div className="empty-note">No items.</div>}
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {items.map(item => (
             <li key={item.value}>
@@ -474,13 +474,13 @@ export default function MaterialListView() {
               )}
               
               {!loadingPrices && !selectedItem && (
-                <div style={{ padding: 12, color: 'var(--text-300)', fontSize: '0.8rem' }}>
+                <div className="empty-note">
                   Select an item to see prices.
                 </div>
               )}
               
               {!loadingPrices && selectedItem && prices.length === 0 && (
-                <div style={{ padding: 12, color: 'var(--text-300)', fontSize: '0.8rem' }}>
+                <div className="empty-note">
                   No prices found for this item. <br/> Click "+ Add Price" to create one.
                 </div>
               )}

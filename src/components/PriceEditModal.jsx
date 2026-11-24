@@ -297,7 +297,7 @@ export default function PriceEditModal({
             <Label><span>Supplier price ($)</span>
               <Input type="number" name="basePrice" className="ew-input focus-anim" value={formData.basePrice || ''} onChange={handleChange} />
             </Label>
-            <span className="ew-subtle" style={{ fontSize: '.78rem', maxWidth: 220 }}>What the supplier charges, without markup. Each estimate adds its own material markup in Summary.</span>
+            <span className="ew-subtle" style={{ fontSize: 'var(--fs-sm)', maxWidth: 220 }}>What the supplier charges, without markup. Each estimate adds its own material markup in Summary.</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <Label><span>Unit</span>

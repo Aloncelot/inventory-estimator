@@ -11,7 +11,7 @@ import { TriangleAlert, Printer, FlipHorizontal2 } from 'lucide-react';
 import PlanLegend from '@/components/PlanLegend';
 import { displayOf } from '@/domain/plans/display';
 import PlanScene from '@/components/layout/PlanScene';
-import { sceneBoxes } from '@/components/layout/planScene';
+import { sceneBoxes } from '@/components/layout/planSceneGeometry';
 import { printPlanSheets } from '@/components/layout/printSheets';
 import { planModel, planCheck, OPENING_DEFAULTS } from '@/domain/plans/framing';
 import { feet } from '@/domain/lib/units';

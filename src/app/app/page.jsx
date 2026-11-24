@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useLocalStorageJson } from '@/hooks/useLocalStorageJson';
 import { ProjectProvider, useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/AuthContext';
@@ -10,23 +11,10 @@ import { CompanyProvider, useCompany } from '@/context/CompanyContext';
 
 import Sidebar from '@/components/Sidebar';
 import LoginView from '@/components/LoginView';
-import LogoutView from '@/components/LogoutView';
-import ProjectView from '@/components/ProjectView';
 import Summary from '@/components/Summary';
 import WallPanelsView from '@/components/WallPanelsView';
 import TrussesView from '@/components/TrussesView';
-import MaterialListView from '@/components/MaterialListView';
 import LooseMaterialView from '@/components/LooseMaterialView';
-import QuoteView from '@/components/QuoteView';
-import LayoutView from '@/components/LayoutView';
-import PlanTakeoffView from '@/components/PlanTakeoffView';
-import LaborView from '@/components/LaborView';
-import ScheduleView from '@/components/ScheduleView';
-import TakeoffView from '@/components/TakeoffView';
-import RevisionsView from '@/components/RevisionsView';
-import TeamView from '@/components/TeamView';
-import InventoryView from '@/components/InventoryView';
-import HelpView from '@/components/help/HelpView';
 import { topicForPage } from '@/components/help/content';
 import { CircleHelp, Sparkles } from 'lucide-react';
 import { AssistantProvider, useAssistant } from '@/context/AssistantContext';
@@ -34,6 +22,24 @@ import AssistantPanel from '@/components/assistant/AssistantPanel';
 import CompanyGate from '@/components/CompanyGate';
 import { PageHeader } from '@/components/ui/mat';
 import { ConfirmProvider } from '@/components/ui/confirm';
+
+// Summary and the always-mounted estimate views load with the shell; every
+// other page is its own chunk, fetched the first time it is opened (the plan
+// takeoff alone brings pdf.js and ~1,700 lines of editor).
+const loading = () => <div className="app-content"><div className="empty-state">Loading…</div></div>;
+const LogoutView = dynamic(() => import('@/components/LogoutView'), { loading });
+const ProjectView = dynamic(() => import('@/components/ProjectView'), { loading });
+const MaterialListView = dynamic(() => import('@/components/MaterialListView'), { loading });
+const QuoteView = dynamic(() => import('@/components/QuoteView'), { loading });
+const LayoutView = dynamic(() => import('@/components/LayoutView'), { loading });
+const PlanTakeoffView = dynamic(() => import('@/components/PlanTakeoffView'), { loading });
+const LaborView = dynamic(() => import('@/components/LaborView'), { loading });
+const ScheduleView = dynamic(() => import('@/components/ScheduleView'), { loading });
+const TakeoffView = dynamic(() => import('@/components/TakeoffView'), { loading });
+const RevisionsView = dynamic(() => import('@/components/RevisionsView'), { loading });
+const TeamView = dynamic(() => import('@/components/TeamView'), { loading });
+const InventoryView = dynamic(() => import('@/components/InventoryView'), { loading });
+const HelpView = dynamic(() => import('@/components/help/HelpView'), { loading });
 
 const SOON = {
 };

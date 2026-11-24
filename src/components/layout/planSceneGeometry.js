@@ -1,4 +1,4 @@
-// src/components/layout/planScene.js
+// src/components/layout/planSceneGeometry.js
 // Boxes to draw in 3D (WebGL) from the plan framing model: every box knows its
 // wall (pick key), what it is (info) and its colour group. Pure; the renderer
 // lives in PlanScene.jsx.

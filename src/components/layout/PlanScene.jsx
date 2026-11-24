@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Maximize2, ArrowDownToLine, Box } from 'lucide-react';
 import { loadThree } from '@/lib/three';
-import { PICKED_COLOR, HOVER_COLOR } from '@/components/layout/planScene';
+import { PICKED_COLOR, HOVER_COLOR } from '@/components/layout/planSceneGeometry';
 
 const BG = '#e3e3df';
 

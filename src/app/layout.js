@@ -1,6 +1,7 @@
 // src/app/layout.js
 import "./globals.css";
 import { AuthProvider } from "@/AuthContext";
+import { appFontVars } from "./fonts";
 
 export const metadata = {
   title: "Estimate Hub",
@@ -12,7 +13,7 @@ const themeScript = `(function(){var h=document.documentElement;try{var t=localS
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className={`dark ${appFontVars}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
