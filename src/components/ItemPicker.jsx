@@ -43,6 +43,7 @@ function PortalSelect({ value, options, onChange, disabled, loading, placeholder
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0, up: false });
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   const place = useCallback(() => {
     const r = triggerRef.current?.getBoundingClientRect();
@@ -52,13 +53,23 @@ function PortalSelect({ value, options, onChange, disabled, loading, placeholder
     setPos({ top: up ? r.top - 2 : r.bottom + 2, left: r.left, width: r.width, up });
   }, []);
 
-  const open = () => {
-    if (disabled || loading) return;
+  const open = (initialQuery = '') => {
+    if (disabled) return;
     place();
-    setSearchTerm('');
+    setSearchTerm(initialQuery);
     setActive(0);
     setIsOpen(true);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const el = searchInputRef.current;
+    if (el) {
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -100,7 +111,13 @@ function PortalSelect({ value, options, onChange, disabled, loading, placeholder
     if (isOpen) return;
     const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
     if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); open(); return; }
-    if (map[e.key]) { e.preventDefault(); focusTrigger(e.currentTarget, map[e.key]); }
+    if (map[e.key]) { e.preventDefault(); focusTrigger(e.currentTarget, map[e.key]); return; }
+    if (e.key === 'Backspace') { e.preventDefault(); open(''); return; }
+    // start typing directly without pressing Enter first
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== ' ') {
+      e.preventDefault();
+      open(e.key);
+    }
   };
 
   const onKeyDown = (e) => {
@@ -143,6 +160,7 @@ function PortalSelect({ value, options, onChange, disabled, loading, placeholder
           <div className="pk-search">
             <Search size={12} />
             <input
+              ref={searchInputRef}
               autoFocus
               placeholder={`Search ${label?.toLowerCase() || ''}…`}
               value={searchTerm}
@@ -150,7 +168,9 @@ function PortalSelect({ value, options, onChange, disabled, loading, placeholder
               onKeyDown={onKeyDown}
             />
           </div>
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="pk-empty">Loading…</div>
+          ) : filtered.length === 0 ? (
             <div className="pk-empty">No matches</div>
           ) : (
             filtered.map((opt, i) => (
