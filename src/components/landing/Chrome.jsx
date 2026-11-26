@@ -1,12 +1,14 @@
 // src/components/landing/Chrome.jsx
 // The landing site's nav and footer, shared by / and the privacy and cookie
-// pages, plus the wordmark.
+// pages, plus the wordmark. The footer opens with a band of drifting
+// mountains and clouds (FooterRidge).
 'use client';
 
 import { useAuth } from '@/AuthContext';
 import QuasarMark, { QUASAR_URL } from '@/components/QuasarMark';
 import { openConsent } from './consent';
 import NebulaMark from '@/components/NebulaMark';
+import FooterRidge from './FooterRidge';
 
 export function Wordmark() {
   return (
@@ -39,6 +41,7 @@ export function Nav({ home = true }) {
 export function Footer() {
   return (
     <footer className="lp-foot">
+      <FooterRidge />
       <div className="lp-wrap lp-foot__in">
         <div className="lp-foot__brand">
           <Wordmark />

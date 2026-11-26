@@ -122,7 +122,6 @@ export default function Landing() {
         </section>
 
         <HouseAssembly steps={STEPS} />
-        <div className="lp-vista" aria-hidden="true" />
 
         <section className="lp-sec lp-features" id="features" aria-labelledby="features-h">
           <div className="lp-wrap">
@@ -144,7 +143,6 @@ export default function Landing() {
         </section>
 
         <Pricing />
-        <div className="lp-vista" aria-hidden="true" />
 
         <section className="lp-sec lp-faq" id="faq" aria-labelledby="faq-h">
           <div className="lp-wrap lp-faq__in">
