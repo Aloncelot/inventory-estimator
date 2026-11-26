@@ -185,7 +185,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
 
     const createNewProject = useCallback(async (name) => {
         const collectionPath = getProjectsCollectionPath();
-        if (!user || !collectionPath || readOnlyRef.current) return null;
+        if (!user || !collectionPath || !canEditRole) return null;
         setIsSaving(true);
         try {
             const actor = actorOf(user);
@@ -206,7 +206,7 @@ export function ProjectProvider({ children, initialProjectId = null }) {
         } finally {
             setIsSaving(false);
         }
-    }, [user, getProjectsCollectionPath, fetchProjectsList, appId]);
+    }, [user, canEditRole, getProjectsCollectionPath, fetchProjectsList, appId]);
 
     const loadingRef = useRef(false);
     const saveRef = useRef(null);

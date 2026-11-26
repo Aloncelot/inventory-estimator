@@ -50,6 +50,9 @@ next-env.d.ts
 
 serviceAccount.json
 serviceAccount*.json
+users.json
+firestore-debug.log
+$null
 
 .vscode/
 

@@ -95,7 +95,7 @@ export function AssistantProvider({ resetKey, children }) {
     if (!pending || !spec || spec.key !== pending.pageKey) return;
     if (spec.getState() !== pending.base) {
       setPending(null);
-      setMessages((m) => [...m, { role: 'model', text: 'The schedule changed after these changes were proposed, so they were not applied. Ask again.', error: true }]);
+      setMessages((m) => [...m, { role: 'model', text: `${spec.title || 'This page'} changed after these changes were proposed, so they were not applied. Ask again.`, error: true }]);
       return;
     }
     spec.apply(pending.draft);
