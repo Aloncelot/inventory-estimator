@@ -4,7 +4,20 @@
 // differently.
 import { norm } from "./parsing";
 
-export const isLVL         = (f = "") => norm(f).includes("lvl");
+/** True when a size label includes a piece length like `4x4"-16'`, `4x4-12`, or `4x4 12ft`. */
+export const hasExplicitLength = (sizeLabel = "") => {
+  const s = String(sizeLabel || "").trim();
+  if (!s) return false;
+  if (/(?:'|\bft\b)\s*$/i.test(s)) return true;
+  return /-\s*\d+(?:\.\d+)?\s*$/.test(s) && !/\/\d+\s*$/.test(s);
+};
+
+export const isLVL = (f = "", size = "") => {
+  const x = norm(f);
+  if (x.includes("lvl") || /\bpsl\b/.test(x) || x.includes("parallam")) return true;
+  if (/\blsl\b/.test(x) || x.includes("timberstrand")) return !hasExplicitLength(size);
+  return false;
+};
 export const isVersaColumn = (f = "") => norm(f).includes("versa");
 
 export const isSPF_PT_SYP = (f = "") => {

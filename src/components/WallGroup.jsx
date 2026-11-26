@@ -14,7 +14,7 @@ import {
   NumInput, Fld, MultiplierSelect, noteOf, patchNote, SortableList, applyOrder,
 } from '@/components/ui/mat';
 import { isLVL, isVersaColumn } from '@/domain/lib/families';
-import { getFamily } from '@/domain/lib/selection';
+import { getFamily, getSize } from '@/domain/lib/selection';
 import { computeWallSection } from '@/domain/estimate';
 import { wallRowDefaults, wallExtraDefaults, openingDefaults } from '@/domain/lib/defaults';
 import OpeningsEditor from '@/components/OpeningsEditor';
@@ -115,12 +115,12 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
           </Fld>,
         ];
       }
-      const legacyLF = isLVL(fam) && !ex.inputs?.headerLF ? Number(ex.inputs?.lvlPieces || 0) * Number(ex.inputs?.lvlLength || 0) : '';
+      const legacyLF = isLVL(fam, getSize(ex.item)) && !ex.inputs?.headerLF ? Number(ex.inputs?.lvlPieces || 0) * Number(ex.inputs?.lvlLength || 0) : '';
       return [n('headerLF', 'Header LF', 64, legacyLF || '')];
     }
     if (ex.type === 'Post' && ex.planPost) {
       // counts come from the posts placed in Plan takeoff
-      const lf = isLVL(fam) || isVersaColumn(fam);
+      const lf = isLVL(fam, getSize(ex.item)) || isVersaColumn(fam);
       return [
         <Fld key="np" label="Posts" title={`${ex.planPost}: posts placed on the plan`}><span className="strong plan-lf"><ScanLine size={12} /> {ex.inputs?.numPosts || 0}</span></Fld>,
         lf
@@ -128,7 +128,7 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
           : <Fld key="pp" label="Pcs/post"><span className="strong">{ex.inputs?.piecesPerPost || 1}</span></Fld>,
       ];
     }
-    if (ex.type === 'Post') return (isLVL(fam) || isVersaColumn(fam))
+    if (ex.type === 'Post') return (isLVL(fam, getSize(ex.item)) || isVersaColumn(fam))
       ? [n('pieces', 'Pieces'), n('heightFt', 'Height (ft)', 56, heightFt)]
       : [n('piecesPerPost', 'Pcs/post'), n('numPosts', 'Posts')];
     if (ex.type === 'Studs') return [

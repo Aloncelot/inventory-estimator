@@ -71,6 +71,30 @@ describe('wall section', () => {
     assert.equal(r.extraRows[0].qtyRaw, 24);
     assert.equal(r.extraRows[0].unit, 'lf');
     assert.equal(r.extraRows[1].qtyRaw, 2);
+    // PSL / PL PSL / Parallam follow the same LF calculation as LVL
+    const psl = computeWallSection({
+      ...base,
+      extras: [
+        { id: 'p1', type: 'Header', item: pick('PSL', '5-1/4x11-7/8"'), wastePct: 0, inputs: { headerLF: 15 } },
+        { id: 'p2', type: 'Header', item: pick('PL PSL', '5-1/4x9-1/2"'), wastePct: 0, inputs: { headerLF: 10 } },
+        { id: 'p3', type: 'Header', item: pick('Parallam', '5-1/4x5-1/4"'), wastePct: 0, inputs: { headerLF: 8 } },
+      ],
+    });
+    assert.deepEqual(psl.extraRows.map((x) => [x.qtyRaw, x.unit]), [[15, 'lf'], [10, 'lf'], [8, 'lf']]);
+    // LSL: by piece (like SPF#2) when the size carries a length, by LF when it has no length
+    const lsl = computeWallSection({
+      ...base,
+      extras: [
+        { id: 'l1', type: 'Header', item: pick('LSL', `4x4"-12'`), wastePct: 0, inputs: { headerLF: 24 } },
+        { id: 'l2', type: 'Header', item: pick('LSL', '4x4"'), wastePct: 0, inputs: { headerLF: 24 } },
+        { id: 'l3', type: 'Header', item: pick('LSL', '3-1/2x3-1/2'), wastePct: 0, inputs: { headerLF: 18 } },
+      ],
+    });
+    assert.equal(lsl.extraRows[0].qtyRaw, 2);     // 24 / 12' = 2 pcs
+    assert.equal(lsl.extraRows[1].qtyRaw, 24);    // no length → LF directly
+    assert.equal(lsl.extraRows[1].unit, 'lf');
+    assert.equal(lsl.extraRows[2].qtyRaw, 18);    // fractional size without length → LF directly
+    assert.equal(lsl.extraRows[2].unit, 'lf');
   });
 
   test('legacy LVL pieces × length is used only when there is no header LF', () => {

@@ -94,9 +94,9 @@ export function computeWallSection(section = {}, variant = 'exterior') {
   for (const r of stored) {
     if (r.type !== 'Header') continue;
     const fam = getFamily(r.item);
-    const lvl = isLVL(fam);
-    const plies = n(r.inputs?.plies) || defaultPlies(depthIn);
     const sizeStr = getSize(r.item);
+    const lvl = isLVL(fam, sizeStr);
+    const plies = n(r.inputs?.plies) || defaultPlies(depthIn);
     const solidHeader = plies <= 1 || /^[468]\s*x/i.test(String(sizeStr || '').trim());
     const o = headerOpenings(r.openings, { plies, lvl, boardLenIn: (parseBoardLengthFt(sizeStr) || 0) * 12 });
     const typedLF = n(r.inputs?.headerLF) || (lvl ? n(r.inputs?.lvlPieces) * n(r.inputs?.lvlLength) : 0);
@@ -131,7 +131,7 @@ export function computeWallSection(section = {}, variant = 'exterior') {
         warn: h.tooLong ? `${h.tooLong} header plies are longer than the picked piece: choose a longer size` : undefined,
       };
     } else if (r.type === 'Post') {
-      res = calcPost({ isLinearLF: isLVL(fam) || isVersaColumn(fam), pieces: n(r.inputs?.pieces), heightFt: n(r.inputs?.heightFt ?? heightFt), piecesPerPost: n(r.inputs?.piecesPerPost), numPosts: n(r.inputs?.numPosts), wastePct: w, item: it });
+      res = calcPost({ isLinearLF: isLVL(fam, getSize(r.item)) || isVersaColumn(fam), pieces: n(r.inputs?.pieces), heightFt: n(r.inputs?.heightFt ?? heightFt), piecesPerPost: n(r.inputs?.piecesPerPost), numPosts: n(r.inputs?.numPosts), wastePct: w, item: it });
     } else if (r.type === 'Studs') {
       res = calcStuds({ lengthLF: n(r.inputs?.lengthLF), spacingIn: n(r.inputs?.studSpacingIn) || 16, multiplier: n(r.inputs?.studMultiplier) || 1, wastePct: w, item: it, unit: getUnit(r.item) });
     } else if (r.type === 'Extra blocking') {

@@ -11,6 +11,7 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   arrayUnion,
   serverTimestamp,
   limit,
@@ -304,4 +305,132 @@ export async function getItemPrices(itemKey) {
   const snap = await getDoc(doc(db, C('itemVendorLookup'), itemKey));
   if (!snap.exists()) return [];
   return getPricesForItem(snap.data());
+}
+
+/**
+ * Rename a family across families, itemVendorLookup, and every supplier's
+ * price list items. Returns { newSlug, newLabel }.
+ */
+export async function renameFamily(oldFamilySlug, newLabelRaw) {
+  const newLabel = String(newLabelRaw || '').trim();
+  if (!oldFamilySlug || !newLabel) throw new Error('Enter a family name.');
+  const newSlug = slug(newLabel);
+  if (!newSlug) throw new Error('Invalid family name.');
+
+  await setDoc(doc(db, C('families'), newSlug), { label: newLabel, slug: newSlug }, { merge: true });
+
+  const q = query(collection(db, C('itemVendorLookup')), where('familySlug', '==', oldFamilySlug));
+  const snap = await getDocs(q);
+  for (const d of snap.docs) {
+    const data = d.data();
+    const vendorIds = data.vendorIds || [];
+    const oldJoin = `${data.familyDisplay}|${data.sizeDisplay}`;
+    const newJoin = `${newLabel}|${data.sizeDisplay}`;
+    const oldDocId = slug(oldJoin);
+    const newDocId = slug(newJoin);
+    for (const vendorId of vendorIds) {
+      const oldRef = doc(db, C('priceLists'), vendorId, 'items', oldDocId);
+      const oldSnap = await getDoc(oldRef);
+      if (oldSnap.exists()) {
+        await setDoc(doc(db, C('priceLists'), vendorId, 'items', newDocId), {
+          ...oldSnap.data(),
+          familyDisplay: newLabel,
+          familySlug: newSlug,
+          joinKey: newJoin,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+        if (newDocId !== oldDocId) await deleteDoc(oldRef);
+      }
+    }
+    const newLookupId = `${newSlug}_${data.sizeSlug}`;
+    const nextLookup = {
+      familyDisplay: newLabel,
+      sizeDisplay: data.sizeDisplay,
+      familySlug: newSlug,
+      sizeSlug: data.sizeSlug,
+    };
+    if (vendorIds.length) nextLookup.vendorIds = arrayUnion(...vendorIds);
+    await setDoc(doc(db, C('itemVendorLookup'), newLookupId), nextLookup, { merge: true });
+    if (newLookupId !== d.id) await deleteDoc(d.ref);
+  }
+
+  if (newSlug !== oldFamilySlug) {
+    await deleteDoc(doc(db, C('families'), oldFamilySlug));
+  }
+  clearCatalogCache();
+  return { newSlug, newLabel };
+}
+
+/**
+ * Rename an item's size label inside its family across itemVendorLookup and
+ * every supplier's price list items. Returns { newKey, newLabel }.
+ */
+export async function renameItemSize(itemData, newSizeRaw) {
+  const newLabel = String(newSizeRaw || '').trim();
+  if (!itemData?.familySlug || !itemData?.familyDisplay || !newLabel) throw new Error('Enter a size name.');
+  const newSizeSlug = slug(newLabel);
+  if (!newSizeSlug) throw new Error('Invalid size name.');
+
+  const oldLookupId = `${itemData.familySlug}_${itemData.sizeSlug}`;
+  const newLookupId = `${itemData.familySlug}_${newSizeSlug}`;
+  const oldDocId = slug(`${itemData.familyDisplay}|${itemData.sizeDisplay}`);
+  const newJoin = `${itemData.familyDisplay}|${newLabel}`;
+  const newDocId = slug(newJoin);
+  const vendorIds = itemData.vendorIds || [];
+
+  for (const vendorId of vendorIds) {
+    const oldRef = doc(db, C('priceLists'), vendorId, 'items', oldDocId);
+    const oldSnap = await getDoc(oldRef);
+    if (oldSnap.exists()) {
+      await setDoc(doc(db, C('priceLists'), vendorId, 'items', newDocId), {
+        ...oldSnap.data(),
+        sizeDisplay: newLabel,
+        sizeSlug: newSizeSlug,
+        joinKey: newJoin,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      if (newDocId !== oldDocId) await deleteDoc(oldRef);
+    }
+  }
+
+  const nextLookup = {
+    familyDisplay: itemData.familyDisplay,
+    sizeDisplay: newLabel,
+    familySlug: itemData.familySlug,
+    sizeSlug: newSizeSlug,
+  };
+  if (vendorIds.length) nextLookup.vendorIds = arrayUnion(...vendorIds);
+  await setDoc(doc(db, C('itemVendorLookup'), newLookupId), nextLookup, { merge: true });
+  if (newLookupId !== oldLookupId) await deleteDoc(doc(db, C('itemVendorLookup'), oldLookupId));
+
+  clearCatalogCache();
+  return { newKey: newLookupId, newLabel };
+}
+
+/**
+ * Rename a vendor's display name (keeps vendorId stable so existing item
+ * lookups and project selections stay linked, and updates supplierName on
+ * every item under that vendor).
+ */
+export async function renameVendor(vendorId, newNameRaw) {
+  const newName = String(newNameRaw || '').trim();
+  if (!vendorId || !newName) throw new Error('Enter a vendor name.');
+
+  await setDoc(doc(db, C('priceLists'), vendorId), {
+    displayName: newName,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+
+  const snap = await getDocs(collection(db, C('priceLists'), vendorId, 'items'));
+  let batch = writeBatch(db);
+  let ops = 0;
+  for (const d of snap.docs) {
+    batch.update(d.ref, { supplierName: newName });
+    ops += 1;
+    if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; }
+  }
+  if (ops) await batch.commit();
+
+  clearCatalogCache();
+  return { vendorId, newName };
 }

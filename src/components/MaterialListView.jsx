@@ -22,8 +22,21 @@ import {
   createNewMaterial, 
   getAllVendors,
   copyStarterCatalog,
+  renameFamily,
+  renameItemSize,
+  renameVendor,
   slug,
-} from "@/lib/catalog"; 
+} from "@/lib/catalog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input'; 
 import PriceEditModal from "./PriceEditModal";
 import { formatMoney } from "@/domain/lib/currency";
 
@@ -136,6 +149,57 @@ export default function MaterialListView() {
   const [editingItem, setEditingItem] = useState(null);
   const [isCreatingPrice, setIsCreatingPrice] = useState(false); 
   const [isCreatingItem, setIsCreatingItem] = useState(false); 
+
+  // { kind: 'family' | 'size' | 'vendor', current: string, meta: object }
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState('');
+
+  const openRename = (kind, current, meta) => {
+    setRenameTarget({ kind, current, meta });
+    setRenameValue(current || '');
+    setRenameError('');
+  };
+  const submitRename = async (e) => {
+    e?.preventDefault();
+    if (!renameTarget || renameBusy) return;
+    const next = renameValue.trim();
+    if (!next) { setRenameError('Enter a name.'); return; }
+    if (next === renameTarget.current) { setRenameTarget(null); return; }
+    setRenameBusy(true);
+    setRenameError('');
+    try {
+      if (renameTarget.kind === 'family') {
+        const { newSlug } = await renameFamily(renameTarget.meta.slug, next);
+        const fams = await getFamilies();
+        setFamilies(fams);
+        const fam = fams.find((f) => f.value === newSlug);
+        if (fam) await selectFamily(fam);
+      } else if (renameTarget.kind === 'size') {
+        const { newKey } = await renameItemSize(renameTarget.meta.fullItemData, next);
+        const fam = families.find((f) => f.value === selectedFamily);
+        if (fam) {
+          const familyItems = await selectFamily(fam);
+          const renamed = familyItems.find((x) => x.value === newKey);
+          if (renamed) await handleItemSelect(renamed);
+        }
+      } else if (renameTarget.kind === 'vendor') {
+        await renameVendor(renameTarget.meta.vendorId, next);
+        setAllVendors(await getAllVendors());
+        if (selectedItem) {
+          setLoadingPrices(true);
+          setPrices(await getPricesForItem(selectedItem.fullItemData));
+          setLoadingPrices(false);
+        }
+      }
+      setRenameTarget(null);
+    } catch (err) {
+      setRenameError(err?.message || 'Could not rename.');
+    } finally {
+      setRenameBusy(false);
+    }
+  };
 
   const [familySearch, setFamilySearch] = useState("");
   const [itemSearch, setItemSearch] = useState("");
@@ -368,6 +432,21 @@ export default function MaterialListView() {
             onSelect={handleFamilySelect}
             loading={loadingFamilies}
             headerAction={
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {selectedFamily ? (
+                  <button
+                    type="button"
+                    className="ew-icon-btn ro-hide"
+                    onClick={() => {
+                      const f = families.find((x) => x.value === selectedFamily);
+                      if (f) openRename('family', f.label, { slug: f.value });
+                    }}
+                    title="Rename selected family"
+                    aria-label="Rename selected family"
+                  >
+                    <Pencil size={12} aria-hidden="true" />
+                  </button>
+                ) : null}
                 <button 
                   type="button"
                   className="ew-btn ew-btn--ghost ro-hide"
@@ -376,6 +455,7 @@ export default function MaterialListView() {
                 >
                    <Plus size={12} aria-hidden="true" /> New
                 </button>
+              </span>
             }
           />
 
@@ -388,14 +468,27 @@ export default function MaterialListView() {
             loading={loadingItems}
             headerAction={
               selectedFamily && (
-                <button 
-                  type="button"
-                  className="ew-btn ew-btn--ghost ro-hide"
-                  onClick={handleAddItemClick}
-                  title="Add a new size in this family"
-                >
-                   <Plus size={12} aria-hidden="true" /> New size
-                </button>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {selectedItem ? (
+                    <button
+                      type="button"
+                      className="ew-icon-btn ro-hide"
+                      onClick={() => openRename('size', selectedItem.label, { fullItemData: selectedItem.fullItemData })}
+                      title="Rename selected size"
+                      aria-label="Rename selected size"
+                    >
+                      <Pencil size={12} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                  <button 
+                    type="button"
+                    className="ew-btn ew-btn--ghost ro-hide"
+                    onClick={handleAddItemClick}
+                    title="Add a new size in this family"
+                  >
+                     <Plus size={12} aria-hidden="true" /> New size
+                  </button>
+                </span>
               )
             }
           />
@@ -448,8 +541,21 @@ export default function MaterialListView() {
                   </thead>
                   <tbody>
                     {prices.map(p => (
-                      <tr key={p.vendorName}>
-                        <td>{p.vendorName}</td>
+                      <tr key={p.vendorId || p.vendorName}>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {p.vendorName}
+                            <button
+                              type="button"
+                              className="ew-icon-btn ro-hide"
+                              title="Rename vendor"
+                              aria-label={`Rename ${p.vendorName}`}
+                              onClick={() => openRename('vendor', p.vendorName, { vendorId: p.vendorId })}
+                            >
+                              <Pencil size={11} aria-hidden="true" />
+                            </button>
+                          </span>
+                        </td>
                         <td className="num">{fmt(p.basePrice)}</td>
                         <td>{p.unit}</td>
                         <td className="ew-subtle">{soldBy(p)}</td>
@@ -511,6 +617,44 @@ export default function MaterialListView() {
           familiesList={families} 
         />
       )}
+
+      {renameTarget ? (
+        <Dialog open onOpenChange={(open) => { if (!open && !renameBusy) setRenameTarget(null); }}>
+          <DialogContent className="ew-card" style={{ background: 'var(--bg-800)', borderColor: 'var(--border)', maxWidth: 420 }}>
+            <form onSubmit={submitRename}>
+              <DialogHeader>
+                <DialogTitle className="text-h2">
+                  {renameTarget.kind === 'family' ? 'Rename family' : renameTarget.kind === 'size' ? 'Rename size' : 'Rename vendor'}
+                </DialogTitle>
+                <DialogDescription>
+                  {renameTarget.kind === 'family'
+                    ? 'Updates this family name across all its sizes and supplier prices.'
+                    : renameTarget.kind === 'size'
+                      ? 'Updates this size label across all its supplier prices.'
+                      : 'Updates this supplier name across all items in the price list.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div style={{ marginTop: 12 }}>
+                <Input
+                  type="text"
+                  autoFocus
+                  className="ew-input focus-anim"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  disabled={renameBusy}
+                />
+              </div>
+              {renameError ? <p role="alert" style={{ margin: '10px 0 0', color: 'var(--danger)' }}>{renameError}</p> : null}
+              <DialogFooter style={{ marginTop: 16 }}>
+                <Button type="button" variant="outline" className="ew-btn" onClick={() => setRenameTarget(null)} disabled={renameBusy}>Cancel</Button>
+                <Button type="submit" className="ew-btn ew-btn--turq" disabled={renameBusy || !renameValue.trim()}>
+                  {renameBusy ? 'Saving…' : 'Rename'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
     </div>
   );
