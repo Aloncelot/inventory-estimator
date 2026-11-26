@@ -8,10 +8,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScanLine, Upload, MousePointer2, PenLine, Ruler, Trash2, ZoomIn, ZoomOut, Maximize2,
   Link2, Unlink, RefreshCw, TriangleAlert, CopyCheck, DoorOpen, X, Plus, Columns2, Copy, Anchor, Minus, SquareDashed,
-  Lock, LockOpen, ArrowLeftRight, Eye, EyeOff,
+  Lock, LockOpen, ArrowLeftRight, Eye, EyeOff, Scissors,
 } from 'lucide-react';
 import { LockMixed, GripOn, GripOff } from '@/components/PlanIcons';
-import { moveWall, setEnd } from '@/domain/plans/move';
+import { moveWall, setEnd, splitWall, separateDoubleWall } from '@/domain/plans/move';
 import { useProject } from '@/context/ProjectContext';
 import PlanLegend from '@/components/PlanLegend';
 import { displayOf } from '@/domain/plans/display';
@@ -39,6 +39,7 @@ import { SHEAR_TYPES } from '@/domain/plans/hardware';
 import { onConcrete as isOnConcrete } from '@/domain/plans/loose';
 import { PLAN_KINDS, WALL_SIZES, KIND_LABEL, normWall, isDoubleWall, standardThick, thickSize, followThick, planGroups, groupKeysOf, wallLengthFt, storeWalls, mergeRedetect, planJunctions, firstWallSide, doubleWallBands } from '@/domain/plans/sync';
 import { JUNCTION_DEFAULTS } from '@/domain/plans/junctions';
+import { wallPolygonsSvg, expandWallBands } from '@/domain/plans/geometry';
 
 const COMMON_SCALES = [`1/16" = 1'-0"`, `3/32" = 1'-0"`, `1/8" = 1'-0"`, `3/16" = 1'-0"`, `1/4" = 1'-0"`, `3/8" = 1'-0"`, `1/2" = 1'-0"`, `3/4" = 1'-0"`, `1" = 1'-0"`];
 /** Inches with quarters as fractions: 6.75 → 6¾ */
@@ -68,7 +69,7 @@ const fmtLF = (v) => Math.round(Number(v) || 0).toLocaleString('en-US');
 
 /* ───────────────────────── drawing ───────────────────────── */
 
-function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, tool, display, grip, onSelect, onMoveEnd, onMoveOpening, onMoveWall, onAddGap, onAddWall, onAddOpening, onAddPost, onAddHardware, onAddFloorHole, onAddBlocking, onCalibrate, onDeleteSelected }) {
+function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, tool, display, grip, onSelect, onMoveEnd, onMoveOpening, onMoveWall, onAddGap, onAddWall, onSplitWall, onAddOpening, onAddPost, onAddHardware, onAddFloorHole, onAddBlocking, onCalibrate, onDeleteSelected }) {
   const W = plan.w || 2592;
   const H = plan.h || 1728;
   const k = plan.ptPerFt || 0;
@@ -76,6 +77,7 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
   // the part of the sheet on screen (the SVG viewBox), in sheet points
   const [view, setView] = useState({ x: 0, y: 0, w: W, h: H });
   const [draft, setDraft] = useState(null); // { a:[x,y], b:[x,y] }
+  const [splitPreview, setSplitPreview] = useState(null); // { w, u, x, y, ux, uy, L }
   const [hover, setHover] = useState(null);
   const drag = useRef(null);
   const endDrag = useRef(null);
@@ -89,7 +91,7 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
   const junctions = useMemo(() => (k ? planJunctions(plan) : []), [plan, k]);
 
   useEffect(() => { setView({ x: 0, y: 0, w: W, h: H }); }, [W, H]);
-  useEffect(() => { setDraft(null); }, [tool]);
+  useEffect(() => { setDraft(null); setSplitPreview(null); }, [tool]);
 
   // a mouse event's position on the sheet, whatever the zoom and pan
   const toPt = useCallback((e) => {
@@ -105,30 +107,33 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
     return r ? Math.max(view.w / r.width, view.h / r.height) : 1;
   }, [view]);
 
-  // snap: wall end points within 10 px, then square to the axes within 6°
+  // snap: wall/band end points within 10 px, then nearer band centreline (for
+  // double walls, snaps to the centre of the closer band, not the gap between),
+  // then square to the axes within 6°
   const snap = useCallback((pt, from, exclude) => {
     const tol = 10 * pxToPt();
+    const bands = expandWallBands(plan.walls || [], k);
     let best = null;
-    for (const w of plan.walls || []) {
-      if (exclude && w.id === exclude) continue;
-      for (const q of [[w.x1, w.y1], [w.x2, w.y2]]) {
+    for (const b of bands) {
+      if (exclude && b.parentId === exclude) continue;
+      for (const q of [[b.x1, b.y1], [b.x2, b.y2]]) {
         const d = Math.hypot(q[0] - pt[0], q[1] - pt[1]);
         if (d < tol && (!best || d < best.d)) best = { d, q };
       }
     }
     if (best) return best.q;
-    // onto another wall's centre line: a T. u is the distance along that wall,
-    // off the distance from it; half the wall's thickness counts as on it
+    // onto another wall band's centre line: a T. u is the distance along that
+    // band, off the distance from it; half the band's width counts as on it
     let line = null;
-    for (const w of plan.walls || []) {
-      if (exclude && w.id === exclude) continue;
-      const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+    for (const b of bands) {
+      if (exclude && b.parentId === exclude) continue;
+      const L = Math.hypot(b.x2 - b.x1, b.y2 - b.y1);
       if (!L) continue;
-      const ux = (w.x2 - w.x1) / L, uy = (w.y2 - w.y1) / L;
-      const u = (pt[0] - w.x1) * ux + (pt[1] - w.y1) * uy;
-      const off = Math.abs((pt[0] - w.x1) * -uy + (pt[1] - w.y1) * ux);
-      const lim = tol + ((Number(w.t) || 5) / 24) * k;
-      if (u > 0 && u < L && off < lim && (!line || off < line.off)) line = { off, q: [w.x1 + ux * u, w.y1 + uy * u], ux, uy };
+      const ux = (b.x2 - b.x1) / L, uy = (b.y2 - b.y1) / L;
+      const u = (pt[0] - b.x1) * ux + (pt[1] - b.y1) * uy;
+      const off = Math.abs((pt[0] - b.x1) * -uy + (pt[1] - b.y1) * ux);
+      const lim = tol + b.width / 2;
+      if (u > 0 && u < L && off < lim && (!line || off < line.off)) line = { off, q: [b.x1 + ux * u, b.y1 + uy * u], ux, uy };
     }
     if (line) {
       // square to the wall it meets when drawing from a point
@@ -236,6 +241,14 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
       if (hit) (tool === 'post' ? onAddPost : onAddHardware)(hit.w.id, hit.u / k);
       return;
     }
+    if (tool === 'split' && e.button === 0) {
+      const hit = wallNear(toPt(e));
+      if (hit) {
+        onSplitWall?.(hit.w.id, [hit.w.x1 + hit.ux * hit.u, hit.w.y1 + hit.uy * hit.u]);
+        setSplitPreview(null);
+      }
+      return;
+    }
     if (tool === 'opening' && e.button === 0) {
       const pt = toPt(e);
       if (!draft) {
@@ -324,6 +337,13 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
       if (w) setDraft((dr) => ({ ...dr, u1: onWall(w, toPt(e)).u }));
       return;
     }
+    if (tool === 'split') {
+      const hit = wallNear(toPt(e));
+      if (hit && hit.u > Math.max(2, 0.25 * (k || 1)) && hit.u < hit.L - Math.max(2, 0.25 * (k || 1))) {
+        setSplitPreview({ w: hit.w, u: hit.u, L: hit.L, ux: hit.ux, uy: hit.uy, x: hit.w.x1 + hit.ux * hit.u, y: hit.w.y1 + hit.uy * hit.u });
+      } else setSplitPreview(null);
+      return;
+    }
     if (draft) setDraft((dr) => ({ ...dr, b: tool === 'floorhole' ? toPt(e) : snap(toPt(e), dr.a) }));
   };
   const onPointerUp = () => {
@@ -367,6 +387,7 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
     const wd = wallDrag.current;
     return wallMove && wd ? moveWall(list, wd.id, wallMove, { grip, k }) : list;
   }, [plan.walls, wallMove, grip, k]);
+  const wallPolys = useMemo(() => wallPolygonsSvg(walls, k), [walls, k]);
   const hoverWall = hover ? walls.find((w) => w.id === hover) : null;
   const draftFt = draft && k ? (tool === 'opening' ? Math.abs(draft.u1 - draft.u0) : Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1])) / k : 0;
   const draftWall = draft && tool === 'opening' ? walls.find((w) => w.id === draft.wallId) : null;
@@ -376,10 +397,13 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
     ? `Opening at ${ftIn(opAt)} from the wall start`
     : endPt && endDrag.current
     ? `${ftIn(Math.hypot(endPt[0] - endDrag.current.other[0], endPt[1] - endDrag.current.other[1]) / (k || 1))}`
+    : splitPreview && k
+    ? `Split: ${ftIn(splitPreview.u / k)} | ${ftIn((splitPreview.L - splitPreview.u) / k)}`
     : draft
     ? (tool === 'opening' ? `Opening ${ftIn(draftFt)} wide` : tool === 'calibrate' ? `Distance on sheet: ${Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1]).toFixed(1)} pt` : `${ftIn(draftFt)}`)
     : hoverWall ? `${wallTitle(hoverWall)} · ${ftIn(wallLengthFt(hoverWall, k))}${hoverWall.openings?.length ? ` · ${hoverWall.openings.length} opening${hoverWall.openings.length > 1 ? 's' : ''}` : ''}` : '';
   const hint = tool === 'add' ? 'Click the start and the end of the wall · Esc cancels'
+    : tool === 'split' ? 'Click on a wall where you want to cut it into two sections · Esc cancels'
     : tool === 'opening' ? 'Click one side of the opening on a wall, then the other side · Esc cancels'
     : tool === 'post' ? 'Click on a wall where the structural plans show a post'
     : tool === 'hardware' ? 'Click on a wall where the structural plans show this hardware'
@@ -448,14 +472,22 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
             return (
               <g key={w.id} data-wall={w.id} onPointerEnter={() => setHover(w.id)} onPointerLeave={() => setHover((h) => (h === w.id ? null : h))}>
                 {isDoubleWall(w) ? (
-                  // a double wall: two bands side by side, each as wide as its studs, gap between
+                  // a double wall: two bands side by side, each rendered as a mitered polygon
                   <>
                     <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke="transparent" strokeWidth={t} />
-                    {doubleWallBands(w, firstWallSide(w, walls, k), t).map((b, i) => (hidden[b.kind] && !on ? null : (
-                      <line key={i} x1={w.x1 + uy * b.off} y1={w.y1 - ux * b.off} x2={w.x2 + uy * b.off} y2={w.y2 - ux * b.off}
-                        stroke={on ? '#ff7a00' : colors[b.kind] || '#555'} strokeOpacity={on ? 0.95 : 0.75} strokeWidth={b.width} />
-                    )))}
+                    {doubleWallBands(w, firstWallSide(w, walls, k), t).map((b, i) => {
+                      if (hidden[b.kind] && !on) return null;
+                      const poly = wallPolys.get(`${w.id}:${i}`);
+                      return poly ? (
+                        <polygon key={i} points={poly} fill={on ? '#ff7a00' : colors[b.kind] || '#555'} fillOpacity={on ? 0.95 : 0.75} />
+                      ) : (
+                        <line key={i} x1={w.x1 + uy * b.off} y1={w.y1 - ux * b.off} x2={w.x2 + uy * b.off} y2={w.y2 - ux * b.off}
+                          stroke={on ? '#ff7a00' : colors[b.kind] || '#555'} strokeOpacity={on ? 0.95 : 0.75} strokeWidth={b.width} />
+                      );
+                    })}
                   </>
+                ) : wallPolys.has(w.id) ? (
+                  <polygon points={wallPolys.get(w.id)} fill={on ? '#ff7a00' : colors[w.kind] || '#555'} fillOpacity={on ? 0.95 : 0.6} />
                 ) : (
                   <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke={on ? '#ff7a00' : colors[w.kind] || '#555'} strokeOpacity={on ? 0.95 : 0.6} strokeWidth={t} />
                 )}
@@ -577,6 +609,20 @@ function PlanCanvas({ plan, imgUrl, showSheet = true, onToggleSheet, selected, t
           const r = onWall(draftWall, [draftWall.x1, draftWall.y1]);
           const a = Math.min(draft.u0, draft.u1), b = Math.max(draft.u0, draft.u1);
           return <line x1={draftWall.x1 + r.ux * a} y1={draftWall.y1 + r.uy * a} x2={draftWall.x1 + r.ux * b} y2={draftWall.y1 + r.uy * b} stroke="#ff7a00" strokeWidth={6} vectorEffect="non-scaling-stroke" strokeOpacity={0.8} />;
+        })() : null}
+        {splitPreview ? (() => {
+          const half = Math.max(4, (((Number(splitPreview.w.t) || 5) / 12) * k) * 0.9);
+          const nx = -splitPreview.uy, ny = splitPreview.ux;
+          return (
+            <g pointerEvents="none">
+              <line
+                x1={splitPreview.x - nx * half} y1={splitPreview.y - ny * half}
+                x2={splitPreview.x + nx * half} y2={splitPreview.y + ny * half}
+                stroke="#ff7a00" strokeWidth={2.5} strokeDasharray="4 2" vectorEffect="non-scaling-stroke"
+              />
+              <circle cx={splitPreview.x} cy={splitPreview.y} r={Math.max(2, half * 0.25)} fill="#ff7a00" />
+            </g>
+          );
         })() : null}
         {draft && draft.a && tool === 'floorhole' ? (
           <rect x={Math.min(draft.a[0], draft.b[0])} y={Math.min(draft.a[1], draft.b[1])} width={Math.abs(draft.b[0] - draft.a[0])} height={Math.abs(draft.b[1] - draft.a[1])} fill="#ff7a00" fillOpacity={0.15} stroke="#ff7a00" strokeWidth={2} vectorEffect="non-scaling-stroke" />
@@ -917,6 +963,21 @@ export default function PlanTakeoffView() {
     setPlan((p) => ({ ...p, walls: [...(p.walls || []), w] }));
     setSelected(new Set([w.id]));
   }, [setPlan]);
+  const splitWallAt = useCallback((wallId, pt) => {
+    let createdId = null;
+    setPlan((p) => {
+      const next = [];
+      for (const w of p.walls || []) {
+        if (w.id !== wallId) { next.push(w); continue; }
+        const parts = splitWall(w, pt, p.ptPerFt, newId);
+        if (!parts) { next.push(w); continue; }
+        createdId = parts[1].id;
+        next.push(parts[0], parts[1]);
+      }
+      return { ...p, walls: next };
+    });
+    if (createdId) setSelected(new Set([createdId]));
+  }, [setPlan]);
 
   const addOpening = useCallback((wallId, atFt, widthFt) => {
     const r2 = (v) => Math.round(v * 100) / 100;
@@ -1127,6 +1188,7 @@ export default function PlanTakeoffView() {
                 {grip ? <GripOn size={15} /> : <GripOff size={15} />}
               </button>
               <button type="button" className={`ew-btn${tool === 'add' ? ' is-on' : ''}`} onClick={() => setTool('add')} title="Draw a wall the detection missed" disabled={!plan.ptPerFt}><PenLine size={14} /> Add wall</button>
+              <button type="button" className={`ew-btn${tool === 'split' ? ' is-on' : ''}`} onClick={() => setTool('split')} title="Split a wall into two sections: click where you want to cut it" disabled={!plan.ptPerFt}><Scissors size={14} /> Split wall</button>
               <button type="button" className={`ew-btn${tool === 'opening' ? ' is-on' : ''}`} onClick={() => setTool('opening')} title="Mark a window or door the detection missed: click both sides of it on a wall" disabled={!plan.ptPerFt}><DoorOpen size={14} /> Add opening</button>
               {tool === 'opening' ? (
                 <select className="ew-select" style={{ width: 84 }} value={openingType} onChange={(e) => setOpeningType(e.target.value)} aria-label="Opening type">
@@ -1248,6 +1310,7 @@ export default function PlanTakeoffView() {
               onMoveEnd={moveEnd}
               onAddGap={(i) => setPlan((p) => placeFrom(addStructWalls(p, [p.structural?.gaps?.[i]].filter(Boolean), newId), p.structural))}
               onAddWall={addWall}
+              onSplitWall={splitWallAt}
               onAddOpening={addOpening}
               grip={grip}
               onMoveWall={moveWallBy}
@@ -1277,6 +1340,22 @@ export default function PlanTakeoffView() {
                     patchWalls(sel.map((w) => w.id), (w) => (patch.double && !w.double ? { ...patch, kind2: w.kind2 || 'partition', size2: w.size } : patch));
                   }}
                   onSwapSides={() => patchWalls(sel.map((w) => w.id), (w) => (w.sidesFlip ? { sidesFlip: false } : { sidesFlip: true }))}
+                  onSeparate={() => {
+                    const ids = new Set(sel.map((w) => w.id));
+                    const nextSel = [];
+                    setPlan((p) => {
+                      const list = p.walls || [];
+                      const out = [];
+                      for (const w of list) {
+                        if (!ids.has(w.id)) { out.push(w); continue; }
+                        const parts = separateDoubleWall(w, list, p.ptPerFt, newId);
+                        if (parts) { out.push(parts[0], parts[1]); nextSel.push(parts[0].id, parts[1].id); }
+                        else { out.push(w); nextSel.push(w.id); }
+                      }
+                      return { ...p, walls: out };
+                    });
+                    if (nextSel.length) setSelected(new Set(nextSel));
+                  }}
                   onDelete={() => deleteWalls(sel.map((w) => w.id))}
                   onLock={(on) => setUnlocked(sel.map((w) => w.id), on)}
                   onOpenings={(fn) => sel.length === 1 && patchOpenings(sel[0].id, fn)}
@@ -1504,7 +1583,7 @@ function ThickField({ wall, onPatch }) {
   );
 }
 
-function SelectionPanel({ walls, ptPerFt, onPatch, onSwapSides, onSetLength, onDelete, onLock, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
+function SelectionPanel({ walls, ptPerFt, onPatch, onSwapSides, onSeparate, onSetLength, onDelete, onLock, onSimilar, onClear, onOpenings, onNewType, openingTypes = [], postTypes = [], onPosts, hardwareTypes = [], onHardware, onShear, colors }) {
   const one = walls.length === 1 ? walls[0] : null;
   const isExterior = one ? normWall(one).kind === 'exterior' : false;
   const norm = walls.map(normWall);
@@ -1566,6 +1645,10 @@ function SelectionPanel({ walls, ptPerFt, onPatch, onSwapSides, onSetLength, onD
           <button type="button" className="ew-btn ew-btn--ghost pt-double__swap" onClick={onSwapSides}
             title="Puts the 1st wall on the other side, on the drawing and in Layout check. Exterior walls start with the 1st wall outside; interior ones, on the left of the direction the wall was drawn">
             <ArrowLeftRight size={14} /> Swap sides
+          </button>
+          <button type="button" className="ew-btn ew-btn--ghost pt-double__swap" onClick={onSeparate}
+            title="Split this double wall into two independent single walls (e.g. for a plumbing chase or independent partitions)">
+            <Unlink size={14} /> Separate walls
           </button>
         </div>
       ) : (

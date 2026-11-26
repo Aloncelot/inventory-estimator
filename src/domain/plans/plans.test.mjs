@@ -343,3 +343,80 @@ test('cross-style dark faces pair and short closet wing wall survives', () => {
   const closetReturn = r.walls.find((w) => !w.exterior && Math.abs(w.x1 - (x0 + 6 * K + pt / 2)) < 5);
   assert.ok(closetReturn, 'short closet wing wall survived');
 });
+
+test('wall running continuously from interior into exterior is split at the crossing wall', async () => {
+  const { markExterior } = await import('./detect.js');
+  const k = 10;
+  const w = (x1, y1, x2, y2, thickIn = 6.5, openings = []) => ({
+    x1: x1 * k, y1: y1 * k, x2: x2 * k, y2: y2 * k, thickIn,
+    lengthFt: Math.hypot(x2 - x1, y2 - y1), openings,
+  });
+  // L-shaped building (30'×30' with 15'×15' cutout at top-right):
+  // the horizontal wall at y=15 runs continuously from x=0 to x=30 (0..15 is interior, 15..30 is exterior!)
+  const walls = [
+    w(0, 0, 15, 0),
+    w(15, 0, 15, 15),
+    w(0, 15, 30, 15, 6.5, [{ atFt: 5, widthFt: 3, type: 'door' }, { atFt: 20, widthFt: 3, type: 'window' }]),
+    w(30, 15, 30, 30),
+    w(30, 30, 0, 30),
+    w(0, 30, 0, 0),
+  ];
+  markExterior(walls, k);
+  const horiz15 = walls.filter((x) => Math.abs(x.y1 - 15 * k) < 1 && Math.abs(x.y2 - 15 * k) < 1);
+  assert.equal(horiz15.length, 2, 'continuous wall split into 2 halves at x=15');
+  const insideHalf = horiz15.find((x) => Math.min(x.x1, x.x2) < 5 * k);
+  const outsideHalf = horiz15.find((x) => Math.max(x.x1, x.x2) > 25 * k);
+  assert.equal(insideHalf.exterior, false, '0..15 half stays interior');
+  assert.equal(outsideHalf.exterior, true, '15..30 half becomes exterior');
+  assert.deepEqual(insideHalf.openings.map((o) => [o.type, o.atFt]), [['door', 5]]);
+  assert.deepEqual(outsideHalf.openings.map((o) => [o.type, o.atFt]), [['window', 5]]);
+});
+
+test('double wall where one wall stops and the other continues splits into double + single', () => {
+  const seg = (x1, y1, x2, y2, style = S) => ({ x1, y1, x2, y2, w: 1, style });
+  const t = 6.25 * IN, pt = 4.75 * IN;
+  const x0 = 100, y0 = 100, W = 24 * K, H = 12 * K;
+  const segs = [
+    // outer box
+    seg(x0, y0, x0 + W, y0), seg(x0 + t, y0 + t, x0 + W - t, y0 + t),
+    seg(x0, y0 + H, x0 + W, y0 + H), seg(x0 + t, y0 + H - t, x0 + W - t, y0 + H - t),
+    seg(x0, y0, x0, y0 + H), seg(x0 + t, y0 + t, x0 + t, y0 + H - t),
+    seg(x0 + W, y0, x0 + W, y0 + H), seg(x0 + W - t, y0 + t, x0 + W - t, y0 + H - t),
+    // interior horizontal run at y = y0 + 6':
+    // wall 1 (4.75") runs the whole interior width (t .. W - t = ~23')
+    seg(x0 + t, y0 + 6 * K, x0 + W - t, y0 + 6 * K, P),
+    seg(x0 + t, y0 + 6 * K + pt, x0 + W - t, y0 + 6 * K + pt, P),
+    // wall 2 (4.75" + 1" gap below wall 1) only runs the first 10' and stops!
+    seg(x0 + t, y0 + 6 * K + pt + 1 * IN, x0 + 10 * K, y0 + 6 * K + pt + 1 * IN, P),
+    seg(x0 + t, y0 + 6 * K + 2 * pt + 1 * IN, x0 + 10 * K, y0 + 6 * K + 2 * pt + 1 * IN, P),
+  ];
+  const r = detectWalls({ width: 1000, height: 600, segments: segs, texts: [] }, { ptPerFt: K, styles: [S, P] });
+  const mid = r.walls.filter((w) => !w.exterior && Math.abs(w.y1 - w.y2) < 1);
+  assert.equal(mid.length, 2, `split into double + continuing single (got ${mid.length})`);
+  const dbl = mid.find((w) => w.double);
+  const single = mid.find((w) => !w.double);
+  assert.ok(dbl && single, 'one double wall and one single continuing wall');
+  assert.ok(dbl.lengthFt > 8 && dbl.lengthFt < 11, `double span ~9.5' (${dbl.lengthFt}')`);
+  assert.ok(single.lengthFt > 12 && single.lengthFt < 15, `single span ~13.5' (${single.lengthFt}')`);
+});
+
+test('two parallel partitions with a wide plumbing-chase gap (>= 1.75") stay independent, not double', () => {
+  const seg = (x1, y1, x2, y2, style = S) => ({ x1, y1, x2, y2, w: 1, style });
+  const t = 6.25 * IN, pt = 4.5 * IN, chaseGap = 3.0 * IN;
+  const x0 = 100, y0 = 100, W = 20 * K, H = 12 * K;
+  const segs = [
+    seg(x0, y0, x0 + W, y0), seg(x0 + t, y0 + t, x0 + W - t, y0 + t),
+    seg(x0, y0 + H, x0 + W, y0 + H), seg(x0 + t, y0 + H - t, x0 + W - t, y0 + H - t),
+    seg(x0, y0, x0, y0 + H), seg(x0 + t, y0 + t, x0 + t, y0 + H - t),
+    seg(x0 + W, y0, x0 + W, y0 + H), seg(x0 + W - t, y0 + t, x0 + W - t, y0 + H - t),
+    // two 4.5" partitions separated by a 3" plumbing chase (total 12" <= maxThickIn)
+    seg(x0 + t, y0 + 5 * K, x0 + W - t, y0 + 5 * K, P),
+    seg(x0 + t, y0 + 5 * K + pt, x0 + W - t, y0 + 5 * K + pt, P),
+    seg(x0 + t, y0 + 5 * K + pt + chaseGap, x0 + W - t, y0 + 5 * K + pt + chaseGap, P),
+    seg(x0 + t, y0 + 5 * K + 2 * pt + chaseGap, x0 + W - t, y0 + 5 * K + 2 * pt + chaseGap, P),
+  ];
+  const r = detectWalls({ width: 1000, height: 600, segments: segs, texts: [] }, { ptPerFt: K, styles: [S, P] });
+  const chase = r.walls.filter((w) => !w.exterior && Math.abs(w.y1 - w.y2) < 1);
+  assert.equal(chase.length, 2, `detected as 2 independent partitions (got ${chase.length})`);
+  assert.ok(chase.every((w) => !w.double && w.kind === 'partition'), 'neither is marked as a double/shear wall');
+});

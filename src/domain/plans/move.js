@@ -1,3 +1,5 @@
+import { isDoubleWall, normWall, firstWallSide, doubleWallBands, standardThick } from './sync.js';
+
 /**
  * Moving walls on the plan drawing.
  * Walls are in sheet points; k is points per foot. Openings are measured in feet from the wall start.
@@ -74,4 +76,98 @@ export function moveWall(walls, id, d, { grip = true, k } = {}) {
     }
     return cur;
   });
+}
+
+/**
+ * Split one wall into two at the point `pt` (projected onto its centre line).
+ * Openings, posts and hardware are distributed to the half they belong to, with
+ * distances on the second half shifted to start at 0. Returns [first, second]
+ * or null if `pt` is too close to either end.
+ */
+export function splitWall(w, pt, k, nextId) {
+  if (!w || !pt) return null;
+  const kk = k || 1;
+  const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+  const margin = Math.max(2, 0.25 * kk);
+  if (L < margin * 2) return null;
+  const ux = (w.x2 - w.x1) / L, uy = (w.y2 - w.y1) / L;
+  const u = (pt[0] - w.x1) * ux + (pt[1] - w.y1) * uy;
+  if (u <= margin || u >= L - margin) return null;
+  const sx = Math.round((w.x1 + ux * u) * 100) / 100;
+  const sy = Math.round((w.y1 + uy * u) * 100) / 100;
+  const splitFt = u / kk;
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const { lenFt: _lenFt, ...base } = w;
+
+  const partOpenings = (list = []) => {
+    const a = [], b = [];
+    for (const o of list) {
+      const mid = (Number(o.atFt) || 0) + (Number(o.widthFt) || 0) / 2;
+      if (mid <= splitFt) a.push(o);
+      else b.push({ ...o, atFt: r2(Math.max(0, (Number(o.atFt) || 0) - splitFt)) });
+    }
+    return [a, b];
+  };
+  const partAt = (list = []) => {
+    const a = [], b = [];
+    for (const item of list) {
+      const at = Number(item.atFt) || 0;
+      if (at <= splitFt) a.push(item);
+      else b.push({ ...item, atFt: r2(Math.max(0, at - splitFt)) });
+    }
+    return [a, b];
+  };
+
+  const [op1, op2] = partOpenings(w.openings);
+  const [p1, p2] = partAt(w.posts);
+  const [h1, h2] = partAt(w.hardware);
+
+  const first = {
+    ...base, x2: sx, y2: sy, auto: false, openings: op1,
+    ...(w.posts ? { posts: p1 } : {}),
+    ...(w.hardware ? { hardware: h1 } : {}),
+  };
+  const second = {
+    ...base, id: nextId(), x1: sx, y1: sy, auto: false, added: true, openings: op2,
+    ...(w.posts ? { posts: p2 } : {}),
+    ...(w.hardware ? { hardware: h2 } : {}),
+  };
+  return [first, second];
+}
+
+/**
+ * Separate a double wall into two independent single walls positioned on the
+ * exact centrelines of its two stud bands. Returns [wall1, wall2] or null if
+ * `w` is not a double wall.
+ */
+export function separateDoubleWall(w, walls, k, nextId) {
+  if (!w || !isDoubleWall(w)) return null;
+  const kk = k || 12;
+  const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+  if (!L) return null;
+  const ux = (w.x2 - w.x1) / L, uy = (w.y2 - w.y1) / L;
+  const t = Math.max(1, ((Number(w.t) || 10) / 12) * kk);
+  const n = normWall(w);
+  const bands = doubleWallBands(w, firstWallSide(w, walls, kk), t);
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const { double: _d, kind2: _k2, size2: _s2, sidesFlip: _sf, ...base } = w;
+  const make = (b, id, kind, size, extra = {}) => {
+    const ox = uy * b.off, oy = -ux * b.off;
+    return {
+      ...base,
+      id,
+      x1: r2(w.x1 + ox), y1: r2(w.y1 + oy),
+      x2: r2(w.x2 + ox), y2: r2(w.y2 + oy),
+      t: standardThick({ double: false, kind, size }),
+      kind,
+      size,
+      auto: false,
+      openings: (w.openings || []).map((o) => ({ ...o })),
+      ...extra,
+    };
+  };
+  return [
+    make(bands[0], w.id, n.kind, n.size),
+    make(bands[1], nextId(), n.kind2 || 'partition', n.size2 || n.size, { added: true }),
+  ];
 }

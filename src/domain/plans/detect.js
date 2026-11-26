@@ -298,7 +298,9 @@ export function detectWalls(page, opts = {}) {
         // (only bands the wall poché backs: cabinets and fixtures have none)
         const parts = g.vb - g.va > tMax * 1.05
           ? splitBand(members.get(r), tMax, minSeg).filter((p) => pocheCover(b.fills, p) >= 0.6 || (poche.count > 50 && pocheRatio(p, b, poche) >= 0.5))
-          : [stripFinishLayer(members.get(r), g, b, poche, inPt)];
+          : splitPartialDouble(members.get(r), g, inPt, o.doubleMinIn, minSeg, k)
+            .flatMap((p) => splitWideGapWalls(members.get(r), p, b, poche, inPt, o.doubleMinIn, tMin))
+            .map((p) => stripFinishLayer(members.get(r), p, b, poche, inPt));
         for (const p0 of parts) {
           const p = poche.count > 50 ? fitPoche(p0, b, poche, inPt, tMin, tMax) : p0;
           bands.push({ deg: b.deg, d: b.d, n: b.n, style, u0: p.u0, u1: p.u1, v: (p.va + p.vb) / 2, t: p.vb - p.va, fitted: p.fitted });
@@ -646,6 +648,121 @@ function pocheRatio(p, b, poche) {
     if (poche.inside(b.d[0] * u + b.n[0] * vm, b.d[1] * u + b.n[1] * vm)) hits += 1;
   }
   return hits / fs.length;
+}
+
+/**
+ * When a double wall ends on one side while its other wall keeps running as a
+ * single wall, union-find merges the whole run into one wide band. Sweep along
+ * `u` over the group's pieces so the double-wall span (≥ doubleMinIn) and the
+ * continuing single-wall span(s) (< doubleMinIn) become separate bands with
+ * their own true thickness and centreline.
+ */
+function splitPartialDouble(members, g, inPt, doubleMinIn, minSeg, k) {
+  if (!members || members.length < 2 || (g.vb - g.va) / inPt < doubleMinIn) return [g];
+  const us = [];
+  for (const m of members) us.push(m.u0, m.u1);
+  us.sort((a, b) => a - b);
+  const uniq = [];
+  for (const u of us) if (!uniq.length || u - uniq[uniq.length - 1] > 0.25) uniq.push(u);
+  if (uniq.length < 3) return [g];
+  const runs = [];
+  for (let i = 0; i < uniq.length - 1; i++) {
+    const a = uniq[i], z = uniq[i + 1];
+    if (z - a < 0.25) continue;
+    const mid = (a + z) / 2;
+    let va = Infinity, vb = -Infinity;
+    for (const m of members) {
+      if (m.u0 <= mid && m.u1 >= mid) {
+        if (m.va < va) va = m.va;
+        if (m.vb > vb) vb = m.vb;
+      }
+    }
+    if (va >= vb) continue;
+    const isDbl = (vb - va) / inPt >= doubleMinIn;
+    const prev = runs[runs.length - 1];
+    if (prev && prev.isDbl === isDbl && Math.abs(prev.va - va) <= 1.2 * inPt && Math.abs(prev.vb - vb) <= 1.2 * inPt) {
+      prev.u1 = z;
+      prev.va = Math.min(prev.va, va);
+      prev.vb = Math.max(prev.vb, vb);
+    } else {
+      runs.push({ u0: a, u1: z, va, vb, isDbl });
+    }
+  }
+  const hasDbl = runs.some((r) => r.isDbl && r.u1 - r.u0 >= minSeg);
+  const hasSingle = runs.some((r) => !r.isDbl && r.u1 - r.u0 >= 1.2 * k);
+  if (!hasDbl || !hasSingle) return [g];
+  const out = runs.filter((r) => r.u1 - r.u0 >= minSeg).map(({ u0, u1, va, vb }) => ({ u0, u1, va, vb }));
+  return out.length ? out : [g];
+}
+
+/**
+ * Distinguish independent parallel partitions (e.g. a plumbing chase with a
+ * ≥1.75" clear gap between two 2x4 walls) from a true double wall (~1" gap):
+ *  - with poché: sample across v (bridging only <0.5" cracks); if 2+ filled
+ *    wall runs (3.2"–7.5") are separated by an unfilled gap ≥1.75", emit each
+ *    run as an independent single wall;
+ *  - without poché: if 4+ distinct face lines form two 3.2"–7.5" walls with a
+ *    clear middle gap ≥1.75", emit them as independent single walls.
+ */
+function splitWideGapWalls(members, g, b, poche, inPt, doubleMinIn, tMin) {
+  const totalIn = (g.vb - g.va) / inPt;
+  if (totalIn < doubleMinIn) return [g];
+  const minGapPt = 1.75 * inPt;
+
+  if (poche.count > 50) {
+    const step = 0.25;
+    const n = Math.max(4, Math.ceil((g.vb - g.va) / step));
+    const vAt = (i) => g.va + ((g.vb - g.va) * i) / n;
+    const covered = [];
+    for (let i = 0; i <= n; i++) {
+      const v = vAt(i);
+      const hits = [0.25, 0.5, 0.75].filter((f) => {
+        const u = g.u0 + (g.u1 - g.u0) * f;
+        return poche.inside(b.d[0] * u + b.n[0] * v, b.d[1] * u + b.n[1] * v);
+      }).length;
+      covered.push(hits >= 2);
+    }
+    const bridge = Math.ceil((0.5 * inPt) / ((g.vb - g.va) / n));
+    const runs = [];
+    let start = -1, last = -1;
+    covered.forEach((c, i) => {
+      if (!c) return;
+      if (start >= 0 && i - last > bridge + 1) { runs.push([vAt(start), vAt(last)]); start = -1; }
+      if (start < 0) start = i;
+      last = i;
+    });
+    if (start >= 0) runs.push([vAt(start), vAt(last)]);
+    const valid = runs.filter(([a, z]) => z - a >= Math.max(tMin, 3.2 * inPt) && z - a <= 7.5 * inPt);
+    if (valid.length >= 2) {
+      let wideGap = false;
+      for (let i = 1; i < valid.length; i++) if (valid[i][0] - valid[i - 1][1] >= minGapPt) wideGap = true;
+      if (wideGap) return valid.map(([va, vb]) => ({ u0: g.u0, u1: g.u1, va, vb }));
+    }
+  }
+
+  // Fallback without poché: 4+ distinct face lines forming two independent walls with ≥1.75" gap
+  if (!members || members.length < 2) return [g];
+  const len = g.u1 - g.u0;
+  const raw = [];
+  for (const m of members) {
+    if (Math.min(m.u1, g.u1) - Math.max(m.u0, g.u0) < len * 0.55) continue;
+    raw.push(m.va, m.vb);
+  }
+  raw.sort((x, y) => x - y);
+  const vs = [];
+  for (const v of raw) if (!vs.length || v - vs[vs.length - 1] > 0.4 * inPt) vs.push(v);
+  if (vs.length === 4) {
+    const w1 = (vs[1] - vs[0]) / inPt;
+    const gap = (vs[2] - vs[1]) / inPt;
+    const w2 = (vs[3] - vs[2]) / inPt;
+    if (w1 >= 3.2 && w1 <= 7.5 && w2 >= 3.2 && w2 <= 7.5 && gap >= 1.75) {
+      return [
+        { u0: g.u0, u1: g.u1, va: vs[0], vb: vs[1] },
+        { u0: g.u0, u1: g.u1, va: vs[2], vb: vs[3] },
+      ];
+    }
+  }
+  return [g];
 }
 
 /**
@@ -1238,7 +1355,7 @@ export function markExterior(walls, k) {
   }
 
   const samples = [0.2, 0.35, 0.5, 0.65, 0.8];
-  for (const w of walls) {
+  const classifyWall = (w) => {
     const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
     const nx = -(w.y2 - w.y1) / L, ny = (w.x2 - w.x1) / L;
     const off = Math.max(((w.thickIn || 6) / 12) * k * 0.5, cell * 0.65) + cell * 1.15;
@@ -1255,6 +1372,88 @@ export function markExterior(walls, k) {
     const need = L < cell * 2.5 ? 1 : 3;
     w.exterior = bestHits >= need;
     if (w.exterior) w.outside = bestSgn;
+    else delete w.outside;
+  };
+
+  // Split walls that run continuously from inside the building out into an
+  // exterior wall (e.g. a bearing/shear wall continuing past a crossing wall
+  // into an L-wing or porch): snap the split to the crossing wall at the
+  // interior↔exterior transition so each half gets its own type.
+  const minPart = 1.5 * k;
+  const splitOut = [];
+  for (const w of walls) {
+    const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+    if (L < minPart * 2) { splitOut.push(w); continue; }
+    const ux = (w.x2 - w.x1) / L, uy = (w.y2 - w.y1) / L;
+    const nx = -uy, ny = ux;
+    const off = Math.max(((w.thickIn || 6) / 12) * k * 0.5, cell * 0.65) + cell * 1.15;
+    const step = Math.max(0.5 * k, cell * 0.75);
+    const n = Math.max(6, Math.ceil(L / step));
+    const du = L / n;
+    const isExtAt = (u) => {
+      const px = w.x1 + ux * u, py = w.y1 + uy * u;
+      return grid[toRow(py + ny * off) * cols + toCol(px + nx * off)] === 2
+        || grid[toRow(py - ny * off) * cols + toCol(px - nx * off)] === 2;
+    };
+    // find candidate crossing walls strictly inside w
+    const crosses = [];
+    for (const o of walls) {
+      if (o === w) continue;
+      const X = lineCross(w, o);
+      if (!X) continue;
+      const u = (X[0] - w.x1) * ux + (X[1] - w.y1) * uy;
+      if (u < minPart || u > L - minPart) continue;
+      // o must actually reach w at X
+      const Lo = Math.hypot(o.x2 - o.x1, o.y2 - o.y1) || 1;
+      const oux = (o.x2 - o.x1) / Lo, ouy = (o.y2 - o.y1) / Lo;
+      const uo = (X[0] - o.x1) * oux + (X[1] - o.y1) * ouy;
+      const reach = (((w.thickIn || 6) + (o.thickIn || 6)) / 24) * k + 1.5 * k;
+      if (uo < -reach || uo > Lo + reach) continue;
+      crosses.push(u);
+    }
+    if (!crosses.length) { splitOut.push(w); continue; }
+    crosses.sort((a, b) => a - b);
+    // deduplicate close crossings
+    const uniq = [];
+    for (const u of crosses) if (!uniq.length || u - uniq[uniq.length - 1] > 1.0 * k) uniq.push(u);
+    // keep only crossings where one side of the crossing is clearly exterior
+    // and the other side is clearly interior
+    const cuts = [];
+    const extShare = (a, b) => {
+      const pad = Math.min(cell * 1.2, (b - a) * 0.2);
+      const lo = a + pad, hi = b - pad;
+      if (hi <= lo) return isExtAt((a + b) / 2) ? 1 : 0;
+      const m = Math.max(3, Math.ceil((hi - lo) / du));
+      let hits = 0;
+      for (let i = 0; i < m; i++) if (isExtAt(lo + ((i + 0.5) * (hi - lo)) / m)) hits += 1;
+      return hits / m;
+    };
+    const bounds = [0, ...uniq, L];
+    for (let i = 1; i < bounds.length - 1; i++) {
+      const leftExt = extShare(bounds[i - 1], bounds[i]) >= 0.6;
+      const rightExt = extShare(bounds[i], bounds[i + 1]) >= 0.6;
+      if (leftExt !== rightExt) cuts.push(bounds[i]);
+    }
+    if (!cuts.length) { splitOut.push(w); continue; }
+    const pts = [0, ...cuts, L];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (b - a < 0.5 * k) continue;
+      const startFt = a / k, endFt = b / k;
+      splitOut.push({
+        ...w,
+        x1: w.x1 + ux * a, y1: w.y1 + uy * a,
+        x2: w.x1 + ux * b, y2: w.y1 + uy * b,
+        lengthFt: +(endFt - startFt).toFixed(2),
+        openings: (w.openings || [])
+          .filter((op) => op.atFt + op.widthFt * 0.5 >= startFt && op.atFt + op.widthFt * 0.5 <= endFt)
+          .map((op) => ({ ...op, atFt: +Math.max(0, op.atFt - startFt).toFixed(2) })),
+      });
+    }
   }
+  walls.length = 0;
+  walls.push(...splitOut);
+
+  for (const w of walls) classifyWall(w);
   return walls;
 }
