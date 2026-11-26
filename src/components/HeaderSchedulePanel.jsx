@@ -5,15 +5,17 @@
 // its row; templates keep a company's or an engineer's schedule for the next job.
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Plus, Trash2, Save, FolderOpen } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Plus, Trash2, Save, FolderOpen, ImageUp, ClipboardPaste } from 'lucide-react';
 import { NumInput } from '@/components/ui/mat';
 import { CollapsiblePanel } from '@/components/ui/Collapsible';
 import { useConfirm } from '@/components/ui/confirm';
 import {
-  SCHEDULE_WALLS, SCHEDULE_SIZES, SCHEDULE_ABOVE, newScheduleRow, rowValues, toTemplate, fromTemplate, EXAMPLE_TEMPLATE,
+  SCHEDULE_WALLS, SCHEDULE_SIZES, SCHEDULE_ABOVE, newScheduleRow, rowValues, toTemplate, fromTemplate,
+  normalizeImportedSchedule, mergeImportedSchedule, BASIC_PARTITION_ROWS, EXAMPLE_TEMPLATE,
 } from '@/domain/plans/headerSchedule';
 import { listHeaderTemplates, saveHeaderTemplate, deleteHeaderTemplate } from '@/lib/headerTemplates';
+import { readHeaderScheduleImage, aiErrorMessage } from '@/lib/ai';
 
 const ftIn = (inch) => {
   const v = Number(inch) || 0;
@@ -29,6 +31,82 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
   const [pick, setPick] = useState('');
   const [naming, setNaming] = useState(null); // name being typed for "Save as template"
   const [msg, setMsg] = useState('');
+  const [reading, setReading] = useState(false);
+  const imgInput = useRef(null);
+
+  const importImage = async (file) => {
+    if (!file || reading) return;
+    setReading(true);
+    setMsg('Reading header schedule image…');
+    try {
+      const raw = await readHeaderScheduleImage(file);
+      const imported = normalizeImportedSchedule(raw);
+      if (!imported.rows.length) {
+        setMsg('No header schedule rows were found in that image.');
+        return;
+      }
+      const impKinds = new Set(imported.rows.map((r) => r.walls));
+      const overlaps = rows.some((r) => impKinds.has(r.walls));
+      if (overlaps) {
+        const labels = [...impKinds].map((k) => (k === 'bearing' ? 'bearing & shear' : k === 'nonbearing' ? 'non-bearing / partition' : 'all-walls')).join(' and ');
+        const ok = await confirm({
+          title: `Replace existing ${labels} rows?`,
+          message: 'Rows for other wall types are kept. Window and door types you changed by hand keep your numbers.',
+          confirmLabel: 'Import',
+        });
+        if (!ok) { setMsg(''); return; }
+      }
+      const merged = mergeImportedSchedule(schedule, imported, { mode: 'merge' });
+      const kept = merged.rows.length - imported.rows.length;
+      onChange(merged);
+      setMsg(
+        kept > 0
+          ? `Imported ${imported.rows.length} rows (kept ${kept} existing rows of other wall types). Review them, then Save as template if needed.`
+          : `Imported ${imported.rows.length} rows from the image. You can also import a separate partition table or add Basic partitions below.`
+      );
+    } catch (e) {
+      setMsg(aiErrorMessage(e));
+    } finally {
+      setReading(false);
+    }
+  };
+  const pasteFromClipboard = async () => {
+    if (reading) return;
+    if (!navigator.clipboard?.read) {
+      setMsg('Click inside this panel and press Ctrl+V to paste a screenshot.');
+      return;
+    }
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imgType = item.types.find((t) => t.startsWith('image/'));
+        if (imgType) {
+          const blob = await item.getType(imgType);
+          await importImage(blob);
+          return;
+        }
+      }
+      setMsg('No screenshot found in the clipboard. Take a screenshot first, then click Paste screenshot (or press Ctrl+V).');
+    } catch {
+      setMsg('Clipboard access was blocked by the browser: click inside this panel and press Ctrl+V to paste your screenshot.');
+    }
+  };
+  const onPaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type?.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) { e.preventDefault(); importImage(file); return; }
+      }
+    }
+  };
+  const hasPartitions = rows.some((r) => r.walls === 'nonbearing');
+  const addBasicPartitions = () => {
+    const nextRows = [...rows, ...BASIC_PARTITION_ROWS.map((r) => newScheduleRow(r))];
+    set({ name: schedule?.name || 'Header schedule', rows: nextRows });
+    setMsg('Added basic non-bearing partition headers (2x4 → 4x4, 2x6 → 6x6).');
+  };
 
   const refresh = useCallback(async () => {
     try { setTemplates(await listHeaderTemplates(uid)); } catch (e) { setMsg(`Templates could not be read: ${e.message || e}`); }
@@ -88,6 +166,31 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
       }
       actions={
         <span className="hs-tools">
+          <input
+            ref={imgInput}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importImage(f); }}
+          />
+          <button
+            type="button"
+            className="ew-btn ew-btn--ghost ro-hide"
+            onClick={pasteFromClipboard}
+            disabled={reading}
+            title="Paste a screenshot straight from your clipboard (no need to save it as a file). Works for both bearing/shear and partition tables."
+          >
+            <ClipboardPaste size={13} /> {reading ? 'Reading…' : 'Paste screenshot'}
+          </button>
+          <button
+            type="button"
+            className="ew-btn ew-btn--ghost ro-hide"
+            onClick={() => imgInput.current?.click()}
+            disabled={reading}
+            title="Upload an image of a bearing/shear or partition header schedule table"
+          >
+            <ImageUp size={13} /> Import image
+          </button>
           <select className="ew-select" value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Template">
             <option value="">Templates…</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -109,6 +212,7 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
         </span>
       }
     >
+      <div onPaste={onPaste}>
       {msg ? <p className="ew-subtle hs-msg">{msg}</p> : null}
 
       <div className="hs-above">
@@ -163,17 +267,28 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
           </tbody>
         </table>
       ) : <p className="ew-subtle">No schedule yet: types keep the kings and jacks you type. Start from a template, or add the rows of the structural sheet.</p>}
-      <div className="hs-foot">
+      <div className="hs-foot" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         <button type="button" className="ew-btn ew-btn--ghost" onClick={() => {
           const last = rows[rows.length - 1];
           set({ name: schedule?.name || 'Header schedule', rows: [...rows, newScheduleRow(last ? { walls: last.walls, size: last.size, above: last.above, upToIn: Number(last.upToIn) + 24 } : {})] });
         }}><Plus size={13} /> Row</button>
+        {!hasPartitions ? (
+          <button
+            type="button"
+            className="ew-btn ew-btn--ghost"
+            onClick={addBasicPartitions}
+            title="Add basic non-bearing partition headers: 4x4 for 2x4 walls and 6x6 for 2x6 walls (when the plans do not include a partition header table)"
+          >
+            <Plus size={13} /> Basic partitions (4x4 / 6x6)
+          </button>
+        ) : null}
       </div>
       <p className="ew-subtle ot-help">
         Each window and door type takes the narrowest row that fits its width, for the most loaded and thickest wall it is in (exterior counts as bearing).
         A row for a given wall, stud size or floor count wins over an &quot;All&quot; / &quot;Any&quot; row. Types you change by hand keep your numbers.
         The header material (family · size · vendor) is still picked on its Header row in Wall panels; the row&apos;s header shows there as the note.
       </p>
+      </div>
     </CollapsiblePanel>
   );
 }

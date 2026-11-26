@@ -146,6 +146,84 @@ export const toTemplate = (schedule, name) => ({ name: name || schedule?.name ||
 /** The project's schedule made from a template. */
 export const fromTemplate = (tpl, templateId) => ({ name: tpl.name, templateId, rows: (tpl.rows || []).map((r) => newScheduleRow(r)) });
 
+const VALID_WALLS = new Set(SCHEDULE_WALLS.map((w) => w.value));
+const VALID_SIZES = new Set(SCHEDULE_SIZES);
+
+/**
+ * Turn raw JSON from an AI image read of a header schedule into a clean
+ * schedule object ready for HeaderSchedulePanel.
+ */
+export function normalizeImportedSchedule(raw) {
+  const list = Array.isArray(raw?.rows) ? raw.rows : [];
+  const rows = [];
+  for (const r of list) {
+    if (!r || typeof r !== 'object') continue;
+    const upToIn = Math.round(Number(r.upToIn) || 0);
+    const header = String(r.header ?? '').trim();
+    if (!(upToIn > 0) && !header) continue;
+    const walls = VALID_WALLS.has(r.walls) ? r.walls : 'bearing';
+    const rawSize = String(r.size ?? 'any').trim().toLowerCase();
+    const size = VALID_SIZES.has(rawSize) ? rawSize
+      : /^4\b|4["']|4\s*in/.test(rawSize) ? '2x4'
+        : /^6\b|6["']|6\s*in/.test(rawSize) ? '2x6'
+          : /^8\b|8["']|8\s*in/.test(rawSize) ? '2x8' : 'any';
+    const rawAbove = String(r.above ?? 'any').trim().toLowerCase();
+    const aboveNum = Number(rawAbove);
+    const above = rawAbove === 'any' || rawAbove === '' || !Number.isFinite(aboveNum)
+      ? 'any'
+      : Math.max(0, Math.min(4, Math.round(aboveNum)));
+    const pliesNum = Number(r.plies);
+    const plies = Number.isFinite(pliesNum) && pliesNum > 0 ? Math.round(pliesNum) : '';
+    rows.push(newScheduleRow({
+      walls,
+      size,
+      above,
+      upToIn: Math.max(0, upToIn),
+      header,
+      plies,
+      sill: String(r.sill ?? '').trim(),
+      jacks: String(r.jacks ?? '').trim(),
+      kings: String(r.kings ?? '').trim(),
+      note: String(r.note ?? '').trim(),
+    }));
+  }
+  return {
+    name: String(raw?.name ?? '').trim() || 'Imported header schedule',
+    rows,
+  };
+}
+
+/** Basic non-bearing partition headers when the plans do not include a partition header table. */
+export const BASIC_PARTITION_ROWS = [
+  { walls: 'nonbearing', size: '2x4', above: 'any', upToIn: 120, header: '4x4', plies: '', sill: '2x', jacks: '', kings: '', note: 'Basic partition default' },
+  { walls: 'nonbearing', size: '2x6', above: 'any', upToIn: 120, header: '6x6', plies: '', sill: '2x', jacks: '', kings: '', note: 'Basic partition default' },
+];
+
+/**
+ * Merge newly imported schedule rows into an existing schedule:
+ * - 'replace' replaces all rows.
+ * - 'merge' keeps existing rows of other wall kinds (e.g. keeping bearing/shear
+ *   rows when importing a separate non-bearing/partition table) and replaces
+ *   only the wall kinds present in the imported table.
+ */
+export function mergeImportedSchedule(current, imported, { mode = 'merge', forceWalls = '' } = {}) {
+  const impRows = (imported?.rows || []).map((r) => (forceWalls && VALID_WALLS.has(forceWalls) ? { ...r, walls: forceWalls } : r));
+  const curRows = current?.rows || [];
+  if (mode === 'replace' || !curRows.length) {
+    return {
+      name: imported?.name || current?.name || 'Header schedule',
+      rows: impRows,
+    };
+  }
+  const impKinds = new Set(impRows.map((r) => r.walls));
+  const kept = curRows.filter((r) => !impKinds.has(r.walls));
+  return {
+    name: current?.name || imported?.name || 'Header schedule',
+    templateId: current?.templateId,
+    rows: [...kept, ...impRows],
+  };
+}
+
 /**
  * Example: the bearing/shear wall header schedule of a structural set (S-401,
  * 32) and its non-bearing partition headers (43/S-401). Floors above: 0 = top

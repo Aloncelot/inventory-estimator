@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  countOf, rowFor, rowValues, applyHeaderSchedule, backToSchedule, floorsAbove, scheduleOpts, fromTemplate, toTemplate, EXAMPLE_TEMPLATE, newScheduleRow,
+  countOf, rowFor, rowValues, applyHeaderSchedule, backToSchedule, floorsAbove, scheduleOpts, fromTemplate, toTemplate,
+  normalizeImportedSchedule, mergeImportedSchedule, BASIC_PARTITION_ROWS, EXAMPLE_TEMPLATE, newScheduleRow,
 } from './headerSchedule.js';
 import { classifyOpenings, commitPlan } from './openingTypes.js';
 import { withPlanHeaders } from './sync.js';
@@ -99,4 +100,52 @@ test('floors above a level, and templates', () => {
   const again = fromTemplate(tpl, 't1');
   assert.equal(again.templateId, 't1');
   assert.equal(new Set(again.rows.map((r) => r.id)).size, again.rows.length);
+});
+
+test('normalizeImportedSchedule sanitizes AI-extracted header schedule rows', () => {
+  const out = normalizeImportedSchedule({
+    name: 'Bearing/Shear Wall Header Schedule',
+    rows: [
+      { walls: 'bearing', size: '4 inch', above: '0', upToIn: 36, header: '4x4', plies: 0, sill: '2x', jacks: '2x4', kings: '2x4' },
+      { walls: 'bearing', size: '6"', above: '2', upToIn: 87, header: '6x12', plies: 0, sill: '(2) 2x', jacks: '(2) 2x6', kings: '(2) 2x6' },
+      { walls: 'nonbearing', size: '2x4', above: 'any', upToIn: 48, header: '4x4' },
+      { walls: 'bearing', size: '2x4', above: '0', upToIn: 0, header: '' }, // empty row dropped
+    ],
+  });
+  assert.equal(out.name, 'Bearing/Shear Wall Header Schedule');
+  assert.equal(out.rows.length, 3);
+  assert.equal(out.rows[0].size, '2x4');
+  assert.equal(out.rows[0].above, 0);
+  assert.equal(out.rows[0].plies, '');
+  assert.equal(out.rows[1].size, '2x6');
+  assert.equal(out.rows[1].above, 2);
+  assert.equal(out.rows[1].upToIn, 87);
+  assert.equal(out.rows[2].above, 'any');
+});
+
+test('mergeImportedSchedule keeps bearing rows when importing a separate partition table', () => {
+  const bearingOnly = normalizeImportedSchedule({
+    name: 'Bearing/Shear',
+    rows: [
+      { walls: 'bearing', size: '2x4', above: '0', upToIn: 36, header: '4x4' },
+      { walls: 'bearing', size: '2x6', above: '0', upToIn: 60, header: '6x6' },
+    ],
+  });
+  const partOnly = normalizeImportedSchedule({
+    name: 'Partitions',
+    rows: BASIC_PARTITION_ROWS,
+  });
+  const merged = mergeImportedSchedule(bearingOnly, partOnly, { mode: 'merge' });
+  assert.equal(merged.rows.length, 4);
+  assert.equal(merged.rows.filter((r) => r.walls === 'bearing').length, 2);
+  assert.equal(merged.rows.filter((r) => r.walls === 'nonbearing').length, 2);
+  // re-importing partitions replaces only nonbearing rows, keeping bearing intact
+  const updatedPart = normalizeImportedSchedule({
+    name: 'Partitions v2',
+    rows: [{ walls: 'nonbearing', size: '2x4', above: 'any', upToIn: 96, header: '4x6' }],
+  });
+  const merged2 = mergeImportedSchedule(merged, updatedPart, { mode: 'merge' });
+  assert.equal(merged2.rows.length, 3);
+  assert.equal(merged2.rows.filter((r) => r.walls === 'bearing').length, 2);
+  assert.equal(merged2.rows.find((r) => r.walls === 'nonbearing').header, '4x6');
 });

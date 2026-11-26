@@ -110,3 +110,74 @@ export async function askAssistant({ system, history = [], message, tools = [], 
   try { text = result.response.text() || ''; } catch { text = ''; }
   return { text: text.trim(), calls };
 }
+
+const HEADER_SCHEDULE_SCHEMA = Schema.object({
+  properties: {
+    name: Schema.string({ description: 'Short title of the header schedule table, if shown' }),
+    rows: Schema.array({
+      description: 'Every row of the header schedule across all wall sizes and story/floor-above bands',
+      items: Schema.object({
+        properties: {
+          walls: Schema.enumString({ enum: ['bearing', 'nonbearing', 'any'], description: 'bearing for exterior, load-bearing, or shear walls; nonbearing for interior non-bearing partitions; any if unspecified' }),
+          size: Schema.enumString({ enum: ['2x4', '2x6', '2x8', 'any'], description: 'Wall stud size: 4 inch / 4" walls -> 2x4, 6 inch / 6" walls -> 2x6, 8 inch -> 2x8, or any' }),
+          above: Schema.enumString({ enum: ['any', '0', '1', '2', '3', '4'], description: 'Number of floors carried above this level: 0 = top floor / 1-story / roof only; 1 = 1 floor above (e.g. 2nd floor of 3-story or 1st floor of 2-story); 2 = 2 floors above (ground floor of 3-story); any if the table does not vary by floors' }),
+          upToIn: Schema.integer({ description: 'Maximum rough opening width in inches (e.g. 3\'-0" -> 36, 5\'-0" -> 60, 7\'-3" -> 87)' }),
+          header: Schema.string({ description: 'Header callout as written (e.g. "4x10", "6x8", "(2) 2x10", "5-1/4x11-7/8 PSL")' }),
+          plies: Schema.integer({ description: 'Number of header plies only if explicitly different from the callout, otherwise 0' }),
+          sill: Schema.string({ description: 'Window sill callout as written (e.g. "2x", "(2) 2x"), or empty string if none' }),
+          jacks: Schema.string({ description: 'Post / trimmer / jack stud callout each side (e.g. "2x4", "(2) 2x4", "4x4", "2x6")' }),
+          kings: Schema.string({ description: 'King stud callout each side (e.g. "2x4", "(2) 2x4", "(2) 2x6")' }),
+          note: Schema.string({ description: 'Short row-specific note if any, otherwise empty string' }),
+        },
+        optionalProperties: ['plies', 'sill', 'jacks', 'kings', 'note'],
+      }),
+    }),
+  },
+});
+
+const HEADER_SCHEDULE_PROMPT = [
+  'Read this structural wood-framing Header Schedule image and extract every row into the JSON schema.',
+  'Rules:',
+  '- Convert all opening widths to total inches (e.g. UP TO 3\'-0" = 36, UP TO 5\'-0" = 60, UP TO 7\'-3" = 87).',
+  '- If the table has separate side-by-side blocks (e.g. 4 INCH WALLS on the left and 6 INCH WALLS on the right), emit rows for both blocks.',
+  '- If the table uses house/story diagrams with a shaded floor to show which level each band applies to: shaded top floor (or 1-story) = "0" floors above; 1 floor above the shaded floor = "1"; 2 floors above the shaded floor = "2"; 3 floors above = "3".',
+  '- Keep callouts concise and faithful to the table (e.g. "4x8", "6x12", "(2) 2x4", "4x4", "(2) 2x").',
+  '- Return ONLY the structured JSON matching the schema.',
+].join('\n');
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the image file.'));
+    reader.onload = () => {
+      const s = String(reader.result || '');
+      const i = s.indexOf(',');
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Read a header schedule screenshot / image with Gemini Vision and return the
+ * raw structured object ({ name, rows }).
+ * @param {File|Blob} file
+ */
+export async function readHeaderScheduleImage(file) {
+  const mimeType = file.type && file.type.startsWith('image/') ? file.type : 'image/png';
+  const data = await fileToBase64(file);
+  const model = getGenerativeModel(getAi(), {
+    model: AI_MODEL,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: HEADER_SCHEDULE_SCHEMA,
+      temperature: 0,
+    },
+  });
+  const result = await model.generateContent([
+    { text: HEADER_SCHEDULE_PROMPT },
+    { inlineData: { mimeType, data } },
+  ]);
+  const text = result.response.text();
+  return JSON.parse(text);
+}

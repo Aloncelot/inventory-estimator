@@ -21,7 +21,8 @@ import {
   createItemPrice, 
   createNewMaterial, 
   getAllVendors,
-  copyStarterCatalog
+  copyStarterCatalog,
+  slug,
 } from "@/lib/catalog"; 
 import PriceEditModal from "./PriceEditModal";
 import { formatMoney } from "@/domain/lib/currency";
@@ -279,28 +280,25 @@ export default function MaterialListView() {
   const handleSavePrice = async (updatedItem) => {
     if (isCreatingItem) {
       await createNewMaterial(updatedItem);
-      if (updatedItem.isNewFamily) {
-          const newFams = await getFamilies();
-          setFamilies(newFams);
-      }
+      const newFams = await getFamilies();
+      setFamilies(newFams);
       if (updatedItem.isNewVendor) {
-         const vendors = await getAllVendors();
-         setAllVendors(vendors);
+        const vendors = await getAllVendors();
+        setAllVendors(vendors);
       }
-      const famSlug = updatedItem.familySlug || families.find(f => f.label === updatedItem.familyDisplay)?.value;
-      if (selectedFamily === famSlug || updatedItem.isNewFamily) {
-         if (selectedFamily === famSlug) {
-             setLoadingItems(true);
-             const familyItems = await getSizesForFamily(selectedFamily);
-             setItems(familyItems);
-             setLoadingItems(false);
-         }
+      const famSlug = slug(updatedItem.familyDisplay);
+      const fam = newFams.find((f) => f.value === famSlug);
+      if (fam) {
+        const familyItems = await selectFamily(fam);
+        const createdKey = `${famSlug}_${slug(updatedItem.sizeDisplay)}`;
+        const created = familyItems.find((x) => x.value === createdKey);
+        if (created) await handleItemSelect(created);
       }
     } else if (isCreatingPrice) {
       await createItemPrice(updatedItem);
       if (updatedItem.isNewVendor) {
-         const vendors = await getAllVendors();
-         setAllVendors(vendors);
+        const vendors = await getAllVendors();
+        setAllVendors(vendors);
       }
       setLoadingPrices(true);
       const newPrices = await getPricesForItem(selectedItem.fullItemData);
@@ -317,7 +315,16 @@ export default function MaterialListView() {
 
   return (
     <div className={`app-content${canEdit ? '' : ' is-readonly'}`}>
-      <PageHeader icon={Package} title="Price list" meta={`${company?.name ? `${company.name}: ` : ''}families, sizes and supplier prices`} />
+      <PageHeader
+        icon={Package}
+        title="Price list"
+        meta={`${company?.name ? `${company.name}: ` : ''}families, sizes and supplier prices`}
+        actions={canEdit ? (
+          <button type="button" className="ew-btn ew-btn--primary ro-hide" onClick={handleAddGlobalClick}>
+            <Plus size={14} aria-hidden="true" /> New material
+          </button>
+        ) : null}
+      />
       {!canEdit ? <p className="ew-subtle">View only: the price list is changed by Estimators and Admins.</p> : null}
       {!loadingFamilies && families.length === 0 ? (
         <div className="ew-card inv-empty">
@@ -362,11 +369,12 @@ export default function MaterialListView() {
             loading={loadingFamilies}
             headerAction={
                 <button 
-                  className="ew-icon-btn ro-hide"
+                  type="button"
+                  className="ew-btn ew-btn--ghost ro-hide"
                   onClick={handleAddGlobalClick}
-                  title="Create New Family and Item"
+                  title="Create a new family and material"
                 >
-                   <Plus size={12} aria-hidden="true" />
+                   <Plus size={12} aria-hidden="true" /> New
                 </button>
             }
           />
@@ -381,11 +389,12 @@ export default function MaterialListView() {
             headerAction={
               selectedFamily && (
                 <button 
-                  className="ew-icon-btn ro-hide"
+                  type="button"
+                  className="ew-btn ew-btn--ghost ro-hide"
                   onClick={handleAddItemClick}
-                  title="Create a new item in this family"
+                  title="Add a new size in this family"
                 >
-                   <Plus size={12} aria-hidden="true" />
+                   <Plus size={12} aria-hidden="true" /> New size
                 </button>
               )
             }

@@ -96,13 +96,16 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     const fam = getFamily(r.item);
     const lvl = isLVL(fam);
     const plies = n(r.inputs?.plies) || defaultPlies(depthIn);
-    const o = headerOpenings(r.openings, { plies, lvl, boardLenIn: (parseBoardLengthFt(getSize(r.item)) || 0) * 12 });
+    const sizeStr = getSize(r.item);
+    const solidHeader = plies <= 1 || /^[468]\s*x/i.test(String(sizeStr || '').trim());
+    const o = headerOpenings(r.openings, { plies, lvl, boardLenIn: (parseBoardLengthFt(sizeStr) || 0) * 12 });
     const typedLF = n(r.inputs?.headerLF) || (lvl ? n(r.inputs?.lvlPieces) * n(r.inputs?.lvlLength) : 0);
-    headerInfo[r.id] = { ...o, lvl, fromOpenings: o.count > 0, effectiveLF: o.count > 0 ? o.headerLF : typedLF };
+    headerInfo[r.id] = { ...o, lvl, plies, solidHeader, fromOpenings: o.count > 0, effectiveLF: o.count > 0 ? o.headerLF : typedLF };
   }
-  // headers infill is automatic: it appears while any infill-family header has LF
+  // headers infill is automatic for built-up (2+ ply 2x) infill-family headers;
+  // solid 1-ply headers (4x / 6x) fill the full wall depth (3.5" / 5.5") and need no infill
   const headerLFPool = stored
-    .filter((r) => r.type === 'Header' && isInfillFamily(getFamily(r.item)))
+    .filter((r) => r.type === 'Header' && isInfillFamily(getFamily(r.item)) && !headerInfo[r.id]?.solidHeader)
     .reduce((s, r) => s + n(headerInfo[r.id]?.effectiveLF), 0);
 
   const computeExtra = (r) => {
@@ -143,7 +146,7 @@ export function computeWallSection(section = {}, variant = 'exterior') {
 
   const extraRows = stored.map(computeExtra);
   let infill = null;
-  if (headerLFPool > 0) {
+  if (headerLFPool > 0 && !section.noInfill) {
     const item = sel.headersInfill ?? legacyInfill?.item ?? null;
     const w = waste.headersInfill ?? legacyInfill?.wastePct ?? 5;
     infill = {

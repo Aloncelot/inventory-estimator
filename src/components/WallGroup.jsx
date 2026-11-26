@@ -262,7 +262,7 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
         {infill ? (
           <MatRow
             label="Headers infill"
-            labelTitle={`Headers infill — added automatically for ${calc.headerLFPool} LF of infill-family headers`}
+            labelTitle={`Headers infill — added automatically for ${calc.headerLFPool} LF of built-up infill-family headers`}
             material={<ItemPicker value={infill.item} onSelect={(item) => setSel('headersInfill', item)} defaults={wallExtraDefaults('Headers infill')} />}
             qty={infill.qtyRaw}
             waste={infill.wastePct}
@@ -274,7 +274,14 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
             subtotal={infill.subtotal}
             note={noteOf(notes, 'extra:headersInfill')}
             onNoteChange={(patch) => setNote('extra:headersInfill', patch)}
+            actions={<RemoveIconButton title="Remove Headers infill from this section" onClick={() => setField('noInfill', true)} />}
           />
+        ) : sectionData.noInfill && calc.headerLFPool > 0 ? (
+          <div style={{ padding: '4px 8px' }}>
+            <button type="button" className="ew-btn ew-btn--ghost ro-hide" onClick={() => setField('noInfill', false)} title="Restore automatic Headers infill row">
+              + Restore Headers infill
+            </button>
+          </div>
         ) : null}
 
         {calc.openingRows.length ? (

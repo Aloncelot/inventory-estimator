@@ -90,6 +90,25 @@ describe('wall section', () => {
     assert.ok(r.infill);
     assert.equal(r.infill.qtyFinal, 1);           // 48/3/32×2 = 1
     assert.equal(r.subtotal, Math.round((r.baseRows.reduce((s, x) => s + x.subtotal, 0) + r.extraRows[0].subtotal + 30) * 100) / 100);
+    // solid 1-ply 4x/6x headers fill the full wall depth (3.5" / 5.5") and need no infill
+    const solidByPlies = computeWallSection({
+      ...base,
+      extras: [{ id: 'b', type: 'Header', item: pick('SPF#2', `2x10"-12'`), wastePct: 0, inputs: { headerLF: 48, plies: 1 } }],
+    });
+    assert.equal(solidByPlies.infill, null);
+    const solidBySize = computeWallSection({
+      ...base,
+      extras: [{ id: 'b', type: 'Header', item: pick('DF#2', `6x8"-12'`), wastePct: 0, inputs: { headerLF: 48 } }],
+    });
+    assert.equal(solidBySize.infill, null);
+    // manual exclusion suppresses infill even for built-up 2x headers
+    const excluded = computeWallSection({
+      ...base,
+      noInfill: true,
+      extras: [{ id: 'b', type: 'Header', item: pick('SPF#2', `2x10"-12'`), wastePct: 0, inputs: { headerLF: 48 } }],
+    });
+    assert.equal(excluded.infill, null);
+    assert.equal(excluded.headerLFPool, 48);
   });
 
   test('legacy "Headers infill" extra rows are ignored as rows but keep their material', () => {
