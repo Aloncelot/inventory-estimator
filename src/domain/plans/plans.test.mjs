@@ -196,3 +196,150 @@ test('witness lines past the building are cut where a dimension crosses them', a
   assert.ok(Math.abs(Math.max(out[0].y1, out[0].y2) - 140) < 0.01, 'cut at the dimension');
   assert.equal(out[1], inside);
 });
+
+test('L-shaped building: alcove exterior walls stay exterior (flood-fill)', async () => {
+  const { markExterior } = await import('./detect.js');
+  const k = 10;
+  const w = (x1, y1, x2, y2, thickIn = 6.5) => ({ x1: x1 * k, y1: y1 * k, x2: x2 * k, y2: y2 * k, thickIn });
+  // L-shape: 30x30 with a 15x15 cutout in the top-right, plus one interior partition
+  const walls = [
+    w(0, 0, 15, 0), w(15, 0, 15, 15), w(15, 15, 30, 15),
+    w(30, 15, 30, 30), w(30, 30, 0, 30), w(0, 30, 0, 0),
+    w(0, 15, 15, 15, 4.75), // interior partition
+  ];
+  markExterior(walls, k);
+  assert.equal(walls[1].exterior, true, 'inner-corner vertical wall facing alcove is exterior');
+  assert.equal(walls[2].exterior, true, 'inner-corner horizontal wall facing alcove is exterior');
+  assert.equal(walls[6].exterior, false, 'interior partition stays interior');
+});
+
+test('exterior wall with thin finish layer is one wall, not double', async () => {
+  const { absorbThinFinish } = await import('./detect.js');
+  const k = 18;
+  const inPt = k / 12;
+  // Case A: separate 3.2" cladding band right outside a 6.25" wall
+  const cladding = { x1: 0, y1: 0, x2: 20 * k, y2: 0, thickIn: 3.2, lengthFt: 20 };
+  const frame = { x1: 0, y1: (3.2 / 2 + 6.25 / 2) * inPt, x2: 20 * k, y2: (3.2 / 2 + 6.25 / 2) * inPt, thickIn: 6.25, lengthFt: 20 };
+  const kept = absorbThinFinish([cladding, frame], k);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].thickIn, 6.25);
+
+  // Case B: 3-line layered exterior wall (6.25" core + 2.5" finish = 8.75" total)
+  const seg = (x1, y1, x2, y2, style = S) => ({ x1, y1, x2, y2, w: 1, style });
+  const page = room();
+  // add a 2.5" finish line outside the left exterior wall (x0 = 100)
+  page.segments.push(seg(100 - 2.5 * inPt, 100, 100 - 2.5 * inPt, 100 + 10 * k));
+  const r = detectWalls(page, { ptPerFt: k, styles: [S, P] });
+  const left = r.walls.find((x) => Math.abs(x.x1 - x.x2) < 1 && x.x1 < 120);
+  assert.ok(left, 'left exterior wall found');
+  assert.equal(left.exterior, true);
+  assert.ok(!left.double, 'not marked as double wall');
+  assert.ok(left.thickIn < 8.5, `finish stripped (${left.thickIn}")`);
+});
+
+test('short closet return wall survives via joinCorners, and bifold closet doors bridge', () => {
+  const k = 18;
+  const inPt = k / 12;
+  const t = 4.75 * inPt;
+  const seg = (x1, y1, x2, y2, style = S) => ({ x1, y1, x2, y2, w: 1, style });
+  const page = room();
+  // Inside room (x: 100..460, y: 100..280): add a 2'-0" closet return wall at x=160,
+  // face-to-face length ~1.2' (< 1.5'), meeting top wall and a closet front wall with bifold door
+  const cx = 100 + 4 * k;
+  const cy = 100 + 8.25 * inPt;
+  const cy2 = cy + 1.2 * k;
+  // vertical return (1.2' face-to-face)
+  page.segments.push(seg(cx, cy, cx, cy2), seg(cx + t, cy, cx + t, cy2));
+  // horizontal closet front wall from x=100+8.25" to cx (with a 3' bifold door gap? make solid 3' stub + bifold)
+  page.segments.push(seg(100 + 8.25 * inPt, cy2, cx + t, cy2), seg(100 + 8.25 * inPt, cy2 + t, cx + t, cy2 + t));
+  const r = detectWalls(page, { ptPerFt: k, styles: [S, P] });
+  const ret = r.walls.find((w) => !w.exterior && Math.abs(w.x1 - w.x2) < 2 && Math.abs(w.x1 - (cx + t / 2)) < 4);
+  assert.ok(ret, 'short closet return wall is preserved after joinCorners');
+});
+
+test('two windows with sill + glazing lines on a poché wall do not invert openings', () => {
+  const k = 18;
+  const inPt = k / 12;
+  const t = 6.25 * inPt;
+  const seg = (x1, y1, x2, y2, style = S) => ({ x1, y1, x2, y2, w: 1, style });
+  const boxPoly = (x0, y0, x1, y1) => ({ pts: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], color: '#999999' });
+  const x0 = 100, y0 = 100, W = 20 * k, H = 10 * k;
+  const segs = [];
+  const polys = [];
+  // Top wall: solid 0..5', window1 5..8', pier 8..10', window2 10..13', solid 13..20'
+  const addSolidTop = (a, b) => {
+    segs.push(seg(x0 + a * k, y0, x0 + b * k, y0), seg(x0 + a * k, y0 + t, x0 + b * k, y0 + t));
+    polys.push(boxPoly(x0 + a * k, y0, x0 + b * k, y0 + t));
+  };
+  const addWindowTop = (a, b) => {
+    // sill lines in wall style + glazing line inside (no poché!)
+    segs.push(seg(x0 + a * k, y0, x0 + b * k, y0), seg(x0 + a * k, y0 + t, x0 + b * k, y0 + t));
+    segs.push(seg(x0 + a * k, y0 + t * 0.5, x0 + b * k, y0 + t * 0.5, '0.24|#000000'));
+  };
+  addSolidTop(0, 5); addWindowTop(5, 8); addSolidTop(8, 10); addWindowTop(10, 13); addSolidTop(13, 20);
+  // other 3 walls with poché
+  segs.push(seg(x0, y0 + H, x0 + W, y0 + H), seg(x0, y0 + H - t, x0 + W, y0 + H - t));
+  polys.push(boxPoly(x0, y0 + H - t, x0 + W, y0 + H));
+  segs.push(seg(x0, y0, x0, y0 + H), seg(x0 + t, y0, x0 + t, y0 + H));
+  polys.push(boxPoly(x0, y0, x0 + t, y0 + H));
+  segs.push(seg(x0 + W, y0, x0 + W, y0 + H), seg(x0 + W - t, y0, x0 + W - t, y0 + H));
+  polys.push(boxPoly(x0 + W - t, y0, x0 + W, y0 + H));
+  // pad polys count > 50 so poché mode activates
+  for (let i = 0; i < 55; i++) polys.push(boxPoly(10 + i * 2, 10, 11 + i * 2, 11));
+  const r = detectWalls({ width: 800, height: 500, segments: segs, texts: [], polys }, { ptPerFt: k, styles: [S] });
+  const top = r.walls.find((w) => Math.abs(w.y1 - w.y2) < 1 && w.y1 < 120);
+  assert.ok(top, 'top wall detected as one continuous wall');
+  assert.equal(top.openings.length, 2, `two windows detected (got ${top.openings.length})`);
+  assert.deepEqual(top.openings.map((o) => [o.type, Math.round(o.widthFt)]), [['window', 3], ['window', 3]]);
+});
+
+test('dashed lines are ignored, cross-style dark faces pair, and double doors bridge', () => {
+  const k = 18;
+  const inPt = k / 12;
+  const page = room();
+  // add dashed overhead beam lines (6" apart) — must NOT become a wall
+  page.segments.push(
+    { x1: 120, y1: 160, x2: 300, y2: 160, w: 0.6, style: '0.6|#000000|d' },
+    { x1: 120, y1: 160 + 6 * inPt, x2: 300, y2: 160 + 6 * inPt, w: 0.6, style: '0.6|#000000|d' },
+  );
+  // add a double door (6' wide, two 3' leaves) on a horizontal partition
+  const y = 100 + 6 * k, pt = 4.75 * inPt;
+  const xA = 100 + 8.25 * inPt, xD1 = xA + 2 * k, xD2 = xD1 + 6 * k, xB = 100 + 12 * k;
+  page.segments.push(
+    { x1: xA, y1: y, x2: xD1, y2: y, w: 0.6, style: P },
+    { x1: xA, y1: y + pt, x2: xD1, y2: y + pt, w: 0.6, style: P },
+    { x1: xD2, y1: y, x2: xB, y2: y, w: 0.6, style: P },
+    { x1: xD2, y1: y + pt, x2: xB, y2: y + pt, w: 0.6, style: P },
+    // two 3' door leaves hinged at xD1 and xD2
+    { x1: xD1, y1: y, x2: xD1, y2: y - 3 * k, w: 0.24, style: '0.24|#000000' },
+    { x1: xD2, y1: y, x2: xD2, y2: y - 3 * k, w: 0.24, style: '0.24|#000000' },
+  );
+  const r = detectWalls(page, { ptPerFt: k, styles: [S, P] });
+  assert.ok(!r.walls.some((w) => String(w.style).endsWith('|d')), 'dashed lines never become walls');
+  const dbl = r.walls.find((w) => !w.exterior && Math.abs(w.y1 - w.y2) < 1 && Math.abs(w.y1 - (y + pt / 2)) < 4);
+  assert.ok(dbl, 'partition with double door bridged');
+  assert.deepEqual(dbl.openings.map((o) => [o.type, Math.round(o.widthFt)]), [['door', 6]]);
+});
+
+test('cross-style dark faces pair and short closet wing wall survives', () => {
+  const seg = (x1, y1, x2, y2, style = S) => ({ x1, y1, x2, y2, w: 1, style });
+  const t = 6.25 * IN, pt = 4.75 * IN;
+  const x0 = 100, y0 = 100, W = 20 * K, H = 12 * K;
+  const segs = [
+    // top wall: cross-style (heavy outer pen, lighter dark inner pen)
+    seg(x0, y0, x0 + W, y0, '1.2|#000000'),
+    seg(x0 + t, y0 + t, x0 + W - t, y0 + t, '0.6|#222222'),
+    // bottom, left, right walls
+    seg(x0, y0 + H, x0 + W, y0 + H), seg(x0 + t, y0 + H - t, x0 + W - t, y0 + H - t),
+    seg(x0, y0, x0, y0 + H), seg(x0 + t, y0 + t, x0 + t, y0 + H - t),
+    seg(x0 + W, y0, x0 + W, y0 + H), seg(x0 + W - t, y0 + t, x0 + W - t, y0 + H - t),
+    // closet wing wall: 1.4' face-to-face stub rising from bottom wall
+    seg(x0 + 6 * K, y0 + H - 2 * K, x0 + 6 * K, y0 + H - t, P),
+    seg(x0 + 6 * K + pt, y0 + H - 2 * K, x0 + 6 * K + pt, y0 + H - t, P),
+  ];
+  const r = detectWalls({ width: 1000, height: 600, segments: segs, texts: [] }, { ptPerFt: K, styles: [S, '0.6|#222222', P] });
+  const top = r.walls.find((w) => Math.abs(w.y1 - w.y2) < 1 && w.y1 < 150);
+  assert.ok(top, 'cross-style top wall detected');
+  const closetReturn = r.walls.find((w) => !w.exterior && Math.abs(w.x1 - (x0 + 6 * K + pt / 2)) < 5);
+  assert.ok(closetReturn, 'short closet wing wall survived');
+});

@@ -131,16 +131,26 @@ export function dimensionLines(page) {
       const L = lenOf(s);
       const d = [(s.x2 - s.x1) / L, (s.y2 - s.y1) / L];
       const cos = Math.abs(d[0] * td[0] + d[1] * td[1]);
-      if (Math.abs(cos - Math.SQRT1_2) > 0.12) continue; // not at 45°
-      for (const [px, py] of pts) {
+      // 45° architectural tick OR ~10°–30° arrowhead wing
+      const isTick = Math.abs(cos - Math.SQRT1_2) <= 0.12;
+      const isArrow = cos >= 0.85 && cos <= 0.99;
+      if (!isTick && !isArrow) continue;
+      for (const [px, py] of isTick ? pts : pts.slice(1)) {
         const u = (px - s.x1) * d[0] + (py - s.y1) * d[1];
         const v = (px - s.x1) * -d[1] + (py - s.y1) * d[0];
         // right on the line: a tick ending near a line beside it (a wall face
         // next to a dimension) does not count
         if (Math.abs(v) > 0.3 || u < -2 || u > L + 2) continue;
         const list = hits.get(k) || [];
-        // CAD draws ticks with a heavier pen; hatching that ends on a line does not count
-        if (!list.some((q) => Math.abs(q.u - u) < 3)) list.push({ u, heavy: (t.w || 0) >= 1.5 * (s.w || 0) && (t.w || 0) > 0 });
+        if (isArrow) {
+          // two symmetric wings meeting at the same tip form one arrowhead
+          const existing = list.find((q) => q.arrow && Math.abs(q.u - u) < 1.5);
+          if (existing) existing.wings = (existing.wings || 1) + 1;
+          else list.push({ u, arrow: true, wings: 1, heavy: false });
+        } else {
+          // CAD draws ticks with a heavier pen; hatching that ends on a line does not count
+          if (!list.some((q) => !q.arrow && Math.abs(q.u - u) < 3)) list.push({ u, heavy: (t.w || 0) >= 1.5 * (s.w || 0) && (t.w || 0) > 0 });
+        }
         hits.set(k, list);
         break;
       }
@@ -148,25 +158,36 @@ export function dimensionLines(page) {
   }
   // without heavier ticks, a dimension needs its figure along it
   const centers = (page.texts || []).map((t) => ({ t, c: textCenter(t), d: [Math.cos(t.angle || 0), Math.sin(t.angle || 0)] }));
-  const hasFigure = (s) => {
+  const hasFigure = (s, requireUnit = false) => {
     const L = lenOf(s);
     const d = [(s.x2 - s.x1) / L, (s.y2 - s.y1) / L];
     return centers.some(({ t, c, d: td }) => {
-      if (Math.abs(d[0] * td[1] - d[1] * td[0]) > 0.05 || !/\d/.test(t.str)) return false;
+      if (Math.abs(d[0] * td[1] - d[1] * td[0]) > 0.05) return false;
+      if (requireUnit ? !/\d\s*['"′″]|\d'\s*-?\s*\d/.test(t.str) : !/\d/.test(t.str)) return false;
       const u = (c[0] - s.x1) * d[0] + (c[1] - s.y1) * d[1];
       const v = (c[0] - s.x1) * -d[1] + (c[1] - s.y1) * d[0];
       return u > 0 && u < L && Math.abs(v) <= (t.size || 6) * 1.5;
     });
   };
   const out = new Set();
-  for (const [k, us] of hits) {
-    if (us.length < 2) continue; // ticks at two points at least
+  for (const [k, rawUs] of hits) {
+    const us = rawUs.filter((q) => !q.arrow || q.wings >= 2);
+    if (us.length < 2) continue; // ticks/arrows at two points at least
     // a dimension line stops just past its outer ticks; a wall face that only
     // serves as a witness line has the ticks somewhere along it
     const L = lenOf(lines[k]);
     const lo = Math.min(...us.map((q) => q.u)), hi = Math.max(...us.map((q) => q.u));
     if (lo > TICK_MAX_PT * 1.5 || L - hi > TICK_MAX_PT * 1.5) continue;
-    if (us.filter((q) => q.heavy).length >= 2 || hasFigure(lines[k])) out.add(lineIdx[k]);
+    if (us.filter((q) => q.heavy || q.arrow).length >= 2 || hasFigure(lines[k])) out.add(lineIdx[k]);
+  }
+  // parallel dimension lines without ticks (e.g. dot/tick-less CAD dims with feet/inch text)
+  // only when thin compared to wall lines and directly carrying a feet/inch figure
+  const maxW = Math.max(0, ...lines.map((s) => s.w || 0));
+  for (let k = 0; k < lines.length; k++) {
+    if (out.has(lineIdx[k])) continue;
+    const s = lines[k];
+    if (maxW > 0 && (s.w || 0) >= maxW * 0.6) continue;
+    if (hasFigure(s, true)) out.add(lineIdx[k]);
   }
   return out;
 }

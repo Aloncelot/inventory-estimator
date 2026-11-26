@@ -74,6 +74,24 @@ test('curves drawn as short lines: tub basin and open door leaf are no wall face
   assert.ok(marked.has(idx(2)), 'basin side');
   assert.ok(!marked.has(idx(3)), 'tub rim');
   assert.ok(marked.has(idx(5)) && marked.has(idx(6)), 'both sides of the leaf');
-  assert.ok(!marked.has(idx(7)) && !marked.has(idx(8)), 'the wall');
+  assert.ok(marked.has(idx(7)) === false && marked.has(idx(8)) === false, 'the wall');
   assert.equal(chords.length, 2);
+});
+
+test('dimension lines: arrowheads and thin feet-inch dimension strings are marked', () => {
+  // arrowhead dimension: two 20° wings at each end
+  const dimArrow = seg(100, 40, 200, 40, 0.24);
+  const w1 = seg(100, 40, 108, 37.5, 0.24), w2 = seg(100, 40, 108, 42.5, 0.24);
+  const w3 = seg(200, 40, 192, 37.5, 0.24), w4 = seg(200, 40, 192, 42.5, 0.24);
+  // thin dimension line with feet-inch figure, plus a heavier wall face
+  const dimText = seg(100, 80, 200, 80, 0.24);
+  const wallFace = seg(100, 120, 300, 120, 1.2);
+  const page = {
+    segments: [dimArrow, w1, w2, w3, w4, dimText, wallFace],
+    texts: [{ str: `12'-6"`, x: 140, y: 78, size: 7, angle: 0, w: 24 }],
+  };
+  const marked = dimensionLines(page);
+  assert.ok(marked.has(0), 'arrowhead dimension line marked');
+  assert.ok(marked.has(5), 'thin feet-inch dimension line marked');
+  assert.ok(!marked.has(6), 'heavy wall face not marked');
 });

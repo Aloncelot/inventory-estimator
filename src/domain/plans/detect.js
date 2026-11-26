@@ -184,7 +184,7 @@ export function detectWalls(page, opts = {}) {
     // poché: the grey fill a CAD export puts in cut walls, any pen
     if (s.fill && lum(styleColor(s.style)) < 0.9) (b.fills || (b.fills = [])).push(rec);
     all.push({ ...s, deg });
-    if (s.arc || marked.has(si)) continue;
+    if (s.arc || marked.has(si) || String(s.style).endsWith('|d')) continue;
     if (s.fill && lum(styleColor(s.style)) > 0.97) continue; // white masks
     if (allow && !allow.has(s.style)) continue;
     if (!b.byStyle.has(s.style)) b.byStyle.set(s.style, []);
@@ -297,14 +297,99 @@ export function detectWalls(page, opts = {}) {
         // a wall face touching a counter): split it into the bands that fit
         // (only bands the wall poché backs: cabinets and fixtures have none)
         const parts = g.vb - g.va > tMax * 1.05
-          ? splitBand(members.get(r), tMax, minSeg).filter((p) => pocheCover(b.fills, p) >= 0.6)
-          : [g];
+          ? splitBand(members.get(r), tMax, minSeg).filter((p) => pocheCover(b.fills, p) >= 0.6 || (poche.count > 50 && pocheRatio(p, b, poche) >= 0.5))
+          : [stripFinishLayer(members.get(r), g, b, poche, inPt)];
         for (const p0 of parts) {
           const p = poche.count > 50 ? fitPoche(p0, b, poche, inPt, tMin, tMax) : p0;
           bands.push({ deg: b.deg, d: b.d, n: b.n, style, u0: p.u0, u1: p.u1, v: (p.va + p.vb) / 2, t: p.vb - p.va, fitted: p.fitted });
         }
       }
     }
+
+    // 2b. cross-style pairing for dark stroke pens (e.g. exterior face drawn
+    // heavier than interior face): only where neither face already paired
+    const darkStyles = [...b.byStyle.keys()].filter((st) => !st.startsWith('fill|') && lum(styleColor(st)) < 0.5);
+    if (darkStyles.length >= 2) {
+      const existing = bands.filter((bd) => bd.deg === b.deg);
+      const covered = (seg) => {
+        const len = seg.u1 - seg.u0;
+        if (len <= 0) return true;
+        let ov = 0;
+        for (const bd of existing) {
+          if (seg.v < bd.v - bd.t / 2 - 0.5 || seg.v > bd.v + bd.t / 2 + 0.5) continue;
+          ov += Math.max(0, Math.min(seg.u1, bd.u1) - Math.max(seg.u0, bd.u0));
+        }
+        return ov >= len * 0.6;
+      };
+      const pool = [];
+      for (const st of darkStyles) {
+        for (const seg of b.byStyle.get(st)) if (!covered(seg)) pool.push({ ...seg, style: st });
+      }
+      pool.sort((p, q) => p.v - q.v);
+      for (let i = 0; i < pool.length; i++) {
+        const a = pool[i];
+        let best = null;
+        for (let j = i + 1; j < pool.length; j++) {
+          const c = pool[j];
+          const gap = c.v - a.v;
+          if (gap > tMax) break;
+          if (gap < tMin || c.style === a.style) continue;
+          const u0 = Math.max(a.u0, c.u0), u1 = Math.min(a.u1, c.u1);
+          if (u1 - u0 < minSeg) continue;
+          if (!best || gap < best.gap) best = { gap, u0, u1, va: a.v, vb: c.v, style: styleWidth(a.style) >= styleWidth(c.style) ? a.style : c.style };
+        }
+        if (best) {
+          const p = poche.count > 50 ? fitPoche(best, b, poche, inPt, tMin, tMax) : best;
+          bands.push({ deg: b.deg, d: b.d, n: b.n, style: best.style, u0: p.u0, u1: p.u1, v: (p.va + p.vb) / 2, t: p.vb - p.va, fitted: p.fitted });
+        }
+      }
+    }
+  }
+
+  // On sheets with wall poché:
+  //  1. a window's two sill lines can pair as a band with glazing inside and no
+  //     poché: drop it so step 4 bridges it as a window;
+  //  2. continuous sill lines across a window merge into one long band in step 1:
+  //     carve out any unfilled (no-poché) span that holds glazing lines inside it
+  //     so step 4 records the exact window openings instead of merging over them.
+  if (poche.count > 50) {
+    const nextBands = [];
+    for (const bd of bands) {
+      const box = { u0: bd.u0, u1: bd.u1, va: bd.v - bd.t / 2, vb: bd.v + bd.t / 2 };
+      const bk = buckets.get(bd.deg);
+      const inner = (bk?.any || []).filter((s) => s.v > box.va + 0.5 * inPt && s.v < box.vb - 0.5 * inPt
+        && Math.min(s.u1, bd.u1) - Math.max(s.u0, bd.u0) >= o.minOpeningFt * k * 0.8);
+      if (pocheRatio(box, bd, poche) < 0.15) {
+        if (inner.some((s) => Math.min(s.u1, bd.u1) - Math.max(s.u0, bd.u0) > (bd.u1 - bd.u0) * 0.5)) continue;
+        nextBands.push(bd);
+        continue;
+      }
+      // find unfilled glazing spans strictly inside this wall band
+      const cuts = [];
+      for (const s of inner) {
+        const a = Math.max(bd.u0, s.u0), z = Math.min(bd.u1, s.u1);
+        if (z - a < o.minOpeningFt * k || z - a > o.maxOpeningFt * k) continue;
+        if (a <= bd.u0 + 0.25 * k || z >= bd.u1 - 0.25 * k) continue;
+        const mid = (a + z) / 2;
+        if (poche.inside(bd.d[0] * mid + bd.n[0] * bd.v, bd.d[1] * mid + bd.n[1] * bd.v)) continue;
+        cuts.push([a, z]);
+      }
+      if (!cuts.length) { nextBands.push(bd); continue; }
+      cuts.sort((p, q) => p[0] - q[0]);
+      const merged = [];
+      for (const [a, z] of cuts) {
+        if (merged.length && a <= merged[merged.length - 1][1] + 0.2 * k) merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], z);
+        else merged.push([a, z]);
+      }
+      let curU = bd.u0;
+      for (const [a, z] of merged) {
+        if (a - curU >= minSeg) nextBands.push({ ...bd, u0: curU, u1: a });
+        curU = Math.max(curU, z);
+      }
+      if (bd.u1 - curU >= minSeg) nextBands.push({ ...bd, u0: curU, u1: bd.u1 });
+    }
+    bands.length = 0;
+    bands.push(...nextBands);
   }
 
   // 4. join collinear bands of one style across gaps and openings
@@ -334,7 +419,7 @@ export function detectWalls(page, opts = {}) {
         const gap = bd.u0 - cur.u1;
         if (gap <= minOpen) { cur.u1 = Math.max(cur.u1, bd.u1); cur.t = Math.max(cur.t, bd.t); cur.fitted = cur.fitted || bd.fitted; continue; }
         if (gap <= maxGap) {
-          const kind = openingEvidence(buckets, all, bands, cur, cur.u1, bd.u0, ln.v, Math.max(cur.t, bd.t), inPt);
+          const kind = openingEvidence(buckets, all, bands, cur, cur.u1, bd.u0, ln.v, Math.max(cur.t, bd.t), inPt, poche);
           if (kind) {
             cur.openings.push({ u0: cur.u1, u1: bd.u0, type: kind });
             cur.u1 = Math.max(cur.u1, bd.u1); cur.t = Math.max(cur.t, bd.t); cur.fitted = cur.fitted || bd.fitted;
@@ -380,17 +465,58 @@ export function detectWalls(page, opts = {}) {
       const [g0, g1] = side > 0 ? [end, best.face] : [best.face, end];
       // the door's swing must be drawn (a tag's slanted sides are no leaf), or
       // the panels of a sliding / bifold closet door fill the opening
-      const swing = best.gap <= maxDoor && openingEvidence(buckets, swings, bands, w, g0, g1, w.v, w.t, inPt) === 'door';
-      if (!swing && !closetDoors(buckets.get(w.deg), g0, g1, w.v, w.t, inPt)) continue;
+      const swing = best.gap <= maxDoor && openingEvidence(buckets, swings, bands, w, g0, g1, w.v, w.t, inPt, poche) === 'door';
+      if (!swing && !closetDoors(buckets.get(w.deg), all, w, g0, g1, w.v, w.t, inPt)) continue;
       w.openings.push({ u0: g0, u1: g1, type: 'door' });
       if (side > 0) w.u1 = best.face; else w.u0 = best.face;
     }
     w.openings.sort((p, q) => p.u0 - q.u0);
   }
 
+  // 4c. On sheets with wall poché, continuous window sill lines can merge into
+  // a single wall band: carve windows where poché drops out and glazing lines
+  // run inside the wall thickness.
+  if (poche.count > 50) {
+    const step = 0.25 * k;
+    for (const w of walls) {
+      const L = w.u1 - w.u0;
+      if (L < minOpen * 2) continue;
+      const n = Math.max(4, Math.ceil(L / step));
+      const du = L / n;
+      const filled = [];
+      let anyFilled = false;
+      for (let i = 0; i < n; i++) {
+        const u = w.u0 + (i + 0.5) * du;
+        const ok = poche.inside(w.d[0] * u + w.n[0] * w.v, w.d[1] * u + w.n[1] * w.v);
+        filled.push(ok);
+        if (ok) anyFilled = true;
+      }
+      if (!anyFilled) continue;
+      const bk = buckets.get(w.deg);
+      const inner = (bk?.any || []).filter((s) => s.v > w.v - w.t / 2 + 0.4 * inPt && s.v < w.v + w.t / 2 - 0.4 * inPt);
+      if (!inner.length) continue;
+      for (let i = 0; i < n;) {
+        if (filled[i]) { i += 1; continue; }
+        let j = i;
+        while (j < n && !filled[j]) j += 1;
+        const g0 = w.u0 + i * du, g1 = w.u0 + j * du, gap = g1 - g0;
+        if (i > 0 && j < n && gap >= minOpen && gap <= maxGap
+          && !w.openings.some((op) => Math.min(op.u1, g1) - Math.max(op.u0, g0) > 0.5 * k)) {
+          const hasGlass = inner.some((s) => Math.min(s.u1, g1) - Math.max(s.u0, g0) >= gap * 0.5);
+          if (hasGlass) w.openings.push({ u0: g0, u1: g1, type: 'window' });
+        }
+        i = j;
+      }
+      w.openings.sort((p, q) => p.u0 - q.u0);
+    }
+  }
+
   // 5. to page coordinates, sizes, exterior test
+  // Keep short walls (down to 0.7') until after joinCorners so closet returns
+  // and short piers get extended to corner centrelines before minWallFt runs.
+  const preMin = Math.min(o.minWallFt, 0.7) * k;
   let out = walls
-    .filter((w) => w.u1 - w.u0 >= o.minWallFt * k)
+    .filter((w) => w.u1 - w.u0 >= preMin)
     .map((w) => {
       const p1 = [w.d[0] * w.u0 + w.n[0] * w.v, w.d[1] * w.u0 + w.n[1] * w.v];
       const p2 = [w.d[0] * w.u1 + w.n[0] * w.v, w.d[1] * w.u1 + w.n[1] * w.v];
@@ -403,10 +529,21 @@ export function detectWalls(page, opts = {}) {
       };
     });
   out = dropDoorLeaves(out, [...page.segments.filter((s) => s.arc), ...curves.chords], k);
-  if (poche.count > 50) out = cutAtDimensions(out, [...dims].map((i) => page.segments[i]), poche, k, o.minWallFt);
+  if (poche.count > 50) out = cutAtDimensions(out, [...dims].map((i) => page.segments[i]), poche, k, Math.min(o.minWallFt, 0.7));
   out = dropContained(out, k);
+  out = absorbThinFinish(out, k);
   out = mainBuilding(out, k);
   joinCorners(out, k);
+  // final minimum length: keep short walls when connected to other walls
+  // (0.9'+ touching both ends, or 1.1'+ structural wall touching one end like a closet wing)
+  const touchesAt = (w, x, y) => out.some((o2) => o2 !== w && segDist(o2, { x1: x, y1: y, x2: x, y2: y }) <= ((Math.max(w.thickIn, o2.thickIn) / 12) * k) + 0.5 * k);
+  out = out.filter((w) => {
+    if (w.lengthFt >= o.minWallFt) return true;
+    const t1 = touchesAt(w, w.x1, w.y1), t2 = touchesAt(w, w.x2, w.y2);
+    if (w.lengthFt >= 0.9 && t1 && t2) return true;
+    if (w.lengthFt >= 1.1 && w.thickIn >= 4 && (t1 || t2)) return true;
+    return false;
+  });
   markExterior(out, k);
   if (poche.count > 50) {
     // short unfilled stubs sticking out of the building with a loose end: the
@@ -453,12 +590,12 @@ export function detectWalls(page, opts = {}) {
  * longest piece out: a piece joins a band while the band stays a wall thickness.
  */
 /**
- * Panels of a sliding or bifold closet door across an opening: each panel is a
- * thin rectangle (two lines a door's thickness apart) along the wall, inside
- * its thickness, part of the width; two or more of them span it. (A tag's
- * leader or the edge of a floor finish is one line.)
+ * Panels of a sliding or bifold closet door across an opening:
+ *  - sliding: two or more thin rectangles along the wall spanning ≥85% of the gap;
+ *  - bifold: two or more angled panels (15°–75° to the wall) inside the opening
+ *    spanning ≥70% of the gap.
  */
-function closetDoors(bucket, g0, g1, v, t, inPt) {
+function closetDoors(bucket, all, band, g0, g1, v, t, inPt) {
   const gap = g1 - g0;
   const lines = (bucket?.any || []).filter((s) => Math.abs(s.v - v) <= t / 2 + 0.5 && s.u0 >= g0 - 1 && s.u1 <= g1 + 1
     && s.u1 - s.u0 >= 0.2 * gap && s.u1 - s.u0 <= 0.8 * gap);
@@ -468,25 +605,135 @@ function closetDoors(bucket, g0, g1, v, t, inPt) {
       && Math.abs(b.v - a.v) >= 0.3 && Math.abs(b.v - a.v) <= 2.5 * inPt);
     if (twin && !panels.some((p) => Math.abs(p[0] - a.u0) <= 1 && Math.abs(p[1] - a.u1) <= 1)) panels.push([a.u0, a.u1]);
   }
-  if (panels.length < 2) return false;
-  panels.sort((a, b) => a[0] - b[0]);
-  let len = 0, end = g0;
-  for (const [a, b] of panels) { if (b <= end) continue; len += b - Math.max(a, end); end = b; }
-  return len >= 0.85 * gap;
+  if (panels.length >= 2) {
+    panels.sort((a, b) => a[0] - b[0]);
+    let len = 0, end = g0;
+    for (const [a, b] of panels) { if (b <= end) continue; len += b - Math.max(a, end); end = b; }
+    if (len >= 0.85 * gap) return true;
+  }
+  // bifold closet doors: angled V-shaped panels projecting across the opening
+  const maxReach = Math.max(t, gap * 0.55);
+  const toUV = (x, y) => [x * band.d[0] + y * band.d[1], x * band.n[0] + y * band.n[1]];
+  const angled = [];
+  for (const s of all || []) {
+    if (s.arc || s.fill) continue;
+    const L = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+    if (L < gap * 0.15 || L > gap * 0.65) continue;
+    const [u1, v1] = toUV(s.x1, s.y1), [u2, v2] = toUV(s.x2, s.y2);
+    const du = Math.abs(u2 - u1), dv = Math.abs(v2 - v1);
+    if (du < 0.25 * L || dv < 0.25 * L) continue; // ~15°–75° to the wall
+    const lo = Math.min(u1, u2), hi = Math.max(u1, u2);
+    if (lo < g0 - 2 * inPt || hi > g1 + 2 * inPt) continue;
+    if (Math.max(Math.abs(v1 - v), Math.abs(v2 - v)) > maxReach) continue;
+    angled.push([Math.max(g0, lo), Math.min(g1, hi)]);
+  }
+  if (angled.length >= 2) {
+    angled.sort((a, b) => a[0] - b[0]);
+    let len = 0, end = g0;
+    for (const [a, b] of angled) { if (b <= end) continue; len += b - Math.max(a, end); end = b; }
+    if (len >= 0.7 * gap) return true;
+  }
+  return false;
+}
+
+/** Share of sample points along a band's centreline that fall inside wall poché. */
+function pocheRatio(p, b, poche) {
+  const vm = (p.va + p.vb) / 2;
+  const fs = [0.15, 0.32, 0.5, 0.68, 0.85];
+  let hits = 0;
+  for (const f of fs) {
+    const u = p.u0 + (p.u1 - p.u0) * f;
+    if (poche.inside(b.d[0] * u + b.n[0] * vm, b.d[1] * u + b.n[1] * vm)) hits += 1;
+  }
+  return hits / fs.length;
 }
 
 /**
- * Fit a band as thick as a double wall to the wall fill (poché) it lies on. A
+ * Strip a thin exterior finish/cladding layer (< 3.5", thinner than a 2x4 stud)
+ * from a layered wall band so an exterior wall with drawn siding/brick/insulation
+ * does not inflate into a double wall or thicker stud size.
+ */
+function stripFinishLayer(members, g, b, poche, inPt) {
+  const totalIn = (g.vb - g.va) / inPt;
+  if (totalIn < 7.5 || !members || members.length < 2) return g;
+  const len = g.u1 - g.u0;
+  // collect distinct v lines that run along most of the band
+  const raw = [];
+  for (const m of members) {
+    if (m.u1 - m.u0 < len * 0.55) continue;
+    raw.push(m.va, m.vb);
+  }
+  raw.sort((x, y) => x - y);
+  const vs = [];
+  for (const v of raw) {
+    if (!vs.length || v - vs[vs.length - 1] > 0.5 * inPt) vs.push(v);
+  }
+  if (vs.length < 3) return g;
+  let lo = 0, hi = vs.length - 1;
+  const hasPoche = poche.count > 50;
+  // trim a thin outer layer (< 3.5" — thinner than a 2x4) on either side while
+  // leaving a real framing wall core (3.8"–7.5")
+  for (const side of ['low', 'high']) {
+    if (hi - lo < 2) break;
+    const stripIn = side === 'low' ? (vs[lo + 1] - vs[lo]) / inPt : (vs[hi] - vs[hi - 1]) / inPt;
+    const remIn = side === 'low' ? (vs[hi] - vs[lo + 1]) / inPt : (vs[hi - 1] - vs[lo]) / inPt;
+    if (stripIn >= 3.5 || remIn < 3.8 || remIn > 9.5) continue;
+    if (hasPoche) {
+      const stripBand = side === 'low' ? { u0: g.u0, u1: g.u1, va: vs[lo], vb: vs[lo + 1] } : { u0: g.u0, u1: g.u1, va: vs[hi - 1], vb: vs[hi] };
+      const coreBand = side === 'low' ? { u0: g.u0, u1: g.u1, va: vs[lo + 1], vb: vs[hi] } : { u0: g.u0, u1: g.u1, va: vs[lo], vb: vs[hi - 1] };
+      if (pocheRatio(coreBand, b, poche) >= 0.4 && pocheRatio(stripBand, b, poche) < 0.4) {
+        if (side === 'low') lo += 1; else hi -= 1;
+      }
+    } else if (stripIn < 3.2) {
+      if (side === 'low') lo += 1; else hi -= 1;
+    }
+  }
+  if (lo === 0 && hi === vs.length - 1) return g;
+  return { ...g, va: vs[lo], vb: vs[hi] };
+}
+
+/**
+ * Drop a thin parallel cladding/finish band (< 3.8", thinner than a 2x4 wall)
+ * that runs directly alongside a structural wall (≥ 3.8"): it is the exterior
+ * finish, not a second wall (and would otherwise block markExterior on the real wall).
+ */
+export function absorbThinFinish(walls, k) {
+  const inPt = k / 12;
+  const frame = (o) => {
+    const d = [Math.cos(angleOf(o)), Math.sin(angleOf(o))];
+    const n = [-d[1], d[0]];
+    return { v: (p) => p[0] * n[0] + p[1] * n[1], u: (p) => p[0] * d[0] + p[1] * d[1] };
+  };
+  const span = (w, u) => { const a = u([w.x1, w.y1]), b = u([w.x2, w.y2]); return [Math.min(a, b), Math.max(a, b)]; };
+  return walls.filter((w) => {
+    if (w.thickIn >= 3.8) return true;
+    for (const o of walls) {
+      if (o === w || o.thickIn < 3.8) continue;
+      if (Math.abs(angleOf(o) - angleOf(w)) > 0.03) continue;
+      const { v, u } = frame(o);
+      const centerDist = Math.abs(v([w.x1, w.y1]) - v([o.x1, o.y1]));
+      const edgeGap = centerDist - ((o.thickIn + w.thickIn) / 2) * inPt;
+      if (edgeGap > 2 * inPt) continue;
+      const [a0, a1] = span(o, u), [b0, b1] = span(w, u);
+      const ov = Math.min(a1, b1) - Math.max(a0, b0);
+      if (ov >= (b1 - b0) * 0.6) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Fit a thick band to the wall fill (poché) it lies on. A
  * band thicker than its fill is a wall plus something drawn against it (a
- * tub's side, a range, a cabinet); a band paired off a stray line can sit
- * across only part of a double wall. Fill is sampled across the band and a few
- * inches past it, at three points along it; the filled run the band overlaps
- * most becomes the band (air gaps of up to 1½" bridged: a double wall is two
- * filled walls side by side). Single walls, and bands on no fill, keep their
- * faces.
+ * tub's side, a range, a cabinet, or an exterior finish); a band paired off a
+ * stray line can sit across only part of a double wall. Fill is sampled across
+ * the band and a few inches past it, at three points along it; the filled run
+ * the band overlaps most becomes the band (air gaps of up to 1½" bridged: a
+ * double wall is two filled walls side by side). Single walls, and bands on no
+ * fill, keep their faces.
  */
 function fitPoche(p, b, poche, inPt, tMin, tMax) {
-  if (p.vb - p.va < DETECT_DEFAULTS.doubleMinIn * inPt) return p;
+  if (p.vb - p.va < 7.5 * inPt) return p;
   const step = 0.25;
   const lo = p.va - 4 * inPt, hi = p.vb + 4 * inPt;
   const n = Math.max(2, Math.ceil((hi - lo) / step));
@@ -613,7 +860,7 @@ export function suggestStyles(styleList) {
 }
 
 /** Evidence that a gap in a wall is an opening: door leaf / swing, or window glazing. */
-function openingEvidence(buckets, all, bands, band, g0, g1, v, t, inPt) {
+function openingEvidence(buckets, all, bands, band, g0, g1, v, t, inPt, poche = null) {
   const tol = 2 * inPt;
   const gapLen = g1 - g0;
   const toUV = (x, y) => [x * band.d[0] + y * band.d[1], x * band.n[0] + y * band.n[1]];
@@ -628,18 +875,37 @@ function openingEvidence(buckets, all, bands, band, g0, g1, v, t, inPt) {
     const u = a[0] + (b[0] - a[0]) * f;
     if (u > g0 + tol && u < g1 - tol) return null;
   }
-  // door: a leaf or swing arc hinged in the gap and reaching well outside the wall
+  // door: a single leaf / swing arc hinged in the gap, OR a double door
+  // (two ~half-width leaves / arcs hinged near opposite jambs g0 and g1)
+  let doubleLeft = false, doubleRight = false;
   for (const s of all) {
     if (s.deg === band.deg && !s.arc) continue;
     const L = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
     const want = s.arc ? [gapLen * 0.5, gapLen * 1.6] : [gapLen * 0.6, gapLen * 1.15];
-    if (L < want[0] || L > want[1]) continue;
     const p = toUV(s.x1, s.y1), q = toUV(s.x2, s.y2);
-    for (const [a, b] of [[p, q], [q, p]]) {
-      if (inStrip(a[0], a[1]) && Math.abs(b[1] - v) >= t / 2 + gapLen * 0.4) return 'door';
+    if (L >= want[0] && L <= want[1]) {
+      for (const [a, b] of [[p, q], [q, p]]) {
+        if (inStrip(a[0], a[1]) && Math.abs(b[1] - v) >= t / 2 + gapLen * 0.4) return 'door';
+      }
+    }
+    // double door: each leaf/arc is ~half the gap width
+    const halfWant = s.arc ? [gapLen * 0.35, gapLen * 0.85] : [gapLen * 0.4, gapLen * 0.62];
+    if (L >= halfWant[0] && L <= halfWant[1]) {
+      for (const [a, b] of [[p, q], [q, p]]) {
+        if (inStrip(a[0], a[1]) && Math.abs(b[1] - v) >= t / 2 + gapLen * 0.22) {
+          if (a[0] <= g0 + gapLen * 0.35) doubleLeft = true;
+          if (a[0] >= g1 - gapLen * 0.35) doubleRight = true;
+        }
+      }
     }
   }
-  // window: parallel lines (glazing, sill) running inside the gap strip
+  if (doubleLeft && doubleRight) return 'door';
+  // window: parallel lines (glazing, sill) running inside the gap strip;
+  // on a sheet with poché, a gap filled with wall poché is a solid wall, not a window
+  if (poche && poche.count > 50) {
+    const um = (g0 + g1) / 2;
+    if (poche.inside(band.d[0] * um + band.n[0] * v, band.d[1] * um + band.n[1] * v)) return null;
+  }
   const bk = buckets.get(band.deg);
   for (const s of bk?.any || []) {
     if (Math.abs(s.v - v) > t / 2 + tol) continue;
@@ -745,14 +1011,15 @@ export function dropDoorLeaves(walls, arcs, k) {
  */
 function dropContained(walls, k) {
   const keep = [];
-  const sorted = walls.slice().sort((a, b) => b.lengthFt - a.lengthFt);
+  const queue = walls.slice().sort((a, b) => b.lengthFt - a.lengthFt);
   const frame = (o) => {
     const d = [Math.cos(angleOf(o)), Math.sin(angleOf(o))];
     const n = [-d[1], d[0]];
     return { v: (p) => p[0] * n[0] + p[1] * n[1], u: (p) => p[0] * d[0] + p[1] * d[1] };
   };
   const span = (w, u) => { const a = u([w.x1, w.y1]), b = u([w.x2, w.y2]); return [Math.min(a, b), Math.max(a, b)]; };
-  for (let w of sorted) {
+  for (let qi = 0; qi < queue.length; qi++) {
+    let w = queue[qi];
     let drop = false;
     for (let i = 0; i < keep.length && !drop; i++) {
       const o = keep[i];
@@ -769,9 +1036,15 @@ function dropContained(walls, k) {
         drop = true;
       } else if (Math.min(a1, b1) - Math.max(a0, b0) > 0.5) {
         // overlapping along part of its length (one wall drawn by two pens):
-        // keep only the part beyond the longer one
-        w = trimWall(w, u, b0 < a0 ? [b0, a0] : [a1, b1], k);
-        if (!w || w.lengthFt < 1.5) drop = true;
+        // keep the parts beyond the longer one (both sides if w extends past both ends)
+        if (b0 < a0 && b1 > a1) {
+          const right = trimWall(w, u, [a1, b1], k);
+          if (right && right.lengthFt >= 0.7) queue.push(right);
+          w = trimWall(w, u, [b0, a0], k);
+        } else {
+          w = trimWall(w, u, b0 < a0 ? [b0, a0] : [a1, b1], k);
+        }
+        if (!w || w.lengthFt < 0.7) drop = true;
       }
     }
     if (!drop) keep.push(w);
@@ -857,24 +1130,29 @@ function segDist(a, b) {
  * runs through, the other butts). T junctions keep the face-to-face length.
  */
 export function joinCorners(walls, k) {
-  const moves = [];
-  for (const a of walls) {
+  const bestMove = new Map();
+  for (let wi = 0; wi < walls.length; wi++) {
+    const a = walls[wi];
     for (const b of walls) {
       if (a === b) continue;
       const X = lineCross(a, b);
       if (!X) continue;
       const reach = (((a.thickIn + b.thickIn) / 2) / 12) * k + 1;
       const ea = nearestEnd(a, X), eb = nearestEnd(b, X);
-      if (ea.d <= reach && eb.d <= reach) moves.push({ w: a, i: ea.i, X });
+      if (ea.d <= reach && eb.d <= reach) {
+        const key = `${wi}:${ea.i}`;
+        const prev = bestMove.get(key);
+        if (!prev || ea.d < prev.d) bestMove.set(key, { w: a, i: ea.i, X, d: ea.d });
+      }
     }
   }
-  for (const m of moves) {
+  for (const m of bestMove.values()) {
     const w = m.w;
     if (m.i === 1) {
       // openings are measured from the start: shift them by how far it moved
       const shift = Math.hypot(w.x1 - m.X[0], w.y1 - m.X[1]) / k;
       const outward = (w.x2 - w.x1) * (w.x1 - m.X[0]) + (w.y2 - w.y1) * (w.y1 - m.X[1]) > 0;
-      w.openings = w.openings.map((o) => ({ ...o, atFt: +(o.atFt + (outward ? shift : -shift)).toFixed(2) }));
+      w.openings = (w.openings || []).map((o) => ({ ...o, atFt: +(o.atFt + (outward ? shift : -shift)).toFixed(2) }));
     }
     w[`x${m.i}`] = m.X[0]; w[`y${m.i}`] = m.X[1];
   }
@@ -897,33 +1175,86 @@ function lineCross(a, b) {
   return [a.x1 + dax * t, a.y1 + day * t];
 }
 
-/** A wall is exterior when, on one side, a ray from its middle meets no other wall. */
+/**
+ * A wall is exterior when one of its sides borders the open outside space.
+ * Uses a 2D grid flood-fill from the padded bounding box so L-shaped, U-shaped,
+ * recessed entries and courtyards classify accurately (unlike straight rays).
+ */
 export function markExterior(walls, k) {
-  const reach = 400 * k; // look up to 400 ft away
+  if (!walls.length) return walls;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const w of walls) {
+    x0 = Math.min(x0, w.x1, w.x2); x1 = Math.max(x1, w.x1, w.x2);
+    y0 = Math.min(y0, w.y1, w.y2); y1 = Math.max(y1, w.y1, w.y2);
+  }
+  const pad = 4 * k;
+  x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+  const W = x1 - x0, H = y1 - y0;
+  // grid resolution ~0.5'–1.25' per cell, capped at 180 cells on the long axis
+  const cell = Math.max(0.5 * k, Math.min(1.25 * k, Math.max(W, H) / 180));
+  const cols = Math.max(4, Math.ceil(W / cell) + 1);
+  const rows = Math.max(4, Math.ceil(H / cell) + 1);
+  const grid = new Uint8Array(cols * rows); // 0 = empty, 1 = wall, 2 = outside air
+
+  const toCol = (x) => Math.max(0, Math.min(cols - 1, Math.floor((x - x0) / cell)));
+  const toRow = (y) => Math.max(0, Math.min(rows - 1, Math.floor((y - y0) / cell)));
+
+  // rasterize every wall (including across its openings, which are sealed by the wall segment)
+  for (const w of walls) {
+    const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+    const halfT = Math.max(((w.thickIn || 6) / 12) * k * 0.5, cell * 0.65);
+    const steps = Math.max(2, Math.ceil(L / (cell * 0.4)));
+    const rCells = Math.ceil(halfT / cell);
+    for (let i = 0; i <= steps; i++) {
+      const f = i / steps;
+      const px = w.x1 + (w.x2 - w.x1) * f;
+      const py = w.y1 + (w.y2 - w.y1) * f;
+      const c0 = toCol(px), r0 = toRow(py);
+      for (let dc = -rCells; dc <= rCells; dc++) {
+        const cc = c0 + dc;
+        if (cc < 0 || cc >= cols) continue;
+        for (let dr = -rCells; dr <= rCells; dr++) {
+          const rr = r0 + dr;
+          if (rr < 0 || rr >= rows) continue;
+          const cx = x0 + (cc + 0.5) * cell, cy = y0 + (rr + 0.5) * cell;
+          if (Math.hypot(cx - px, cy - py) <= halfT + cell * 0.4) grid[rr * cols + cc] = 1;
+        }
+      }
+    }
+  }
+
+  // BFS flood-fill from (0, 0) (guaranteed outside due to 4' padding)
+  const queue = new Int32Array(cols * rows);
+  let head = 0, tail = 0;
+  grid[0] = 2;
+  queue[tail++] = 0;
+  while (head < tail) {
+    const idx = queue[head++];
+    const c = idx % cols, r = (idx - c) / cols;
+    if (c > 0 && grid[idx - 1] === 0) { grid[idx - 1] = 2; queue[tail++] = idx - 1; }
+    if (c + 1 < cols && grid[idx + 1] === 0) { grid[idx + 1] = 2; queue[tail++] = idx + 1; }
+    if (r > 0 && grid[idx - cols] === 0) { grid[idx - cols] = 2; queue[tail++] = idx - cols; }
+    if (r + 1 < rows && grid[idx + cols] === 0) { grid[idx + cols] = 2; queue[tail++] = idx + cols; }
+  }
+
+  const samples = [0.2, 0.35, 0.5, 0.65, 0.8];
   for (const w of walls) {
     const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
     const nx = -(w.y2 - w.y1) / L, ny = (w.x2 - w.x1) / L;
-    const off = ((w.thickIn / 12) * k) / 2 + 1;
-    let open = false;
+    const off = Math.max(((w.thickIn || 6) / 12) * k * 0.5, cell * 0.65) + cell * 1.15;
+    let bestSgn = null, bestHits = 0;
     for (const sgn of [1, -1]) {
-      // three rays (middle and quarter points) must all escape
-      const escapes = [0.25, 0.5, 0.75].every((f) => {
+      let hitsOut = 0;
+      for (const f of samples) {
         const px = w.x1 + (w.x2 - w.x1) * f + sgn * nx * off;
         const py = w.y1 + (w.y2 - w.y1) * f + sgn * ny * off;
-        return !walls.some((o) => o !== w && hits(px, py, px + sgn * nx * reach, py + sgn * ny * reach, o));
-      });
-      if (escapes) { open = true; w.outside = sgn; break; }
+        if (grid[toRow(py) * cols + toCol(px)] === 2) hitsOut += 1;
+      }
+      if (hitsOut > bestHits) { bestHits = hitsOut; bestSgn = sgn; }
     }
-    w.exterior = open;
+    const need = L < cell * 2.5 ? 1 : 3;
+    w.exterior = bestHits >= need;
+    if (w.exterior) w.outside = bestSgn;
   }
   return walls;
-}
-
-function hits(ax, ay, bx, by, w) {
-  const cx = w.x1, cy = w.y1, dx = w.x2, dy = w.y2;
-  const den = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx);
-  if (Math.abs(den) < 1e-9) return false;
-  const t = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / den;
-  const s = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / den;
-  return t > 0 && t <= 1 && s >= 0 && s <= 1;
 }

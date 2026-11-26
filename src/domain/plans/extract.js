@@ -74,7 +74,9 @@ export async function extractPage(page, OPS) {
         if (stroked) segments.push({ x1: cx, y1: cy, x2: x, y2: y, w, style, arc: true, pid });
         cx = x; cy = y;
       } else if (op === PATH.quadraticCurveTo) {
-        i += 2; [cx, cy] = apply(st.ctm, data[i++], data[i++]); curved = true;
+        i += 2; const [x, y] = apply(st.ctm, data[i++], data[i++]); curved = true;
+        if (stroked) segments.push({ x1: cx, y1: cy, x2: x, y2: y, w, style, arc: true, pid });
+        cx = x; cy = y;
       } else if (op === PATH.closePath) {
         if (stroked && (cx !== sx || cy !== sy)) segments.push({ x1: cx, y1: cy, x2: sx, y2: sy, w, style, pid });
         cx = sx; cy = sy;
@@ -121,21 +123,37 @@ export async function extractPage(page, OPS) {
     }
   }
 
-  // filled thin rectangles (solid "poche" walls) become their two long edges
+  // filled wall shapes (solid "poche" walls) become their long edges:
+  // rectangles (axis-aligned or rotated) emit their 2 long sides; multi-corner
+  // L/T/U polygons emit their straight edges
   for (const f of fills) {
     const p = f.pts;
-    if (p.length < 4 || p.length > 5) continue;
-    const xs = p.map((q) => q[0]); const ys = p.map((q) => q[1]);
-    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    const axis = p.slice(0, 4).every((q, i) => { const r = p[(i + 1) % 4]; return Math.abs(q[0] - r[0]) < 0.01 || Math.abs(q[1] - r[1]) < 0.01; });
-    if (!axis) continue;
+    if (p.length < 4 || p.length > 500) continue;
     const style = `fill|${f.color}`;
-    if (x1 - x0 >= y1 - y0) {
-      segments.push({ x1: x0, y1: y0, x2: x1, y2: y0, w: 0, style, fill: true });
-      segments.push({ x1: x0, y1, x2: x1, y2: y1, w: 0, style, fill: true });
-    } else {
-      segments.push({ x1: x0, y1: y0, x2: x0, y2: y1, w: 0, style, fill: true });
-      segments.push({ x1, y1: y0, x2: x1, y2: y1, w: 0, style, fill: true });
+    const n = p.length > 4 && Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) < 0.05 ? p.length - 1 : p.length;
+    if (n === 4) {
+      const e = [0, 1, 2, 3].map((i) => {
+        const a = p[i], b = p[(i + 1) % 4];
+        return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], L: Math.hypot(b[0] - a[0], b[1] - a[1]) };
+      });
+      // opposite edges parallel and nearly equal → rectangle (any angle)
+      const par = (u, v) => {
+        if (!u.L || !v.L) return false;
+        const cross = Math.abs((u.x2 - u.x1) * (v.y2 - v.y1) - (u.y2 - u.y1) * (v.x2 - v.x1)) / (u.L * v.L);
+        return cross < 0.02 && Math.abs(u.L - v.L) <= Math.max(0.1, 0.02 * Math.max(u.L, v.L));
+      };
+      if (par(e[0], e[2]) && par(e[1], e[3])) {
+        const pair = e[0].L + e[2].L >= e[1].L + e[3].L ? [e[0], e[2]] : [e[1], e[3]];
+        for (const s of pair) segments.push({ x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2, w: 0, style, fill: true });
+        continue;
+      }
+    }
+    // L/T/U wall poché polygons: emit edges long enough to be wall faces
+    for (let i = 0; i < n; i++) {
+      const a = p[i], b = p[(i + 1) % n];
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) >= 2) {
+        segments.push({ x1: a[0], y1: a[1], x2: b[0], y2: b[1], w: 0, style, fill: true });
+      }
     }
   }
 
@@ -147,6 +165,6 @@ export async function extractPage(page, OPS) {
     texts.push({ str: it.str, x: m[4], y: m[5], size: Math.hypot(m[2], m[3]) || Math.hypot(m[0], m[1]), angle: Math.atan2(m[1], m[0]), w: it.width || 0 });
   }
   // filled shapes (wall poché is grey), for telling a wall from a cabinet edge
-  const polys = fills.filter((f) => f.pts.length >= 4 && f.pts.length <= 40).map((f) => ({ pts: f.pts, color: f.color }));
+  const polys = fills.filter((f) => f.pts.length >= 4 && f.pts.length <= 2000).map((f) => ({ pts: f.pts, color: f.color }));
   return { width: vp.width, height: vp.height, segments, texts, polys };
 }
