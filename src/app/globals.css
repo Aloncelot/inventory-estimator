@@ -1333,7 +1333,16 @@ input[type="checkbox"] { accent-color: var(--accent); width: 13px; height: 13px;
 .op-add { display: flex; gap: 4px; }
 
 /* ── Plan takeoff ─────────────────────────────────────────────────────── */
-.pt-tools { display: inline-flex; gap: 4px; }
+.pt-tools { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.pt-tools-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.pt-tools-drawer { padding: 8px 10px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-800); display: flex; flex-direction: column; gap: 6px; }
+.cl-head { align-items: center; }
+.ot-panel.is-collapsed .cl-head { margin-bottom: 0; }
+.cl-trigger { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--text-100); font: inherit; padding: 2px 4px 2px 0; margin-left: -2px; border-radius: 4px; cursor: pointer; }
+.cl-trigger:hover { color: var(--accent); }
+.cl-chev { display: inline-flex; align-items: center; justify-content: center; color: var(--text-300); }
+.cl-trigger:hover .cl-chev, .pt-tools-toggle:hover .cl-chev { color: var(--accent); }
+.cl-body__inner { padding-top: 2px; }
 .ew-btn.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--text-100); }
 .pt-busy { color: var(--text-300); }
 .pt-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; max-width: 640px; padding: 28px 0; color: var(--text-300); }

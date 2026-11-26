@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { shearLengths, SHEAR_TYPES } from '@/domain/plans/hardware';
 import { beamGroups } from '@/domain/plans/beams';
 import { NumInput, TextInput } from '@/components/ui/mat';
+import { CollapsiblePanel } from '@/components/ui/Collapsible';
 
 const fmt = (v) => Math.round(Number(v) || 0).toLocaleString('en-US');
 const UNLABELED_CHOICES = {
@@ -72,21 +73,21 @@ export default function StructuralPanel({ plan, busy, onUpload, onPage, onPlace,
   const missedBy = missed.reduce((m, x) => ({ ...m, [x.kind]: (m[x.kind] || 0) + 1 }), {});
   const sizes = found ? Object.entries(found.posts.reduce((m, p) => ({ ...m, [p.labeled ? p.name : 'unlabeled']: (m[p.labeled ? p.name : 'unlabeled'] || 0) + 1 }), {})).sort((a, b) => b[1] - a[1]) : [];
   return (
-    <section className="ot-panel">
-      <div className="ot-head">
-        <strong>Structural plan</strong>
-        <span className="ew-subtle">
-          {st?.fileName ? `${st.fileName}${st.pageCount > 1 ? ` · sheet ${st.page}` : ''}` : 'Posts, tie-downs, hold-downs and shear walls from the framing plan'}
-        </span>
-        <span className="ot-add">
+    <CollapsiblePanel
+      title="Structural plan"
+      storageKey="pt-sec-structural"
+      subtitle={st?.fileName ? `${st.fileName}${st.pageCount > 1 ? ` · sheet ${st.page}` : ''}` : 'Posts, tie-downs, hold-downs and shear walls from the framing plan'}
+      actions={
+        <>
           {st?.fileName && st.pageCount > 1 ? (
             <select className="ew-select" style={{ width: 64 }} value={st.page || 1} onChange={(e) => onPage(Number(e.target.value))} aria-label="Structural sheet" disabled={Boolean(busy)}>
               {Array.from({ length: st.pageCount }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
             </select>
           ) : null}
           <button type="button" className={`ew-btn${st?.fileName ? ' ew-btn--ghost' : ''}`} onClick={onUpload} disabled={Boolean(busy)}><Upload size={13} /> {st?.fileName ? 'Replace' : 'Upload structural PDF'}</button>
-        </span>
-      </div>
+        </>
+      }
+    >
 
       {!st?.fileName ? (
         <p className="ew-subtle">
@@ -169,6 +170,6 @@ export default function StructuralPanel({ plan, busy, onUpload, onPage, onPlace,
           <BeamsBox plan={plan} onBeams={onBeams} />
         </>
       )}
-    </section>
+    </CollapsiblePanel>
   );
 }

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Trash2, Save, FolderOpen } from 'lucide-react';
 import { NumInput } from '@/components/ui/mat';
+import { CollapsiblePanel } from '@/components/ui/Collapsible';
 import { useConfirm } from '@/components/ui/confirm';
 import {
   SCHEDULE_WALLS, SCHEDULE_SIZES, SCHEDULE_ABOVE, newScheduleRow, rowValues, toTemplate, fromTemplate, EXAMPLE_TEMPLATE,
@@ -76,14 +77,17 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
   };
 
   return (
-    <section className="ot-panel">
-      <div className="ot-head">
-        <strong>Header schedule</strong>
-        <span className="ew-subtle">
+    <CollapsiblePanel
+      title="Header schedule"
+      storageKey="pt-sec-headers"
+      subtitle={
+        <>
           {rows.length ? `${schedule.name || 'Untitled'} · ${rows.length} rows · this project` : 'Kings, trimmers and header per opening width, from the structural sheets'}
           {mine ? ' · from your template' : ''}
-        </span>
-        <span className="ot-add hs-tools">
+        </>
+      }
+      actions={
+        <span className="hs-tools">
           <select className="ew-select" value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Template">
             <option value="">Templates…</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -103,7 +107,8 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
               </span>
             )}
         </span>
-      </div>
+      }
+    >
       {msg ? <p className="ew-subtle hs-msg">{msg}</p> : null}
 
       <div className="hs-above">
@@ -169,6 +174,6 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
         A row for a given wall, stud size or floor count wins over an &quot;All&quot; / &quot;Any&quot; row. Types you change by hand keep your numbers.
         The header material (family · size · vendor) is still picked on its Header row in Wall panels; the row&apos;s header shows there as the note.
       </p>
-    </section>
+    </CollapsiblePanel>
   );
 }

@@ -96,6 +96,37 @@ export function alignSheets(archTexts, structTexts, s = 1) {
   return { dx: x.off, dy: y.off, s, labels: [...new Set([...x.labels, ...y.labels])].sort() };
 }
 
+/**
+ * Fallback alignment when a residential plan has no grid bubbles: match the
+ * outer building bounding box of the structural walls onto the architectural
+ * walls (within 6% on both width and height).
+ */
+export function alignByWalls(archWalls, structWalls, s = 1) {
+  const boxOf = (list, scale = 1) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const w of list || []) {
+      x0 = Math.min(x0, w.x1 * scale, w.x2 * scale);
+      x1 = Math.max(x1, w.x1 * scale, w.x2 * scale);
+      y0 = Math.min(y0, w.y1 * scale, w.y2 * scale);
+      y1 = Math.max(y1, w.y1 * scale, w.y2 * scale);
+    }
+    return x1 > x0 && y1 > y0 ? { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 } : null;
+  };
+  const ext = (archWalls || []).filter((w) => w.kind === 'exterior');
+  const a = boxOf(ext.length >= 4 ? ext : archWalls, 1);
+  const b = boxOf(structWalls, s);
+  if (!a || !b) return null;
+  if (Math.abs(a.w - b.w) / Math.max(a.w, b.w) > 0.06) return null;
+  if (Math.abs(a.h - b.h) / Math.max(a.h, b.h) > 0.06) return null;
+  return {
+    dx: r2(((a.x0 - b.x0) + (a.x1 - b.x1)) / 2),
+    dy: r2(((a.y0 - b.y0) + (a.y1 - b.y1)) / 2),
+    s,
+    labels: [],
+    source: 'perimeter',
+  };
+}
+
 /* ───────────────────── posts, rods, callouts, shear tags ───────────────────── */
 
 const NOMINAL = [[1.5, '2'], [3.5, '4'], [5.5, '6'], [7.25, '8'], [9.25, '10'], [11.25, '12']];
@@ -173,14 +204,21 @@ const parseLen = (str) => {
   return m ? Number(m[1]) + (Number(m[2]) + (m[3] ? Number(m[3]) / Number(m[4]) : 0)) / 12 : null;
 };
 
-/** Shear tags: a type letter with its length next to it, both turned with the wall. */
+const SHEAR_CODE_RE = /^(?:SW|SH|WS)-?([A-H]|\d{1,2}[A-Z]?)$/i;
+
+/**
+ * Shear tags:
+ *  - a type letter (A–H) with a length next to it, both turned with the wall;
+ *  - explicit shear-wall codes (SW1, SW-2, SW-A, SH-1, WS-1) with or without a length.
+ */
 export function findShearTags(texts, ptPerFt) {
   const letters = (texts || []).filter((t) => /^[A-H]$/.test(String(t.str).trim()));
+  const codes = (texts || []).filter((t) => SHEAR_CODE_RE.test(String(t.str).trim()));
   const lens = (texts || []).map((t) => ({ t, ft: parseLen(t.str) })).filter((x) => x.ft);
   const near = 2.2 * ptPerFt;
   const used = new Set();
   const out = [];
-  for (const t of letters) {
+  const nearestLen = (t) => {
     let best = null;
     for (const l of lens) {
       if (used.has(l)) continue;
@@ -188,21 +226,35 @@ export function findShearTags(texts, ptPerFt) {
       const d = Math.hypot(l.t.x - t.x, l.t.y - t.y);
       if (d <= near && (!best || d < best.d)) best = { l, d };
     }
+    return best;
+  };
+  for (const t of letters) {
+    const best = nearestLen(t);
     if (!best) continue;
     used.add(best.l);
     out.push({ type: t.str.trim(), lengthFt: r2(best.l.ft), x: t.x, y: t.y, vertical: Math.abs(Math.sin(n(t.angle))) > 0.7 });
   }
+  for (const t of codes) {
+    const best = nearestLen(t);
+    if (best) used.add(best.l);
+    out.push({
+      type: t.str.trim().toUpperCase(),
+      lengthFt: best ? r2(best.l.ft) : 0,
+      x: t.x, y: t.y,
+      vertical: Math.abs(Math.sin(n(t.angle))) > 0.7,
+    });
+  }
   return out;
 }
 
-const CALLOUT_RE = /^\((\d+)\)\s*([A-Z]{2,5}\d{1,3}[A-Z]?(?:-\d+)?)\b/;
-/** Hold-down callouts written on the plan: "(2) HDU5 W/ …" → { qty: 2, model: 'HDU5' }. */
+const CALLOUT_RE = /^(?:\((\d+)\)\s*)?([A-Z]{2,5}\d{1,3}[A-Z]?(?:-\d+)?)\b/;
+/** Hold-down callouts written on the plan: "(2) HDU5 W/ …" or "HDU5" → { qty, model }. */
 export function findCallouts(texts) {
   const out = [];
   for (const t of texts || []) {
     const m = CALLOUT_RE.exec(String(t.str || '').trim());
     if (!m || !/^(HDU|HD|HTT|STHD|LTT|DTT|PHD|MSTC|CMST|MSTA|ATS)/.test(m[2])) continue;
-    out.push({ qty: Number(m[1]), model: m[2], x: t.x, y: t.y });
+    out.push({ qty: m[1] ? Number(m[1]) : 1, model: m[2], x: t.x, y: t.y });
   }
   return out;
 }
@@ -463,8 +515,26 @@ export function placeStructural(plan, found, { unlabeled = UNLABELED_POSTS, post
       if (!hit) { missed.push({ kind: 'shear', x: s.x, y: s.y, name: `${s.type} ${s.lengthFt}'` }); continue; }
       const w = byId.get(hit.w.id);
       if (w.shearManual) continue;
-      w.shear.push({ type: s.type, lengthFt: s.lengthFt });
+      const len = s.lengthFt > 0 ? s.lengthFt : r2(hit.L);
+      w.shear.push({ type: s.type, lengthFt: len });
       placed.shear += 1;
+    }
+  }
+  // Classify interior walls from structural evidence (leaving manual edits & exterior walls alone):
+  //  - shear tag or structural hold-down/tie-down on an interior wall → 'shear'
+  //  - auto-guessed interior 'bearing' wall NOT drawn on a structural sheet (with ≥3 walls)
+  //    and without structural shear/hardware/posts → demote back to 'partition'
+  const hasStructWalls = bearing && (found.walls || []).length >= 3;
+  for (const w of walls) {
+    if (w.auto === false || w.double || normKind(w) === 'exterior') continue;
+    const hasShear = (w.shear || []).length > 0 || (w.hardware || []).some((h) => h.src === 'sd');
+    const hasPost = (w.posts || []).some((p) => p.src === 'sd');
+    if (hasShear && normKind(w) !== 'shear') {
+      if (!w.sdKind) w.sdKind = w.kind;
+      w.kind = 'shear';
+    } else if (hasStructWalls && normKind(w) === 'bearing' && !sw.confirmed.has(w.id) && !hasPost) {
+      if (!w.sdKind) w.sdKind = w.kind;
+      w.kind = 'partition';
     }
   }
   for (const w of walls) {

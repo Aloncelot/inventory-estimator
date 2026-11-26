@@ -20,6 +20,7 @@ import HeaderSchedulePanel from '@/components/HeaderSchedulePanel';
 import { scheduleOpts, floorsAbove, backToSchedule } from '@/domain/plans/headerSchedule';
 import { commitPlan, newType, typeUse, copyPlan } from '@/domain/plans/openingTypes';
 import { PageHeader, NumInput } from '@/components/ui/mat';
+import { useCollapsible, SpringChevron, CollapsibleBody } from '@/components/ui/Collapsible';
 import { useConfirm } from '@/components/ui/confirm';
 import { loadPdfjs } from '@/lib/pdfjs';
 import { savePlanFile, loadPlanFile } from '@/lib/planFiles';
@@ -34,7 +35,7 @@ import FloorPanel from '@/components/FloorPanel';
 import StructuralPanel from '@/components/StructuralPanel';
 import SheetPicker from '@/components/SheetPicker';
 import { extractSheet } from '@/lib/pdflib';
-import { alignSheets, readStructural, placeStructural, removeStructural, addStructWalls, UNLABELED_POSTS, SHEAR_DEFAULTS } from '@/domain/plans/structural';
+import { alignSheets, alignByWalls, readStructural, placeStructural, removeStructural, addStructWalls, UNLABELED_POSTS, SHEAR_DEFAULTS } from '@/domain/plans/structural';
 import { SHEAR_TYPES } from '@/domain/plans/hardware';
 import { onConcrete as isOnConcrete } from '@/domain/plans/loose';
 import { PLAN_KINDS, WALL_SIZES, KIND_LABEL, normWall, isDoubleWall, standardThick, thickSize, followThick, planGroups, groupKeysOf, wallLengthFt, storeWalls, mergeRedetect, planJunctions, firstWallSide, doubleWallBands } from '@/domain/plans/sync';
@@ -686,6 +687,7 @@ export default function PlanTakeoffView() {
     try { localStorage.setItem('pt-show-sheet', v ? '0' : '1'); } catch { /* private mode */ }
     return !v;
   }), []);
+  const [toolsOpen, toggleTools] = useCollapsible('pt-tools-open', true);
   const [fileMissing, setFileMissing] = useState(false);
   const [calib, setCalib] = useState(null); // { distPt, ft, inch }
   const pageCache = useRef(new Map()); // fileKey|page → extracted page
@@ -871,8 +873,10 @@ export default function PlanTakeoffView() {
       const sp = await extracted(key, pageNo);
       const ap = await extracted(plan.fileKey, plan.page || 1);
       const sk = detectScale(sp.texts)?.ptPerFt || plan.ptPerFt;
-      const align = alignSheets(ap.texts, sp.texts, plan.ptPerFt / sk);
-      const found = align ? readStructural(sp, { ptPerFt: sk, align, walls: structWalls(sp, sk) }) : null;
+      const s = plan.ptPerFt / sk;
+      const sw = structWalls(sp, sk);
+      const align = alignSheets(ap.texts, sp.texts, s) || alignByWalls(plan.walls, sw, s);
+      const found = align ? readStructural(sp, { ptPerFt: sk, align, walls: sw }) : null;
       setPlan((p) => {
         const st = { fileName, fileKey: key, page: pageNo, pageCount, ptPerFt: sk, align, found, opts: p.structural?.opts || {} };
         return found ? placeFrom(removeStructural(p), st) : { ...removeStructural(p), structural: st };
@@ -1141,91 +1145,124 @@ export default function PlanTakeoffView() {
           ))}
         </div>
         {plan?.fileKey ? (
-          <div className="lc-dims">
-            {plan.pageCount > 1 ? (
-              <label className="fld"><span>Sheet</span>
-                <select className="ew-select" style={{ width: 64 }} value={plan.page || 1} onChange={async (e) => {
-                  const pageNo = Number(e.target.value);
-                  setPlan((p) => ({ ...p, page: pageNo }));
-                  try { await runDetect({ key: plan.fileKey, pageNo, base: { page: pageNo } }); } catch (err) { setBusy(''); setError(err.message || String(err)); }
-                }}>
-                  {Array.from({ length: plan.pageCount }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
-                </select>
-              </label>
-            ) : null}
-            <label className="fld" title={plan.scaleSource === 'sheet' ? 'Read from the scale note on the sheet' : plan.scaleSource === 'calibrated' ? 'Set from a dimension you measured' : 'Picked by hand'}>
-              <span>Scale</span>
-              <select className="ew-select" style={{ width: 128 }} value={scaleValue} onChange={(e) => {
-                const s = parseScaleText(e.target.value);
-                if (s) setScale(s.ptPerFt, s.label, 'manual');
-              }}>
-                {!plan.ptPerFt ? <option value="">Pick a scale</option> : null}
-                {scaleValue === 'custom' ? <option value="custom">{plan.scaleLabel || 'Calibrated'}</option> : null}
-                {COMMON_SCALES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </label>
-            {plan.scaleSource === 'sheet' ? <span className="ew-subtle">from the sheet</span> : plan.scaleSource === 'calibrated' ? <span className="ew-subtle">calibrated</span> : null}
-            <div className="pt-tools" role="toolbar" aria-label="Tools">
-              <button type="button" className={`ew-btn${tool === 'select' ? ' is-on' : ''}`} onClick={() => setTool('select')} title="Select walls"><MousePointer2 size={14} /> Select</button>
-              {(() => {
-                const all = plan.walls || [];
-                const open = all.filter((w) => w.unlocked).length;
-                const state = !open ? 'locked' : open === all.length ? 'unlocked' : 'mixed';
-                return (
-                  <button type="button" className={`ew-icon-btn pt-lock is-${state}`} disabled={!all.length}
-                    onClick={() => setUnlocked(null, state === 'locked')}
-                    title={state === 'locked' ? 'All walls are locked: click to unlock them all so they can be dragged'
-                      : state === 'unlocked' ? 'All walls are unlocked and can be dragged: click to lock them all'
-                        : `${open} of ${all.length} walls are unlocked: click to lock them all`}
-                    aria-label={state === 'locked' ? 'Unlock all walls' : 'Lock all walls'}>
-                    {state === 'locked' ? <Lock size={15} /> : state === 'unlocked' ? <LockOpen size={15} /> : <LockMixed size={15} />}
-                  </button>
-                );
-              })()}
-              <button type="button" className={`ew-icon-btn pt-grip${grip ? ' is-on' : ''}`} onClick={() => setGrip((g) => !g)} aria-pressed={grip}
-                title={grip ? 'Grip adjacent walls: on. Walls meeting a moved wall stretch or shrink with it. Click to move walls on their own' : 'Grip adjacent walls: off. A moved wall goes alone. Click so the walls meeting it follow'}
-                aria-label="Grip adjacent walls">
-                {grip ? <GripOn size={15} /> : <GripOff size={15} />}
-              </button>
-              <button type="button" className={`ew-btn${tool === 'add' ? ' is-on' : ''}`} onClick={() => setTool('add')} title="Draw a wall the detection missed" disabled={!plan.ptPerFt}><PenLine size={14} /> Add wall</button>
-              <button type="button" className={`ew-btn${tool === 'split' ? ' is-on' : ''}`} onClick={() => setTool('split')} title="Split a wall into two sections: click where you want to cut it" disabled={!plan.ptPerFt}><Scissors size={14} /> Split wall</button>
-              <button type="button" className={`ew-btn${tool === 'opening' ? ' is-on' : ''}`} onClick={() => setTool('opening')} title="Mark a window or door the detection missed: click both sides of it on a wall" disabled={!plan.ptPerFt}><DoorOpen size={14} /> Add opening</button>
-              {tool === 'opening' ? (
-                <select className="ew-select" style={{ width: 84 }} value={openingType} onChange={(e) => setOpeningType(e.target.value)} aria-label="Opening type">
-                  <option value="window">Window</option>
-                  <option value="door">Door</option>
-                </select>
-              ) : null}
-              <button type="button" className={`ew-btn${tool === 'post' ? ' is-on' : ''}`} onClick={() => setTool('post')} title="Place a post the structural plans show: click on the wall" disabled={!plan.ptPerFt}><Columns2 size={14} /> Add post</button>
-              {tool === 'post' ? (
-                <select className="ew-select" style={{ width: 128 }} value={postChoice || (plan.postTypes || [])[0]?.id || ''} onChange={(e) => setPostChoice(e.target.value)} aria-label="Post type">
-                  {(plan.postTypes || []).length ? null : <option value="">P1 built-up (new)</option>}
-                  {(plan.postTypes || []).map((t) => <option key={t.id} value={t.id}>{t.id} · {t.kind === 'solid' ? `solid ${t.widthIn}"` : `(${t.plies}) studs`}</option>)}
-                  <option value="__builtup">New built-up type</option>
-                  <option value="__solid">New solid type</option>
-                </select>
-              ) : null}
-              <button type="button" className={`ew-btn${tool === 'hardware' ? ' is-on' : ''}`} onClick={() => setTool('hardware')} title="Place structural hardware (hold-down, strap…) the plans show: click on the wall" disabled={!plan.ptPerFt}><Anchor size={14} /> Add hardware</button>
-              {tool === 'hardware' ? (
-                <select className="ew-select" style={{ width: 140 }} value={hwChoice || (plan.hardwareTypes || []).find((t) => (t.rule || 'each') === 'each')?.id || '__new'} onChange={(e) => setHwChoice(e.target.value)} aria-label="Hardware type">
-                  {(plan.hardwareTypes || []).filter((t) => (t.rule || 'each') === 'each').map((t) => <option key={t.id} value={t.id}>{t.id}{t.name ? ` · ${t.name}` : ''}</option>)}
-                  <option value="__new">New hardware type</option>
-                </select>
-              ) : null}
-              <button type="button" className={`ew-btn${tool === 'blocking' ? ' is-on' : ''}`} onClick={() => setTool('blocking')} title="Draw blocking runs: bathroom, kitchen, stair railing or other" disabled={!plan.ptPerFt}><Minus size={14} /> Blocking</button>
-              {tool === 'blocking' ? (
-                <select className="ew-select" style={{ width: 150 }} value={blkKind} onChange={(e) => setBlkKind(e.target.value)} aria-label="Blocking kind">
-                  {BLOCKING_KINDS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-                </select>
-              ) : null}
-              <button type="button" className={`ew-btn${tool === 'floorhole' ? ' is-on' : ''}`} onClick={() => setTool('floorhole')} title="Mark a floor opening (stair, shaft, open to below): it is taken off the subfloor" disabled={!plan.ptPerFt}><SquareDashed size={14} /> Floor opening</button>
-              <button type="button" className={`ew-btn${tool === 'calibrate' ? ' is-on' : ''}`} onClick={() => { setTool('calibrate'); setCalib(null); }} title="Set the scale from a dimension you know"><Ruler size={14} /> Calibrate</button>
-            </div>
-            <button type="button" className="ew-btn" onClick={() => detectAgain()} disabled={Boolean(busy) || !plan.ptPerFt || fileMissing} title="Find the walls again (after changing the scale or the line styles)"><RefreshCw size={14} /> Detect walls</button>
-            {fileButton('Replace PDF', onFile)}
-          </div>
+          <button
+            type="button"
+            className={`ew-btn ew-btn--ghost pt-tools-toggle${toolsOpen ? ' is-open' : ''}`}
+            onClick={toggleTools}
+            aria-expanded={toolsOpen}
+            title={toolsOpen ? 'Hide tools' : 'Show tools'}
+          >
+            <span>Tools{!toolsOpen && tool ? ` · ${tool === 'floorhole' ? 'Floor opening' : tool === 'add' ? 'Add wall' : tool === 'split' ? 'Split wall' : tool === 'opening' ? 'Add opening' : tool === 'post' ? 'Add post' : tool === 'hardware' ? 'Add hardware' : tool[0].toUpperCase() + tool.slice(1)}` : ''}</span>
+            <SpringChevron open={toolsOpen} size={14} />
+          </button>
         ) : null}
       </div>
+
+      {plan?.fileKey ? (
+        <CollapsibleBody open={toolsOpen}>
+          <div className="pt-tools-drawer">
+            <div className="lc-dims">
+              {plan.pageCount > 1 ? (
+                <label className="fld"><span>Sheet</span>
+                  <select className="ew-select" style={{ width: 64 }} value={plan.page || 1} onChange={async (e) => {
+                    const pageNo = Number(e.target.value);
+                    setPlan((p) => ({ ...p, page: pageNo }));
+                    try { await runDetect({ key: plan.fileKey, pageNo, base: { page: pageNo } }); } catch (err) { setBusy(''); setError(err.message || String(err)); }
+                  }}>
+                    {Array.from({ length: plan.pageCount }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+                  </select>
+                </label>
+              ) : null}
+              <label className="fld" title={plan.scaleSource === 'sheet' ? 'Read from the scale note on the sheet' : plan.scaleSource === 'calibrated' ? 'Set from a dimension you measured' : 'Picked by hand'}>
+                <span>Scale</span>
+                <select className="ew-select" style={{ width: 128 }} value={scaleValue} onChange={(e) => {
+                  const s = parseScaleText(e.target.value);
+                  if (s) setScale(s.ptPerFt, s.label, 'manual');
+                }}>
+                  {!plan.ptPerFt ? <option value="">Pick a scale</option> : null}
+                  {scaleValue === 'custom' ? <option value="custom">{plan.scaleLabel || 'Calibrated'}</option> : null}
+                  {COMMON_SCALES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              {plan.scaleSource === 'sheet' ? <span className="ew-subtle">from the sheet</span> : plan.scaleSource === 'calibrated' ? <span className="ew-subtle">calibrated</span> : null}
+              <div className="pt-tools" role="toolbar" aria-label="Tools">
+                <button type="button" className={`ew-btn${tool === 'select' ? ' is-on' : ''}`} onClick={() => setTool('select')} title="Select walls"><MousePointer2 size={14} /> Select</button>
+                {(() => {
+                  const all = plan.walls || [];
+                  const open = all.filter((w) => w.unlocked).length;
+                  const state = !open ? 'locked' : open === all.length ? 'unlocked' : 'mixed';
+                  return (
+                    <button type="button" className={`ew-icon-btn pt-lock is-${state}`} disabled={!all.length}
+                      onClick={() => setUnlocked(null, state === 'locked')}
+                      title={state === 'locked' ? 'All walls are locked: click to unlock them all so they can be dragged'
+                        : state === 'unlocked' ? 'All walls are unlocked and can be dragged: click to lock them all'
+                          : `${open} of ${all.length} walls are unlocked: click to lock them all`}
+                      aria-label={state === 'locked' ? 'Unlock all walls' : 'Lock all walls'}>
+                      {state === 'locked' ? <Lock size={15} /> : state === 'unlocked' ? <LockOpen size={15} /> : <LockMixed size={15} />}
+                    </button>
+                  );
+                })()}
+                <button type="button" className={`ew-icon-btn pt-grip${grip ? ' is-on' : ''}`} onClick={() => setGrip((g) => !g)} aria-pressed={grip}
+                  title={grip ? 'Grip adjacent walls: on. Walls meeting a moved wall stretch or shrink with it. Click to move walls on their own' : 'Grip adjacent walls: off. A moved wall goes alone. Click so the walls meeting it follow'}
+                  aria-label="Grip adjacent walls">
+                  {grip ? <GripOn size={15} /> : <GripOff size={15} />}
+                </button>
+                <button type="button" className={`ew-btn${tool === 'add' ? ' is-on' : ''}`} onClick={() => setTool('add')} title="Draw a wall the detection missed" disabled={!plan.ptPerFt}><PenLine size={14} /> Add wall</button>
+                <button type="button" className={`ew-btn${tool === 'split' ? ' is-on' : ''}`} onClick={() => setTool('split')} title="Split a wall into two sections: click where you want to cut it" disabled={!plan.ptPerFt}><Scissors size={14} /> Split wall</button>
+                <button type="button" className={`ew-btn${tool === 'opening' ? ' is-on' : ''}`} onClick={() => setTool('opening')} title="Mark a window or door the detection missed: click both sides of it on a wall" disabled={!plan.ptPerFt}><DoorOpen size={14} /> Add opening</button>
+                {tool === 'opening' ? (
+                  <select className="ew-select" style={{ width: 84 }} value={openingType} onChange={(e) => setOpeningType(e.target.value)} aria-label="Opening type">
+                    <option value="window">Window</option>
+                    <option value="door">Door</option>
+                  </select>
+                ) : null}
+                <button type="button" className={`ew-btn${tool === 'post' ? ' is-on' : ''}`} onClick={() => setTool('post')} title="Place a post the structural plans show: click on the wall" disabled={!plan.ptPerFt}><Columns2 size={14} /> Add post</button>
+                {tool === 'post' ? (
+                  <select className="ew-select" style={{ width: 128 }} value={postChoice || (plan.postTypes || [])[0]?.id || ''} onChange={(e) => setPostChoice(e.target.value)} aria-label="Post type">
+                    {(plan.postTypes || []).length ? null : <option value="">P1 built-up (new)</option>}
+                    {(plan.postTypes || []).map((t) => <option key={t.id} value={t.id}>{t.id} · {t.kind === 'solid' ? `solid ${t.widthIn}"` : `(${t.plies}) studs`}</option>)}
+                    <option value="__builtup">New built-up type</option>
+                    <option value="__solid">New solid type</option>
+                  </select>
+                ) : null}
+                <button type="button" className={`ew-btn${tool === 'hardware' ? ' is-on' : ''}`} onClick={() => setTool('hardware')} title="Place structural hardware (hold-down, strap…) the plans show: click on the wall" disabled={!plan.ptPerFt}><Anchor size={14} /> Add hardware</button>
+                {tool === 'hardware' ? (
+                  <select className="ew-select" style={{ width: 140 }} value={hwChoice || (plan.hardwareTypes || []).find((t) => (t.rule || 'each') === 'each')?.id || '__new'} onChange={(e) => setHwChoice(e.target.value)} aria-label="Hardware type">
+                    {(plan.hardwareTypes || []).filter((t) => (t.rule || 'each') === 'each').map((t) => <option key={t.id} value={t.id}>{t.id}{t.name ? ` · ${t.name}` : ''}</option>)}
+                    <option value="__new">New hardware type</option>
+                  </select>
+                ) : null}
+                <button type="button" className={`ew-btn${tool === 'blocking' ? ' is-on' : ''}`} onClick={() => setTool('blocking')} title="Draw blocking runs: bathroom, kitchen, stair railing or other" disabled={!plan.ptPerFt}><Minus size={14} /> Blocking</button>
+                {tool === 'blocking' ? (
+                  <select className="ew-select" style={{ width: 150 }} value={blkKind} onChange={(e) => setBlkKind(e.target.value)} aria-label="Blocking kind">
+                    {BLOCKING_KINDS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+                  </select>
+                ) : null}
+                <button type="button" className={`ew-btn${tool === 'floorhole' ? ' is-on' : ''}`} onClick={() => setTool('floorhole')} title="Mark a floor opening (stair, shaft, open to below): it is taken off the subfloor" disabled={!plan.ptPerFt}><SquareDashed size={14} /> Floor opening</button>
+                <button type="button" className={`ew-btn${tool === 'calibrate' ? ' is-on' : ''}`} onClick={() => { setTool('calibrate'); setCalib(null); }} title="Set the scale from a dimension you know"><Ruler size={14} /> Calibrate</button>
+              </div>
+              <button type="button" className="ew-btn" onClick={() => detectAgain()} disabled={Boolean(busy) || !plan.ptPerFt || fileMissing} title="Find the walls again (after changing the scale or the line styles)"><RefreshCw size={14} /> Detect walls</button>
+              {fileButton('Replace PDF', onFile)}
+            </div>
+            {plan.styleList?.length ? (
+              <div className="pt-styles" aria-label="Line styles used as walls">
+                <span className="ew-subtle" title="Each pen (line weight and color) on the sheet. Walls are searched only in the checked ones.">Line styles</span>
+                {plan.styleList.map((s) => {
+                  const on = (plan.styles || []).includes(s.style);
+                  return (
+                    <label key={s.style} className={`pt-style${on ? ' is-on' : ''}`} title={`${s.walls} walls · ${fmtLF(s.lengthFt)} LF in this style`}>
+                      <input type="checkbox" checked={on} onChange={() => setPlan((p) => ({ ...p, styles: on ? (p.styles || []).filter((x) => x !== s.style) : [...(p.styles || []), s.style] }))} />
+                      <i style={{ background: s.color, height: Math.max(2, Math.min(6, s.width * 2.5 || 4)) }} />
+                      {s.width ? `${s.width} pt` : 'fill'} · {fmtLF(s.lengthFt)} LF
+                    </label>
+                  );
+                })}
+                <button type="button" className="ew-btn ew-btn--ghost" onClick={() => detectAgain()} disabled={Boolean(busy) || fileMissing}>Apply</button>
+              </div>
+            ) : null}
+          </div>
+        </CollapsibleBody>
+      ) : null}
 
       {busy ? <div className="lc-note pt-busy">{busy}</div> : null}
       {error ? <div className="lc-note"><TriangleAlert size={12} /> {error}</div> : null}
@@ -1280,23 +1317,6 @@ export default function PlanTakeoffView() {
         </div>
       ) : (
         <>
-          {plan.styleList?.length ? (
-            <div className="pt-styles" aria-label="Line styles used as walls">
-              <span className="ew-subtle" title="Each pen (line weight and color) on the sheet. Walls are searched only in the checked ones.">Line styles</span>
-              {plan.styleList.map((s) => {
-                const on = (plan.styles || []).includes(s.style);
-                return (
-                  <label key={s.style} className={`pt-style${on ? ' is-on' : ''}`} title={`${s.walls} walls · ${fmtLF(s.lengthFt)} LF in this style`}>
-                    <input type="checkbox" checked={on} onChange={() => setPlan((p) => ({ ...p, styles: on ? (p.styles || []).filter((x) => x !== s.style) : [...(p.styles || []), s.style] }))} />
-                    <i style={{ background: s.color, height: Math.max(2, Math.min(6, s.width * 2.5 || 4)) }} />
-                    {s.width ? `${s.width} pt` : 'fill'} · {fmtLF(s.lengthFt)} LF
-                  </label>
-                );
-              })}
-              <button type="button" className="ew-btn ew-btn--ghost" onClick={() => detectAgain()} disabled={Boolean(busy) || fileMissing}>Apply</button>
-            </div>
-          ) : null}
-
           <PlanLegend display={display} onChange={setDisplay} />
           <div className="pt-main">
             <PlanCanvas

@@ -209,3 +209,44 @@ test('beams: the heavy line each mark names, dashed pieces joined, grouped by ma
   assert.deepEqual(b.map((x) => [x.mark, x.note, x.lengthFt]), [['B3', '', 10], ['B7', 'HDR', 5], ['B3', '', 8]]);
   assert.deepEqual(beamGroups(b).map((g) => [g.key, g.count, g.lengthFt]), [['B3', 2, 18], ['B7 HDR', 1, 5]]);
 });
+
+test('structural sheet classifies interior walls into shear, bearing, and partition, and aligns by perimeter without grids', async () => {
+  const { alignByWalls } = await import('./structural.js');
+  // 40'×20' building with 3 interior walls:
+  //  - wShear: auto partition that has a SW-1 tag → promoted to 'shear'
+  //  - wBear:  auto partition drawn on structural sheet → promoted to 'bearing'
+  //  - wPart:  auto bearing (from dark arch pen) NOT drawn on structural sheet → demoted to 'partition'
+  const walls = [
+    { id: 'extT', x1: 100, y1: 100, x2: 100 + 40 * K, y2: 100, t: 6.75, kind: 'exterior', size: '2x6', auto: true },
+    { id: 'extB', x1: 100, y1: 100 + 20 * K, x2: 100 + 40 * K, y2: 100 + 20 * K, t: 6.75, kind: 'exterior', size: '2x6', auto: true },
+    { id: 'extL', x1: 100, y1: 100, x2: 100, y2: 100 + 20 * K, t: 6.75, kind: 'exterior', size: '2x6', auto: true },
+    { id: 'extR', x1: 100 + 40 * K, y1: 100, x2: 100 + 40 * K, y2: 100 + 20 * K, t: 6.75, kind: 'exterior', size: '2x6', auto: true },
+    { id: 'wShear', x1: 100 + 10 * K, y1: 100, x2: 100 + 10 * K, y2: 100 + 20 * K, t: 4.75, kind: 'partition', size: '2x4', auto: true },
+    { id: 'wBear', x1: 100 + 20 * K, y1: 100, x2: 100 + 20 * K, y2: 100 + 20 * K, t: 4.75, kind: 'partition', size: '2x4', auto: true },
+    { id: 'wPart', x1: 100 + 30 * K, y1: 100, x2: 100 + 30 * K, y2: 100 + 20 * K, t: 4.75, kind: 'bearing', size: '2x4', auto: true },
+  ];
+  // structural sheet shifted by (+50, -30), no grid bubbles, draws perimeter + wShear + wBear (omits wPart)
+  const shift = (w) => ({ x1: w.x1 + 50, y1: w.y1 - 30, x2: w.x2 + 50, y2: w.y2 - 30, thickIn: 5.5 });
+  const swRaw = [walls[0], walls[1], walls[2], walls[3], walls[4], walls[5]].map(shift);
+  const align = alignByWalls(walls, swRaw, 1);
+  assert.ok(align && Math.abs(align.dx + 50) < 0.5 && Math.abs(align.dy - 30) < 0.5, 'aligned by perimeter without grids');
+  const sp = {
+    segments: [],
+    texts: [
+      T('SW-1', walls[4].x1 + 50 + 8, walls[4].y1 + 10 * K - 30, -Math.PI / 2),
+      T('HDU5', walls[4].x1 + 50 + 8, walls[4].y1 + 2 * K - 30),
+    ],
+  };
+  const found = readStructural(sp, { ptPerFt: K, align, walls: swRaw });
+  const r = placeStructural({ ptPerFt: K, walls }, found);
+  const byId = Object.fromEntries(r.plan.walls.map((w) => [w.id, w]));
+  assert.equal(byId.wShear.kind, 'shear', 'interior wall with SW-1/HDU5 promoted to shear');
+  assert.equal(byId.wBear.kind, 'bearing', 'interior wall drawn on structural sheet promoted to bearing');
+  assert.equal(byId.wPart.kind, 'partition', 'interior wall absent from structural sheet demoted to partition');
+  assert.equal(byId.extT.kind, 'exterior', 'exterior walls stay exterior');
+  // removing structural restores original auto-detected kinds
+  const restored = Object.fromEntries(removeStructural(r.plan).walls.map((w) => [w.id, w]));
+  assert.equal(restored.wShear.kind, 'partition');
+  assert.equal(restored.wBear.kind, 'partition');
+  assert.equal(restored.wPart.kind, 'bearing');
+});

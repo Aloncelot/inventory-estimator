@@ -7,19 +7,18 @@
 
 import { Plus, Trash2 } from 'lucide-react';
 import { NumInput } from '@/components/ui/mat';
+import { CollapsiblePanel } from '@/components/ui/Collapsible';
 import { HW_RULES, SHEAR_TYPES } from '@/domain/plans/hardware';
 
 export default function HardwareTypesPanel({ types = [], counts, groups = [], shearTypes = [], color, onPatchType, onAddType, onDeleteType, onSelectType, selectedType }) {
   const total = types.reduce((s, t) => s + (counts.get(t.id) || 0), 0);
   return (
-    <section className="ot-panel">
-      <div className="ot-head">
-        <strong>Structural hardware</strong>
-        <span className="ew-subtle">{total} pieces in {types.length} type{types.length === 1 ? '' : 's'} · to Loose material</span>
-        <span className="ot-add">
-          <button type="button" className="ew-btn ew-btn--ghost" onClick={onAddType}><Plus size={13} /> Hardware type</button>
-        </span>
-      </div>
+    <CollapsiblePanel
+      title="Structural hardware"
+      storageKey="pt-sec-hardware"
+      subtitle={`${total} pieces in ${types.length} type${types.length === 1 ? '' : 's'} · to Loose material`}
+      actions={<button type="button" className="ew-btn ew-btn--ghost" onClick={onAddType}><Plus size={13} /> Hardware type</button>}
+    >
       {types.length ? (
         <table className="tbl ot-tbl">
           <thead>
@@ -80,6 +79,6 @@ export default function HardwareTypesPanel({ types = [], counts, groups = [], sh
         &quot;At wall ends&quot; counts pieces at both ends of every wall of the checked types (hold-downs on shear walls); &quot;Along walls&quot; counts one
         every spacing plus one (anchor bolts, straps); &quot;Along shear walls&quot; does the same on each shear wall at its type&apos;s spacing. Pick the item in Loose material → Hardware · {`<level>`}.
       </p>
-    </section>
+    </CollapsiblePanel>
   );
 }

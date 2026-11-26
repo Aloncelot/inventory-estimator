@@ -6,6 +6,7 @@
 
 import { Plus, Trash2, RotateCcw, TriangleAlert } from 'lucide-react';
 import { NumInput } from '@/components/ui/mat';
+import { CollapsiblePanel } from '@/components/ui/Collapsible';
 import { OPENING_DEFAULTS } from '@/domain/plans/framing';
 
 const scopeOf = (t) => (t?.scope === 'interior' ? 'interior' : 'exterior');
@@ -14,19 +15,23 @@ export default function OpeningTypesPanel({ types = [], use, colors, selectedTyp
   const total = (kind, scope) => types.filter((t) => t.kind === kind && scopeOf(t) === scope).reduce((s, t) => s + (use.get(t.id)?.count || 0), 0);
   const kinds = (kind, scope) => types.filter((t) => t.kind === kind && scopeOf(t) === scope).length;
   return (
-    <section className="ot-panel">
-      <div className="ot-head">
-        <strong>Window &amp; door types</strong>
-        <span className="ew-subtle">
+    <CollapsiblePanel
+      title="Window & door types"
+      storageKey="pt-sec-openings"
+      subtitle={
+        <>
           Exterior: {total('window', 'exterior')} windows ({kinds('window', 'exterior')} types), {total('door', 'exterior')} doors ({kinds('door', 'exterior')}) ·
           Interior: {total('door', 'interior')} doors ({kinds('door', 'interior')} types){total('window', 'interior') ? `, ${total('window', 'interior')} windows` : ''}
-        </span>
-        <span className="ot-add">
+        </>
+      }
+      actions={
+        <>
           <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddType('window', 'exterior')}><Plus size={13} /> Exterior window</button>
           <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddType('door', 'exterior')}><Plus size={13} /> Exterior door</button>
           <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddType('door', 'interior')}><Plus size={13} /> Interior door</button>
-        </span>
-      </div>
+        </>
+      }
+    >
       {types.length ? (
         <table className="tbl ot-tbl ot-tbl--auto">
           <thead>
@@ -94,6 +99,6 @@ export default function OpeningTypesPanel({ types = [], use, colors, selectedTyp
         change its type, or make a new one. Each type becomes a Header row in the wall section where its openings are (Wall panels):
         pick the material there (family · size · vendor); the header length comes from the plan.
       </p>
-    </section>
+    </CollapsiblePanel>
   );
 }

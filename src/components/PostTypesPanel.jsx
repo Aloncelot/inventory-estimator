@@ -7,20 +7,23 @@
 
 import { Plus, Trash2 } from 'lucide-react';
 import { NumInput } from '@/components/ui/mat';
+import { CollapsiblePanel } from '@/components/ui/Collapsible';
 import { POST_KINDS } from '@/domain/plans/sync';
 
 export default function PostTypesPanel({ types = [], use, color, selectedType, onSelectType, onPatchType, onAddType, onDeleteType }) {
   const total = types.reduce((s, t) => s + (use.get(t.id) || 0), 0);
   return (
-    <section className="ot-panel">
-      <div className="ot-head">
-        <strong>Post types</strong>
-        <span className="ew-subtle">{total} post{total === 1 ? '' : 's'} in {types.length} type{types.length === 1 ? '' : 's'} · from the structural plans</span>
-        <span className="ot-add">
+    <CollapsiblePanel
+      title="Post types"
+      storageKey="pt-sec-posts"
+      subtitle={`${total} post${total === 1 ? '' : 's'} in ${types.length} type${types.length === 1 ? '' : 's'} · from the structural plans`}
+      actions={
+        <>
           <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddType('builtup')}><Plus size={13} /> Built-up type</button>
           <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddType('solid')}><Plus size={13} /> Solid type</button>
-        </span>
-      </div>
+        </>
+      }
+    >
       {types.length ? (
         <table className="tbl ot-tbl">
           <thead>
@@ -61,6 +64,6 @@ export default function PostTypesPanel({ types = [], use, color, selectedType, o
         Built-up posts use the wall&apos;s studs (pieces per post = plies); solid posts are one piece, bought by LF when the material is LVL, PSL or Versa.
         Posts replace the studs where they stand, and panel joints stay clear of them.
       </p>
-    </section>
+    </CollapsiblePanel>
   );
 }

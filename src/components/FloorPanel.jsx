@@ -8,6 +8,7 @@
 import { useMemo } from 'react';
 import { X } from 'lucide-react';
 import { NumInput } from '@/components/ui/mat';
+import { CollapsiblePanel } from '@/components/ui/Collapsible';
 import { floorOf, blockingOf, sillOf, onConcrete, BLOCKING_KINDS } from '@/domain/plans/loose';
 
 const fmt = (v) => Math.round(Number(v) || 0).toLocaleString('en-US');
@@ -20,11 +21,11 @@ export default function FloorPanel({ plan, levelIndex, color, onPatch }) {
   const concrete = onConcrete({ plan }, levelIndex);
   const k = Number(plan.ptPerFt) || 1;
   return (
-    <section className="ot-panel">
-      <div className="ot-head">
-        <strong>Floor &amp; loose material from the plan</strong>
-        <span className="ew-subtle">to this level&apos;s section of Loose material{plan.linked ? '' : ' (after Use in Wall panels)'}</span>
-      </div>
+    <CollapsiblePanel
+      title="Floor & loose material from the plan"
+      storageKey="pt-sec-floor"
+      subtitle={`to this level's section of Loose material${plan.linked ? '' : ' (after Use in Wall panels)'}`}
+    >
       <div className="fp-grid">
         <div className="fp-box">
           <strong>Subfloor</strong>
@@ -73,6 +74,6 @@ export default function FloorPanel({ plan, levelIndex, color, onPatch }) {
           <span className="ew-subtle">Exterior, bearing and shear walls; to Loose material → Foundation.</span>
         </div>
       </div>
-    </section>
+    </CollapsiblePanel>
   );
 }
