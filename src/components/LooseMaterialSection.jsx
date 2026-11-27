@@ -16,6 +16,7 @@ import {
   NumInput, Fld, MultiplierSelect, noteOf, patchNote, SortableList, applyOrder,
 } from '@/components/ui/mat';
 import { computeLooseSection, sectionKind, rowCalcType, computeStairs, STAIR_TYPES, inches } from '@/domain/estimate';
+import { ROOF_PITCH_OPTIONS } from '@/domain/calculators/roof';
 import { STAIR_DEFAULTS } from '@/domain/estimate/stairs';
 import { LOOSE_SECTION_DEFAULTS, looseRowDefaults } from '@/domain/lib/defaults';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -193,13 +194,55 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
         <Fld label="Lally columns" w={48}><NumInput value={inputs.colQty ?? 0} onCommit={(v) => setInput('colQty', v)} /></Fld>
       </>
     );
-  } else if (kind === 'roof') {
+  }
+  let roofBlock = null;
+  if (kind === 'roof') {
     const f = (key, label, w = 56) => <Fld key={key} label={label} w={w}><NumInput value={inputs[key] ?? 0} onCommit={(v) => setInput(key, v)} /></Fld>;
+    const pitchRise = Number(inputs.pitchRise) || 0;
     toolbar = (
       <>
         {f('rafterLF', 'Rafter LF')}{f('ridgeLF', 'Ridge LF')}{f('gableLF', 'Gable LF')}{f('eaveLF', 'Eave LF')}
         {f('rakeLF', 'Rake LF')}{f('trimLF', 'Trim LF')}{f('roofArea', 'Roof sq ft', 64)}
+        <Fld key="pitchRise" label="Pitch">
+          <select
+            className="ew-select"
+            value={pitchRise}
+            onChange={(e) => setInput('pitchRise', Number(e.target.value))}
+            aria-label="Roof pitch"
+          >
+            {ROOF_PITCH_OPTIONS.map((rise) => (
+              <option key={rise} value={rise}>{rise === 0 ? 'Flat / 0:12' : `${rise}:12`}</option>
+            ))}
+          </select>
+        </Fld>
+        {pitchRise > 0 ? (
+          <>
+            <span className="ew-subtle" title="Pitch slope factor and sloped roof area">
+              {`×${(calc.pitchFactor || 1).toFixed(3)} · ${Math.round(calc.slopedRoofArea || 0).toLocaleString('en-US')} sq ft sloped`}
+            </span>
+            <label className="fld" title="Apply roof pitch slope factor to Rafter LF as well as Roof sq ft">
+              <input
+                type="checkbox"
+                checked={Boolean(inputs.pitchRafters)}
+                onChange={(e) => setInput('pitchRafters', e.target.checked)}
+              />
+              <span>Pitch rafters</span>
+            </label>
+          </>
+        ) : null}
       </>
+    );
+    roofBlock = (
+      <div className="stair-in">
+        <div className="stair-in__row">
+          {f('hipValleyLF', 'Hip/Valley LF')}
+          {f('ceilingJoistLF', 'Ceiling joist LF')}
+          {f('subfasciaLF', 'Sub-fascia LF')}
+          {f('fasciaLF', 'Fascia LF')}
+          {f('soffitLF', 'Soffit LF')}
+          {f('overhangLF', 'Overhang LF')}
+        </div>
+      </div>
     );
   }
 
@@ -267,6 +310,7 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
         </>
       )}
     >
+      {roofBlock}
       {stairBlock}
       <div className="mat" role="table">
         <MatHead />

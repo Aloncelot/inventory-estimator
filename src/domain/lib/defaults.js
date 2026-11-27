@@ -64,11 +64,13 @@ export const PANEL_NAIL_DEFAULTS = {
   bottomPlate: d('Galvanized Ring Coil', '8D-2-3/8"', 'Concord'), // galvanized: it goes into PT plates
   topPlate: FRAME_NAIL,
   extraPlates: FRAME_NAIL,
+  connectorFasteners: d('Galvanized', 'SD9112R500', 'Fastener Plus'),
 };
 
 export const BRACING_DEFAULTS = {
   panels: d('SPF#2', `2x4"-16'`),
   trusses: d('SPF#2', `2x4"-16'`),
+  permanentTrusses: d('SPF#2', `2x4"-16'`),
 };
 
 export const LOOSE_SECTION_DEFAULTS = {
@@ -88,6 +90,12 @@ export const LOOSE_SECTION_DEFAULTS = {
   rake: d('SPF#2', `2x6"-16'`),
   trim: d('PVC Trim (V)', `1x8"-8'`, 'The Home Depot'),
   trimScrews: d('50lf Cortex Screws and plugs', '2"', 'The Home Depot'),
+  hipValley: d('LVL', '1-3/4x18"', 'BlueLinx'),
+  ceilingJoist: d('SPF#2', `2x8"-16'`),
+  subfascia: d('SPF#2', `2x6"-16'`),
+  fascia: d('PVC Trim (V)', `1x8"-8'`, 'The Home Depot'),
+  soffit: d('PVC Trim (V)', `1x8"-8'`, 'The Home Depot'),
+  overhang: d('SPF#2', `2x4"-16'`),
   // stairs
   stringers: d('SPF#2', `2x12"-16'`, 'Fairway Lumber'),
   landingJoists: d('SPF#2', `2x8"-12'`),

@@ -14,6 +14,7 @@ import {
   calcFoamSeal, calcSillPlate, calcTape, calcConcreteNails, calcLallyColumn, calcRimboard,
   calcJoist, calcIJoist, calcBeam, calcSubfloor, calcGlue, calcStrapping, calcLinearLumber,
   calcRidge, calcRake, calcHurricaneTies, calcRoofSheathing, calcClips, calcTrimScrews,
+  roofPitchFactor,
 } from '../calculators';
 import { parseBoardLengthFt, unitPriceFrom } from '../lib/parsing';
 import { tryEvaluate } from '../lib/calc';
@@ -24,6 +25,7 @@ import { headerOpenings, defaultPlies, studDepthIn } from './openings';
 import { trussEstimate } from './trusses';
 import { isStick } from '../scope';
 import { windowFlashing } from '../plans/loose';
+import { hardwareCounts } from '../plans/hardware';
 
 const n = (v) => Number(v) || 0;
 const round2 = (v) => Number((Number(v) || 0).toFixed(2));
@@ -51,9 +53,25 @@ export function computeWallSection(section = {}, variant = 'exterior') {
   const perSheet = nailsPerSheet({ edgeIn, fieldIn, studSpacingIn });
   const showBlocking = variant === 'exterior' || kind === 'bearing';
   const showSheathing = variant === 'exterior' || kind === 'shear';
+  const doubleSided = kind === 'shear' && Boolean(section.doubleSided);
+  const sides = doubleSided ? 2 : 1;
   const blockingRows = Math.max(0, Math.ceil(n(heightFt) / 4) - 1);
   // corner and T studs counted on the plan (plan-linked sections that take the plan length)
   const cornerStuds = section.planKey && !section.planManual ? Math.max(0, Math.round(n(section.planJunctionStuds))) : 0;
+  const chordStuds = kind === 'shear' ? Math.max(0, Math.round(n(section.chordStuds))) : 0;
+  const extraStuds = cornerStuds + chordStuds;
+  const studTag = extraStuds > 0
+    ? {
+      tag: {
+        text: `+${extraStuds}`,
+        title: cornerStuds > 0 && chordStuds > 0
+          ? `${cornerStuds} corner and T studs + ${chordStuds} shear chord studs, added after the waste`
+          : chordStuds > 0
+            ? `${chordStuds} shear chord / boundary studs, added after the waste`
+            : `${cornerStuds} corner and T studs from the plan (the walls of this section where other walls meet them), added after the waste`,
+      },
+    }
+    : {};
 
   const bottomFt = pieceLength(sel.bottomPlate);
   const topFt = pieceLength(sel.topPlate);
@@ -65,8 +83,8 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     { key: 'topPlate', label: 'Top plate', wastePct: waste.topPlate ?? 10, piece: piece(sel.topPlate, lengthLF),
       ...calcPlates({ lengthLF, boardLenFt: topFt, wastePct: waste.topPlate ?? 10, item: getItem(sel.topPlate), unit: getUnit(sel.topPlate) }) },
     { key: 'studs', label: 'Studs', wastePct: waste.studs ?? 60,
-      ...(cornerStuds ? { tag: { text: `+${cornerStuds}`, title: `${cornerStuds} corner and T studs from the plan (the walls of this section where other walls meet them), added after the waste` } } : {}),
-      ...calcStuds({ lengthLF, spacingIn: studSpacingIn, multiplier: studMultiplier, wastePct: waste.studs ?? 60, item: getItem(sel.studs), unit: getUnit(sel.studs), extra: cornerStuds }) },
+      ...studTag,
+      ...calcStuds({ lengthLF, spacingIn: studSpacingIn, multiplier: studMultiplier, wastePct: waste.studs ?? 60, item: getItem(sel.studs), unit: getUnit(sel.studs), extra: extraStuds }) },
   ];
   if (showBlocking) base.push({ key: 'blocking', label: 'Blocking', wastePct: waste.blocking ?? 10, piece: piece(sel.blocking, n(lengthLF) * blockingRows),
     ...calcBlocking({ lengthLF, heightFt, boardLenFt: blockFt, wastePct: waste.blocking ?? 10, item: getItem(sel.blocking), unit: getUnit(sel.blocking) }) });
@@ -81,8 +99,10 @@ export function computeWallSection(section = {}, variant = 'exterior') {
       ...calcPlates({ lengthLF: n(lengthLF) * fireRows, boardLenFt: fireFt, wastePct: waste.fireBlocking ?? 10, item: getItem(sel.fireBlocking), unit: getUnit(sel.fireBlocking) }) });
   }
   if (showSheathing) base.push({ key: 'sheathing', label: variant === 'exterior' ? 'Sheathing' : 'Sheathing (4×8)', wastePct: waste.sheathing ?? 20,
-    tag: { text: `${edgeIn}/${fieldIn}`, title: `Nailing: edges ${edgeIn}" o.c., field ${fieldIn}" o.c. → ${perSheet} nails per sheet` },
-    ...calcSheathing({ lengthLF, heightFt, wastePct: waste.sheathing ?? 20, item: getItem(sel.sheathing), unit: getUnit(sel.sheathing, 'sheet') }) });
+    tag: doubleSided
+      ? { text: `2× · ${edgeIn}/${fieldIn}`, title: `Double-sided shear sheathing · Nailing: edges ${edgeIn}" o.c., field ${fieldIn}" o.c. → ${perSheet} nails per sheet` }
+      : { text: `${edgeIn}/${fieldIn}`, title: `Nailing: edges ${edgeIn}" o.c., field ${fieldIn}" o.c. → ${perSheet} nails per sheet` },
+    ...calcSheathing({ lengthLF, heightFt, sides, wastePct: waste.sheathing ?? 20, item: getItem(sel.sheathing), unit: getUnit(sel.sheathing, 'sheet') }) });
   const baseRows = base.map((r) => withPrice(r, sel[r.key]));
 
   // Header rows: their openings (windows / doors) set the header LF, kings and jacks
@@ -198,7 +218,7 @@ export function computeWallSection(section = {}, variant = 'exterior') {
       headerLF += n(r.inputs?.headerLF) || n(r.inputs?.lvlPieces) * n(r.inputs?.lvlLength);
     }
   }
-  plateStud += ot.kingsJacks * 2 * IRC.plateToStud;
+  plateStud += (ot.kingsJacks + chordStuds) * 2 * IRC.plateToStud;
   headerLF += ot.headerLenLF;   // header length of the openings (one ply)
   const braced = variant === 'exterior' || kind === 'shear';
   const nailing = {
@@ -220,6 +240,8 @@ export function computeWallSection(section = {}, variant = 'exterior') {
     heightFt: n(heightFt),
     studMultiplier: n(studMultiplier) || 1,
     kind,
+    doubleSided,
+    chordStuds,
     wallKind: /(^|\D)2\s*[x×]\s*6(\D|$)/i.test(sizeLabel) ? 'int-2x6' : 'int-2x4',
     panelSheets,
     zipSheetsFinal: variant === 'exterior' && /zip/.test(getFamily(sel.sheathing)) ? panelSheets : 0,
@@ -253,8 +275,9 @@ export const PANEL_NAIL_ROWS = [
   { key: 'bottomPlate', selKey: 'nailsFrame8d', group: 'plates', label: 'Plate nails — bottom plate to floor', unit: 'box', perBox: 2700, waste: 40 },
   { key: 'topPlate', selKey: 'nailsTopPlate', group: 'plates', label: 'Plate nails — loose top plate', unit: 'box', perBox: 2500, waste: 40 },
   { key: 'extraPlates', selKey: 'nailsExtraPlate', group: 'plates', label: 'Plate nails — additional plates', unit: 'box', perBox: 2500, waste: 40 },
+  { key: 'connectorFasteners', selKey: 'nailsConnector', group: 'hardware', label: 'Connector nails / screws (SD9 / SD10 / 10d×1-1/2")', unit: 'box', perBox: 500, waste: 15 },
 ];
-export const PANEL_NAIL_GROUPS = { concrete: 'On concrete', sheathing: 'Sheathing', framing: 'Framing', plates: 'Plates' };
+export const PANEL_NAIL_GROUPS = { concrete: 'On concrete', sheathing: 'Sheathing', framing: 'Framing', plates: 'Plates', hardware: 'Structural connectors' };
 export const PANEL_NAIL_INPUTS = {
   pinSpacingIn: 16,
   anchorSpacingIn: 48,
@@ -263,6 +286,7 @@ export const PANEL_NAIL_INPUTS = {
   holeDiaIn: 0.625,      // 5/8" drill bit
   embedIn: 7,            // embedment into the concrete
   cartridgeOz: 10,       // cartridge volume, fl oz
+  fastenersPerConnector: 12,
 };
 const IN3_PER_FL_OZ = 1.8046875;
 
@@ -286,9 +310,9 @@ const fmtN = (v) => Math.round(n(v)).toLocaleString('en-US');
 
 /**
  * data: level.panelNails (sel, waste, inputs, onConcrete, extras…)
- * ctx:  sections (each section's nailing), plates (loose.plates), isGround
+ * ctx:  sections (each section's nailing), plates (loose.plates), isGround, hardwarePieces
  */
-export function computePanelNails(data = {}, { sections = [], plates = {}, isGround = false } = {}) {
+export function computePanelNails(data = {}, { sections = [], plates = {}, isGround = false, hardwarePieces = 0 } = {}) {
   const sel = data.sel || {};
   const waste = data.waste || {};
   const inputs = { ...PANEL_NAIL_INPUTS, ...(data.inputs || {}) };
@@ -314,6 +338,9 @@ export function computePanelNails(data = {}, { sections = [], plates = {}, isGro
   const sheets = sections.reduce((acc, x) => acc + (x?.perSheet ? n(x.sheathNails) / x.perSheet : 0), 0);
   const topNails = alongRun(top.lf, IRC.topPlateOcIn) + top.pieces * IRC.topPlateSplice;
   const extraNails = alongRun(extra.lf, IRC.bottomPlateOcIn);
+  const hwCount = Math.max(0, Math.round(n(hardwarePieces)));
+  const perConn = Math.max(0, n(inputs.fastenersPerConnector));
+  const connFasteners = hwCount * perConn;
 
   // count = nails / pins / anchors / LF;  per = how many of them one unit holds
   const counts = {
@@ -334,6 +361,10 @@ export function computePanelNails(data = {}, { sections = [], plates = {}, isGro
     bottomPlate: { count: tot('bottomPlateNails'), hint: `Bottom plates @ ${IRC.bottomPlateOcIn}" o.c. (3 per 16" at exterior / shear walls) = ${fmtN(tot('bottomPlateNails'))} nails` },
     topPlate: { count: topNails, hint: `${fmtN(top.lf)} LF @ ${IRC.topPlateOcIn}" o.c. + ${IRC.topPlateSplice} per splice × ${fmtN(top.pieces)} pieces = ${fmtN(topNails)} nails` },
     extraPlates: { count: extraNails, hint: extra.lf > 0 ? `${fmtN(extra.lf)} LF of additional plate @ ${IRC.bottomPlateOcIn}" o.c. = ${fmtN(extraNails)} nails` : 'No additional plates (include "Second bottom plate" in loose materials)' },
+    connectorFasteners: {
+      count: connFasteners,
+      hint: hwCount > 0 ? `${fmtN(hwCount)} connectors × ${perConn} fasteners each = ${fmtN(connFasteners)} fasteners` : 'No structural hardware connectors on this level',
+    },
   };
 
   const baseRows = PANEL_NAIL_ROWS
@@ -352,7 +383,7 @@ export function computePanelNails(data = {}, { sections = [], plates = {}, isGro
       };
     });
   const extraRows = computeNailExtras(data.extras);
-  return { onConcrete, inputs, anchors, anchorsPerTube, ptLF: pt.lf, baseRows, extraRows, total: round2(sum(baseRows) + sum(extraRows)) };
+  return { onConcrete, inputs, anchors, anchorsPerTube, ptLF: pt.lf, hardwarePieces: hwCount, baseRows, extraRows, total: round2(sum(baseRows) + sum(extraRows)) };
 }
 
 /* ───────────────────────── Bracing (all levels) ─────────────────────────
@@ -362,6 +393,7 @@ export function computePanelNails(data = {}, { sections = [], plates = {}, isGro
 export const BRACING_ROWS = [
   { key: 'panels', label: 'Temporary bracing — walls', unit: 'pcs', waste: 0 },
   { key: 'trusses', label: 'Temporary bracing — trusses', unit: 'pcs', waste: 0 },
+  { key: 'permanentTrusses', label: 'Permanent truss bracing (CLR / diagonal)', unit: 'pcs', waste: 10 },
 ];
 // Trusses: about 2 bundles of 2×4-16' (≈ 600 pcs) brace ~5,000 sq ft. On large
 // buildings bracing is bought for one section at a time and reused.
@@ -372,6 +404,8 @@ export const BRACING_INPUTS = {
   bundlesPerArea: 2,
   areaPerBundlesSqFt: 5000,
   piecesPerBundle: 294,     // standard 2×4 unit
+  permanentBraceLFPerSqFt: 0.15,
+  permanentBraceLF: 0,
 };
 
 // a stick-framed wall is braced like a run of panels: one station every 8'
@@ -391,6 +425,7 @@ export function computeBracing(data = {}, { panels = 0, stickLF = 0, roofAreaSqF
       return { qty: (n(panels) + stations) * per, hint: `${parts.join(' + ') || '0 panels'} × ${per} braces` };
     })(),
     trusses: trussBracing(inputs, roofAreaSqFt),
+    permanentTrusses: permanentTrussBracing(inputs, roofAreaSqFt, sel.permanentTrusses),
   };
   const baseRows = BRACING_ROWS.map((d) => {
     const s = sel[d.key];
@@ -401,6 +436,22 @@ export function computeBracing(data = {}, { panels = 0, stickLF = 0, roofAreaSqF
     return { key: d.key, label: d.label, hint: counts[d.key].hint, qtyRaw, wastePct, qtyFinal, unit: getUnit(s, d.unit), unitPrice, subtotal: qtyFinal * (unitPrice || 0), priceDate: priceDateOf(s) };
   });
   return { inputs, baseRows, panels: n(panels), stickLF: n(stickLF), roofAreaSqFt: n(roofAreaSqFt), total: sum(baseRows) };
+}
+
+function permanentTrussBracing(inputs, roofAreaSqFt, selItem) {
+  const area = n(inputs.buildingAreaSqFt) || n(roofAreaSqFt);
+  const typedLF = n(inputs.permanentBraceLF);
+  const rate = Math.max(0, n(inputs.permanentBraceLFPerSqFt));
+  const lf = typedLF > 0 ? typedLF : (area > 0 ? Math.round(area * rate) : 0);
+  const boardFt = pieceLength(selItem, 16);
+  const qty = lf > 0 ? Math.ceil(lf / boardFt) : 0;
+  if (lf <= 0) {
+    return { qty: 0, hint: 'Type permanent bracing LF (or building / Roof sq ft for CLR & diagonal bracing)' };
+  }
+  const src = typedLF > 0
+    ? `${fmtN(lf)} LF typed`
+    : `${fmtN(area)} sq ft${n(inputs.buildingAreaSqFt) ? '' : ' (Roof sq ft)'} × ${rate} LF/sq ft = ${fmtN(lf)} LF`;
+  return { qty, hint: `${src} ÷ ${boardFt}' boards = ${fmtN(qty)} pcs` };
 }
 
 function trussBracing(inputs, roofAreaSqFt) {
@@ -552,10 +603,13 @@ export function computeLevel(level = {}, { isGround = false, panelLenFt = 8, sti
     extLengthLF: d.extLengthSum, int2x6LF: d.int2x6LF, int2x4LF: d.int2x4LF, extZipSheets: d.extZipSheetsFinal, panelLenFt, stick,
     windows: level.plan?.walls?.length ? windowFlashing(level.plan) : null,
   });
+  const hwCounts = level.plan?.hardwareTypes?.length ? hardwareCounts(level.plan) : null;
+  const hardwarePieces = hwCounts ? [...hwCounts.values()].reduce((acc, c) => acc + n(c), 0) : 0;
   const panelNails = computePanelNails(level.panelNails, {
     sections: [...exterior, ...interior].map((x) => x.nailing),
     plates: loose.plates,
     isGround,
+    hardwarePieces,
   });
 
   const exteriorTotal = sum(exterior);
@@ -735,6 +789,7 @@ export function computeLooseSection(section = {}, foundation = null) {
   const mk = (key, label, res, d = 5, extra = {}) => withPrice({ key, label, ...res, wastePct: w(key, d), ...extra }, sel[key]);
 
   let calcRows = [];
+  let roofMeta = null;
   if (kind === 'foundation') {
     // from the plan: exterior, bearing and shear walls of the levels on concrete,
     // one PT sill plate row per wall size; otherwise the LF typed here
@@ -767,10 +822,29 @@ export function computeLooseSection(section = {}, foundation = null) {
     ];
   } else if (kind === 'roof') {
     const lf = (k) => n(inputs[k]);
-    const lumber = (key, label, length, d = 5, fn = calcLinearLumber) =>
-      mk(key, label, fn({ lengthLF: length, boardLenFt: pieceLength(sel[key], 16), wastePct: w(key, d), item: getItem(sel[key]) }), d);
-    const rafter = lumber('rafter', 'Rafter', lf('rafterLF'));
-    const sheathing = mk('sheathing', 'Sheathing', calcRoofSheathing({ areaSqFt: lf('roofArea'), wastePct: w('sheathing', 20), item: getItem(sel.sheathing) }), 20);
+    const pitchRise = Math.max(0, lf('pitchRise'));
+    const pitchFactor = roofPitchFactor(pitchRise);
+    const planArea = lf('roofArea');
+    const slopedArea = Math.round(planArea * pitchFactor * 100) / 100;
+    const rafterLen = inputs.pitchRafters ? lf('rafterLF') * pitchFactor : lf('rafterLF');
+    roofMeta = { pitchFactor, slopedRoofArea: slopedArea };
+
+    const lumber = (key, label, length, d = 5, fn = calcLinearLumber, boardFallback = 16, extra = {}) =>
+      mk(key, label, fn({ lengthLF: length, boardLenFt: pieceLength(sel[key], boardFallback), wastePct: w(key, d), item: getItem(sel[key]) }), d, extra);
+    const rafter = lumber(
+      'rafter', 'Rafter', rafterLen, 5, calcLinearLumber, 16,
+      inputs.pitchRafters && pitchRise > 0
+        ? { hint: `${lf('rafterLF')} LF × ${pitchFactor.toFixed(3)} (${pitchRise}:12 pitch) = ${round2(rafterLen)} LF` }
+        : {},
+    );
+    const sheathing = mk(
+      'sheathing', 'Sheathing',
+      calcRoofSheathing({ areaSqFt: slopedArea, wastePct: w('sheathing', 20), item: getItem(sel.sheathing) }),
+      20,
+      pitchRise > 0
+        ? { hint: `${planArea} sq ft plan × ${pitchFactor.toFixed(3)} (${pitchRise}:12 pitch) = ${slopedArea} sq ft sloped` }
+        : {},
+    );
     calcRows = [
       rafter,
       lumber('ridge', 'Ridge', lf('ridgeLF'), 4, calcRidge),
@@ -784,6 +858,19 @@ export function computeLooseSection(section = {}, foundation = null) {
       lumber('trim', 'Trim', lf('trimLF')),
       mk('trimScrews', 'Trim screws', calcTrimScrews({ trimLF: lf('trimLF'), wastePct: w('trimScrews'), item: getItem(sel.trimScrews) })),
     ];
+    const optionalRoof = [
+      ['hipValley', 'hipValleyLF', 'Hip / Valley', calcRidge, 5, 16],
+      ['ceilingJoist', 'ceilingJoistLF', 'Ceiling joists / collar ties', calcLinearLumber, 5, 16],
+      ['subfascia', 'subfasciaLF', 'Sub-fascia', calcLinearLumber, 5, 16],
+      ['fascia', 'fasciaLF', 'Fascia', calcLinearLumber, 5, 16],
+      ['soffit', 'soffitLF', 'Soffit', calcLinearLumber, 10, 8],
+      ['overhang', 'overhangLF', 'Overhang / outriggers', calcLinearLumber, 5, 16],
+    ];
+    for (const [key, inputKey, label, fn, defaultWaste, boardFallback] of optionalRoof) {
+      if (lf(inputKey) > 0 || Boolean(sel[key])) {
+        calcRows.push(lumber(key, label, lf(inputKey), defaultWaste, fn, boardFallback));
+      }
+    }
   } else if (kind === 'stairs') {
     // one staircase: geometry from the stair plan and section; the materials are picked
     const st = computeStairs(inputs);
@@ -886,7 +973,7 @@ export function computeLooseSection(section = {}, foundation = null) {
     return { ...row, ...res, calcType: ct, wastePct: wp, piece: pc, priceDate: priceDateOf(row.item) };
   });
 
-  return { kind, calcRows, manualRows, subtotal: round2(sum(calcRows) + sum(manualRows)), ...(kind === 'stairs' ? { stairs: computeStairs(inputs) } : {}) };
+  return { kind, calcRows, manualRows, subtotal: round2(sum(calcRows) + sum(manualRows)), ...(roofMeta || {}), ...(kind === 'stairs' ? { stairs: computeStairs(inputs) } : {}) };
 }
 
 export function computeLoose(est = {}) {

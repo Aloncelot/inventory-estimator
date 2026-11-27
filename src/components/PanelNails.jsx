@@ -81,6 +81,9 @@ function PanelNailsComponent({ title = 'Panel nails', data, calc: calcProp, onCh
       <Fld key="em" label="Embed (in)" w={40}><NumInput value={inputs.embedIn} onCommit={(v) => setInput('embedIn', v)} /></Fld>,
       <Fld key="co" label="Cartridge (fl oz)" w={44}><NumInput value={inputs.cartridgeOz} onCommit={(v) => setInput('cartridgeOz', v)} /></Fld>,
     ];
+    if (r.key === 'connectorFasteners') return [
+      <Fld key="fc" label="Fasteners / conn." w={44}><NumInput value={inputs.fastenersPerConnector} onCommit={(v) => setInput('fastenersPerConnector', v)} /></Fld>,
+    ];
     return null;
   };
 

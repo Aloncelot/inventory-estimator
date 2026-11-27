@@ -34,6 +34,31 @@ export function countOf(text) {
 /** Plies of a header callout: "(3) 2x10" → 3, "4x10" / "5-1/4x11-7/8 PSL" → 1. */
 export const pliesOf = (text) => countOf(text);
 
+const SOLID_TRIMMER_RE = /\b(4\s*[x×]\s*4|4\s*[x×]\s*6|6\s*[x×]\s*6)\b|\b(psl|lvl|lsl|parallam)\b/i;
+
+/** Whether a trimmer/jack callout specifies a solid post or engineered timber (4x4, 4x6, 6x6, PSL/LVL/LSL/Parallam). */
+export function isSolidTrimmer(text) {
+  const s = String(text ?? '').trim();
+  return s ? SOLID_TRIMMER_RE.test(s) : false;
+}
+
+/**
+ * Stud-equivalent count for a trimmer/jack callout:
+ * 4x4 → 2, 4x6 → 3, 6x6 → 4, PSL/LVL/LSL/Parallam → 2 (multiplied by any "(N)" prefix);
+ * otherwise countOf(text).
+ */
+export function trimmerStudEquiv(text) {
+  const s = String(text ?? '').trim();
+  if (!s) return null;
+  const qty = countOf(s);
+  if (qty === null) return null;
+  if (/\b6\s*[x×]\s*6\b/i.test(s)) return qty * 4;
+  if (/\b4\s*[x×]\s*6\b/i.test(s)) return qty * 3;
+  if (/\b4\s*[x×]\s*4\b/i.test(s)) return qty * 2;
+  if (/\b(psl|lvl|lsl|parallam)\b/i.test(s)) return qty * 2;
+  return qty;
+}
+
 let seq = 0;
 export const newScheduleRow = (patch = {}) => ({
   id: `hr${Date.now().toString(36)}${(seq++).toString(36)}`,
@@ -79,12 +104,14 @@ export function rowFor(schedule, { load, size, above, widthIn }) {
 /** What a schedule row gives an opening type (the window sill only to windows). */
 export function rowValues(row, kind = 'window') {
   const plies = n(row.plies) || pliesOf(row.header);
-  return {
+  const out = {
     kings: countOf(row.kings) ?? undefined,
-    jacks: countOf(row.jacks) ?? undefined,
+    jacks: trimmerStudEquiv(row.jacks) ?? undefined,
     plies: plies || undefined,
     notes: [row.header, row.jacks ? `trimmers ${row.jacks}` : '', row.kings ? `kings ${row.kings}` : '', kind === 'window' && row.sill ? `sill ${row.sill}` : '', row.note].filter(Boolean).join(' · '),
   };
+  if (isSolidTrimmer(row.jacks)) out.solidTrimmer = String(row.jacks).trim();
+  return out;
 }
 
 /**
@@ -94,7 +121,7 @@ export function rowValues(row, kind = 'window') {
  */
 export function applyHeaderSchedule(plan, schedule, above = 0) {
   if (!plan?.openingTypes?.length) return plan;
-  const FIELDS = ['kings', 'jacks', 'plies', 'notes'];
+  const FIELDS = ['kings', 'jacks', 'plies', 'notes', 'solidTrimmer'];
   const hasRows = (schedule?.rows || []).length > 0;
   let changed = false;
   const types = plan.openingTypes.map((t) => {
@@ -123,7 +150,7 @@ export function applyHeaderSchedule(plan, schedule, above = 0) {
 /** An opening type back on the schedule: your numbers go, the row's come back. */
 export function backToSchedule(t) {
   const next = { ...t };
-  for (const k of ['kings', 'jacks', 'plies', 'notes', 'byHand', 'schedRow', 'schedMiss']) delete next[k];
+  for (const k of ['kings', 'jacks', 'plies', 'notes', 'solidTrimmer', 'byHand', 'schedRow', 'schedMiss']) delete next[k];
   return next;
 }
 

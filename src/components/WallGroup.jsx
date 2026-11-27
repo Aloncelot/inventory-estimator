@@ -214,6 +214,21 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
           </select>
         </Fld>
       ) : null}
+      {kind === 'shear' ? (
+        <>
+          <label className="fld" title="Sheathed on both sides (doubles sheathing sheets and sheathing nails)">
+            <input
+              type="checkbox"
+              checked={Boolean(sectionData.doubleSided)}
+              onChange={(e) => setField('doubleSided', e.target.checked)}
+            />
+            <span>Double-sided</span>
+          </label>
+          <Fld label="Chord studs" w={44} title="Extra chord studs at shear wall segment ends">
+            <NumInput value={sectionData.chordStuds ?? 0} onCommit={(v) => setField('chordStuds', Math.max(0, Math.round(v)))} />
+          </Fld>
+        </>
+      ) : null}
     </>
   );
 

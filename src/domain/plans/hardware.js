@@ -18,6 +18,8 @@ export const HW_RULES = [
   { value: 'ends', label: 'At wall ends' },
   { value: 'spacing', label: 'Along walls @ spacing' },
   { value: 'shear', label: 'Along shear walls' },
+  { value: 'posts', label: 'At structural posts' },
+  { value: 'beams', label: 'At beam ends' },
 ];
 
 export const SHEAR_TYPES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
@@ -57,13 +59,17 @@ export function newHardwareType(types = []) {
 export function hardwareCounts(plan) {
   const k = n(plan?.ptPerFt);
   const out = new Map();
+  const totalPosts = (plan?.walls || []).reduce((acc, w) => acc + (w.posts || []).length, 0);
+  const totalBeams = (plan?.beams || []).length;
   for (const t of plan?.hardwareTypes || []) {
     let c = 0;
     const groups = new Set(t.groups || []);
     if (t.rule === 'shear') c += shearCount(plan, t.byType || {});
+    if (t.rule === 'posts') c += totalPosts * Math.max(1, n(t.perPost) || 1);
+    if (t.rule === 'beams') c += totalBeams * Math.max(1, n(t.perBeam) || 2);
     for (const w of plan.walls || []) {
       c += (w.hardware || []).filter((h) => h.typeId === t.id).length;
-      if (t.rule === 'each' || t.rule === 'shear' || !groupKeysOf(w).some((g) => groups.has(g))) continue;
+      if (t.rule === 'each' || t.rule === 'shear' || t.rule === 'posts' || t.rule === 'beams' || !groupKeysOf(w).some((g) => groups.has(g))) continue;
       if (t.rule === 'ends') c += 2 * Math.max(0, n(t.perEnd) || 1);
       if (t.rule === 'spacing') {
         const L = wallLengthFt(w, k) * 12;
@@ -78,8 +84,29 @@ export function hardwareCounts(plan) {
 
 export const describeRule = (t) => (t.rule === 'shear'
   ? `along shear walls: ${Object.entries(t.byType || {}).filter(([, v]) => Number(v) > 0).map(([k, v]) => `${k} @ ${v}"`).join(', ') || '—'}`
-  : t.rule === 'ends'
-  ? `${n(t.perEnd) || 1} at each end of ${(t.groups || []).map(groupLabel).join(', ') || '—'}`
-  : t.rule === 'spacing'
-    ? `@ ${n(t.spacingIn) || 32}" along ${(t.groups || []).map(groupLabel).join(', ') || '—'}`
-    : 'placed on the walls');
+  : t.rule === 'posts'
+    ? `${n(t.perPost) || 1} per structural post`
+    : t.rule === 'beams'
+      ? `${n(t.perBeam) || 2} per beam (both ends)`
+      : t.rule === 'ends'
+        ? `${n(t.perEnd) || 1} at each end of ${(t.groups || []).map(groupLabel).join(', ') || '—'}`
+        : t.rule === 'spacing'
+          ? `@ ${n(t.spacingIn) || 32}" along ${(t.groups || []).map(groupLabel).join(', ') || '—'}`
+          : 'placed on the walls');
+
+/** Ready-made structural hardware type presets for common plan-derived connectors. */
+export function hardwarePreset(kind, types = [], { shearGroups = [] } = {}) {
+  const base = newHardwareType(types);
+  switch (kind) {
+    case 'postBase':
+      return { ...base, name: 'Post base (ABU / PB)', rule: 'posts', perPost: 1 };
+    case 'postCap':
+      return { ...base, name: 'Post cap (BC / AC)', rule: 'posts', perPost: 1 };
+    case 'beamHanger':
+      return { ...base, name: 'Beam hanger (HU / HUC)', rule: 'beams', perBeam: 2 };
+    case 'shearClips':
+      return { ...base, name: 'Shear clips / hold-downs', rule: 'ends', perEnd: 1, groups: [...shearGroups] };
+    default:
+      return base;
+  }
+}

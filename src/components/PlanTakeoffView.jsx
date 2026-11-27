@@ -29,7 +29,7 @@ import { detectScale, detectWalls, parseScaleText } from '@/domain/plans/detect'
 import { newPostType, postWidthIn } from '@/domain/plans/sync';
 import PostTypesPanel from '@/components/PostTypesPanel';
 import HardwareTypesPanel from '@/components/HardwareTypesPanel';
-import { hardwareCounts, newHardwareType } from '@/domain/plans/hardware';
+import { hardwareCounts, newHardwareType, hardwarePreset } from '@/domain/plans/hardware';
 import { withPlanLoose, BLOCKING_KINDS } from '@/domain/plans/loose';
 import FloorPanel from '@/components/FloorPanel';
 import StructuralPanel from '@/components/StructuralPanel';
@@ -1552,6 +1552,15 @@ export default function PlanTakeoffView() {
             }}
             onPatchType={(id, patch) => setPlan((p) => ({ ...p, hardwareTypes: (p.hardwareTypes || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) }))}
             onAddType={() => setPlan((p) => ({ ...p, hardwareTypes: [...(p.hardwareTypes || []), newHardwareType(p.hardwareTypes || [])] }))}
+            onAddPreset={(kind) => setPlan((p) => ({
+              ...p,
+              hardwareTypes: [
+                ...(p.hardwareTypes || []),
+                hardwarePreset(kind, p.hardwareTypes || [], {
+                  shearGroups: groups.filter((g) => g.kind === 'shear').map((g) => g.key),
+                }),
+              ],
+            }))}
             onDeleteType={(id) => setPlan((p) => ({
               ...p,
               hardwareTypes: (p.hardwareTypes || []).filter((t) => t.id !== id),

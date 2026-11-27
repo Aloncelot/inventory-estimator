@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  countOf, rowFor, rowValues, applyHeaderSchedule, backToSchedule, floorsAbove, scheduleOpts, fromTemplate, toTemplate,
+  countOf, isSolidTrimmer, trimmerStudEquiv, rowFor, rowValues, applyHeaderSchedule, backToSchedule, floorsAbove, scheduleOpts, fromTemplate, toTemplate,
   normalizeImportedSchedule, mergeImportedSchedule, BASIC_PARTITION_ROWS, EXAMPLE_TEMPLATE, newScheduleRow,
 } from './headerSchedule.js';
 import { classifyOpenings, commitPlan } from './openingTypes.js';
@@ -148,4 +148,51 @@ test('mergeImportedSchedule keeps bearing rows when importing a separate partiti
   assert.equal(merged2.rows.length, 3);
   assert.equal(merged2.rows.filter((r) => r.walls === 'bearing').length, 2);
   assert.equal(merged2.rows.find((r) => r.walls === 'nonbearing').header, '4x6');
+});
+
+test('solid trimmers: isSolidTrimmer, trimmerStudEquiv, rowValues, applyHeaderSchedule, and backToSchedule', () => {
+  // countOf stays backwards-compatible
+  assert.equal(countOf('4x4'), 1);
+
+  assert.equal(isSolidTrimmer('4x4'), true);
+  assert.equal(isSolidTrimmer('(2) 4x4'), true);
+  assert.equal(isSolidTrimmer('4x6'), true);
+  assert.equal(isSolidTrimmer('6x6'), true);
+  assert.equal(isSolidTrimmer('3-1/2x5-1/2 PSL'), true);
+  assert.equal(isSolidTrimmer('LVL'), true);
+  assert.equal(isSolidTrimmer('LSL'), true);
+  assert.equal(isSolidTrimmer('Parallam'), true);
+  assert.equal(isSolidTrimmer('2x4'), false);
+  assert.equal(isSolidTrimmer('(2) 2x6'), false);
+  assert.equal(isSolidTrimmer(''), false);
+
+  assert.equal(trimmerStudEquiv('4x4'), 2);
+  assert.equal(trimmerStudEquiv('(2) 4x4'), 4);
+  assert.equal(trimmerStudEquiv('4x6'), 3);
+  assert.equal(trimmerStudEquiv('(2) 4x6'), 6);
+  assert.equal(trimmerStudEquiv('6x6'), 4);
+  assert.equal(trimmerStudEquiv('(2) 6x6'), 8);
+  assert.equal(trimmerStudEquiv('3-1/2x5-1/2 PSL'), 2);
+  assert.equal(trimmerStudEquiv('(2) LVL'), 4);
+  assert.equal(trimmerStudEquiv('(2) 2x6'), 2);
+  assert.equal(trimmerStudEquiv('2x4'), 1);
+  assert.equal(trimmerStudEquiv(''), null);
+
+  // solid trimmer row includes solidTrimmer and stud-equivalent jacks
+  const solidVal = rowValues({ header: '4x12', jacks: '4x6', kings: '(2) 2x4', sill: '(2) 2x' });
+  assert.equal(solidVal.jacks, 3);
+  assert.equal(solidVal.solidTrimmer, '4x6');
+
+  // non-solid row omits solidTrimmer key completely
+  const stdVal = rowValues({ header: '4x6', jacks: '2x4', kings: '2x4', sill: '2x' });
+  assert.equal('solidTrimmer' in stdVal, false);
+
+  // applyHeaderSchedule sets solidTrimmer and backToSchedule clears it
+  const plan = classifyOpenings({ walls: [wall('e', 'exterior', '2x4', [win(80)])] });
+  const applied = applyHeaderSchedule(plan, sched, 2); // EXAMPLE_TEMPLATE: 2x4, above 2, upTo 87 → jacks: '4x6'
+  assert.equal(applied.openingTypes[0].jacks, 3);
+  assert.equal(applied.openingTypes[0].solidTrimmer, '4x6');
+  const reset = backToSchedule(applied.openingTypes[0]);
+  assert.equal('solidTrimmer' in reset, false);
+  assert.equal('jacks' in reset, false);
 });

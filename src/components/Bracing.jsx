@@ -32,6 +32,19 @@ export default function Bracing({ title = 'Bracing (all levels)', data, calc: ca
       </Fld>,
       <Fld key="pb" label="Pcs / bundle" w={44}><NumInput value={inputs.piecesPerBundle} onCommit={(v) => setInput('piecesPerBundle', v)} /></Fld>,
     ];
+    if (r.key === 'permanentTrusses') {
+      const area = Number(inputs.buildingAreaSqFt) || Number(calc.roofAreaSqFt) || 0;
+      const rate = Math.max(0, Number(inputs.permanentBraceLFPerSqFt) || 0);
+      const autoLF = area > 0 ? Math.round(area * rate) : 0;
+      return [
+        <Fld key="pr" label="LF / sq ft" w={52} title="Permanent bracing linear feet per sq ft of roof area (default 0.15)">
+          <NumInput step="0.05" value={inputs.permanentBraceLFPerSqFt} placeholder="0.15" onCommit={(v) => setInput('permanentBraceLFPerSqFt', v)} />
+        </Fld>,
+        <Fld key="plf" label="Override LF" w={64} title="Leave 0 to compute automatically from area × LF/sq ft">
+          <NumInput value={inputs.permanentBraceLF || ''} placeholder={autoLF ? String(autoLF) : '0'} onCommit={(v) => setInput('permanentBraceLF', v)} />
+        </Fld>,
+      ];
+    }
     return null;
   };
 

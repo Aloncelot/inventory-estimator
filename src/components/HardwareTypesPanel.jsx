@@ -10,7 +10,7 @@ import { NumInput } from '@/components/ui/mat';
 import { CollapsiblePanel } from '@/components/ui/Collapsible';
 import { HW_RULES, SHEAR_TYPES } from '@/domain/plans/hardware';
 
-export default function HardwareTypesPanel({ types = [], counts, groups = [], shearTypes = [], color, onPatchType, onAddType, onDeleteType, onSelectType, selectedType }) {
+export default function HardwareTypesPanel({ types = [], counts, groups = [], shearTypes = [], color, onPatchType, onAddType, onAddPreset, onDeleteType, onSelectType, selectedType }) {
   const total = types.reduce((s, t) => s + (counts.get(t.id) || 0), 0);
   return (
     <CollapsiblePanel
@@ -19,6 +19,15 @@ export default function HardwareTypesPanel({ types = [], counts, groups = [], sh
       subtitle={`${total} pieces in ${types.length} type${types.length === 1 ? '' : 's'} · to Loose material`}
       actions={<button type="button" className="ew-btn ew-btn--ghost" onClick={onAddType}><Plus size={13} /> Hardware type</button>}
     >
+      {onAddPreset ? (
+        <div className="ro-hide" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <span className="ew-subtle">Quick add:</span>
+          <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddPreset('postBase')}>+ Post bases</button>
+          <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddPreset('postCap')}>+ Post caps</button>
+          <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddPreset('beamHanger')}>+ Beam hangers</button>
+          <button type="button" className="ew-btn ew-btn--ghost" onClick={() => onAddPreset('shearClips')}>+ Shear clips (A34/A35)</button>
+        </div>
+      ) : null}
       {types.length ? (
         <table className="tbl ot-tbl">
           <thead>
@@ -26,7 +35,7 @@ export default function HardwareTypesPanel({ types = [], counts, groups = [], sh
               <th>Type</th>
               <th>Name</th>
               <th>Counted</th>
-              <th className="num" title="Per wall end, or spacing in inches">Qty / spacing</th>
+              <th className="num" title="Per wall end, per post/beam, or spacing in inches">Qty / spacing</th>
               <th title="Wall types this rule applies to">Wall types</th>
               <th className="num">Count</th>
               <th>Notes</th>
@@ -56,15 +65,21 @@ export default function HardwareTypesPanel({ types = [], counts, groups = [], sh
                       </span>
                     ) : t.rule === 'ends' ? <NumInput w={40} value={t.perEnd ?? 1} onCommit={(v) => set({ perEnd: Math.max(1, Math.round(v) || 1) })} title="Pieces at each end" />
                       : t.rule === 'spacing' ? <NumInput w={48} value={t.spacingIn ?? 32} onCommit={(v) => set({ spacingIn: Math.max(4, v) })} title="Spacing, in" />
-                        : <span className="ew-subtle">—</span>}
+                        : t.rule === 'posts' ? <NumInput w={40} value={t.perPost ?? 1} onCommit={(v) => set({ perPost: Math.max(1, Math.round(v) || 1) })} title="Pieces per structural post" />
+                          : t.rule === 'beams' ? <NumInput w={40} value={t.perBeam ?? 2} onCommit={(v) => set({ perBeam: Math.max(1, Math.round(v) || 1) })} title="Pieces per beam (both ends)" />
+                            : <span className="ew-subtle">—</span>}
                   </td>
                   <td className="hw-groups">
-                    {t.rule === 'each' ? <span className="ew-subtle">Use Add hardware on the drawing</span> : t.rule === 'shear' ? <span className="ew-subtle">Shear walls, by the type of each tag</span> : groups.map((g) => (
-                      <label key={g.key} className={`hw-chip${sel.has(g.key) ? ' is-on' : ''}`}>
-                        <input type="checkbox" checked={sel.has(g.key)} onChange={(e) => set({ groups: e.target.checked ? [...sel, g.key] : [...sel].filter((x) => x !== g.key) })} />
-                        {g.label}
-                      </label>
-                    ))}
+                    {t.rule === 'each' ? <span className="ew-subtle">Use Add hardware on the drawing</span>
+                      : t.rule === 'shear' ? <span className="ew-subtle">Shear walls, by the type of each tag</span>
+                        : t.rule === 'posts' ? <span className="ew-subtle">All structural posts on this level</span>
+                          : t.rule === 'beams' ? <span className="ew-subtle">All beams on this level (both ends)</span>
+                            : groups.map((g) => (
+                              <label key={g.key} className={`hw-chip${sel.has(g.key) ? ' is-on' : ''}`}>
+                                <input type="checkbox" checked={sel.has(g.key)} onChange={(e) => set({ groups: e.target.checked ? [...sel, g.key] : [...sel].filter((x) => x !== g.key) })} />
+                                {g.label}
+                              </label>
+                            ))}
                   </td>
                   <td className="num" style={{ fontWeight: 600 }}>{count}</td>
                   <td><input className="ew-input ot-notes" value={t.notes || ''} placeholder="per S-001 table" onChange={(e) => set({ notes: e.target.value })} /></td>

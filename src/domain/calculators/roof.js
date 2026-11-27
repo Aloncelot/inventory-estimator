@@ -6,6 +6,14 @@ import { calcBoxes } from "./boxes";
 import { applyWaste, unitPriceFrom } from "../lib/parsing";
 import { isLumberFamily } from "../lib/families";
 
+export const ROOF_PITCH_OPTIONS = [0, 3, 4, 5, 6, 7, 8, 9, 10, 12];
+
+/** Slope multiplier for a roof pitch (rise per 12" run): 0 → 1, 6 → ~1.118, 12 → ~1.414. */
+export function roofPitchFactor(pitchRise = 0) {
+  const rise = Math.max(0, Number(pitchRise) || 0);
+  return rise > 0 ? Math.hypot(12, rise) / 12 : 1;
+}
+
 /**
  * Rafter / Eave / Trim / Gable:
  * Qty = Length / BoardLength + Waste

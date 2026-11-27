@@ -256,7 +256,14 @@ export default function HeaderSchedulePanel({ schedule, uid, levelName, above, a
                   <td><input className="ew-input hs-txt" value={r.header} placeholder="4x10" onChange={(e) => setRow(r.id, { header: e.target.value })} /></td>
                   <td className="num"><NumInput w={36} allowEmpty value={r.plies ?? ''} placeholder={String(v.plies || '')} onCommit={(x) => setRow(r.id, { plies: x === '' ? '' : Math.max(1, Math.round(x)) })} /></td>
                   <td><input className="ew-input hs-txt" value={r.sill || ''} placeholder="2x" onChange={(e) => setRow(r.id, { sill: e.target.value })} /></td>
-                  <td><input className="ew-input hs-txt" value={r.jacks} placeholder="2x4" onChange={(e) => setRow(r.id, { jacks: e.target.value })} title={v.jacks ? `${v.jacks} each side` : ''} /></td>
+                  <td>
+                    <input className="ew-input hs-txt" value={r.jacks} placeholder="2x4" onChange={(e) => setRow(r.id, { jacks: e.target.value })} title={v.jacks ? `${v.jacks} each side` : ''} />
+                    {v.solidTrimmer ? (
+                      <span className="ew-subtle" style={{ marginLeft: 4, whiteSpace: 'nowrap' }} title={`Solid trimmer (${r.jacks}) counted as ${v.jacks} stud equivalents per side`}>
+                        {`= ${v.jacks}×`}
+                      </span>
+                    ) : null}
+                  </td>
                   <td><input className="ew-input hs-txt" value={r.kings} placeholder="2x4" onChange={(e) => setRow(r.id, { kings: e.target.value })} title={v.kings ? `${v.kings} each side` : ''} /></td>
                   <td><input className="ew-input hs-note" value={r.note} placeholder="per detail 32/S-401" onChange={(e) => setRow(r.id, { note: e.target.value })} /></td>
                   <td className="num">{used.get(r.id) || ''}</td>

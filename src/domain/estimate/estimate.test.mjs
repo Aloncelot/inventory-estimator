@@ -5,11 +5,13 @@ import {
   computeWallSection, computeLevel, computePanelNails, computeLoosePanel, computeBracing,
   computeManufacture, computeWallPanels, computeLooseSection, computeLoose, computeProject,
   sectionAddonPerLF, pieceLength, wallPanelsOf,
+  PANEL_NAIL_GROUPS, PANEL_NAIL_INPUTS,
 } from './index.js';
 import { migrateEstimate } from './migrate.js';
 import { slimItem, slimEstimate, priceDateOf } from '../lib/selection.js';
-import { isGroundLevelName, wallRowDefaults } from '../lib/defaults.js';
+import { isGroundLevelName, wallRowDefaults, LOOSE_SECTION_DEFAULTS, BRACING_DEFAULTS, PANEL_NAIL_DEFAULTS } from '../lib/defaults.js';
 import { nailsPerSheet, perBoxFromSize, rollLengthFromSize } from '../lib/fastening.js';
+import { roofPitchFactor, ROOF_PITCH_OPTIONS, calcSheathing } from '../calculators';
 
 // a selection as ItemPicker stores it; $10 per unit
 const pick = (familyLabel, sizeLabel, price = 10, extra = {}) => ({
@@ -442,4 +444,189 @@ test('fireblocking row for tall walls without blocking (IRC R302.11)', async () 
   assert.ok(!ten.baseRows.some((r) => r.key === 'fireBlocking'));
   const ext = computeWallSection({ lengthLF: 100, heightFt: 12, sel: {} }, 'exterior');
   assert.ok(!ext.baseRows.some((r) => r.key === 'fireBlocking'), 'blocking rows already fireblock');
+});
+
+describe('roof pitch, optional roof framing rows, and permanent truss bracing', () => {
+  test('roofPitchFactor and ROOF_PITCH_OPTIONS', () => {
+    assert.deepEqual(ROOF_PITCH_OPTIONS, [0, 3, 4, 5, 6, 7, 8, 9, 10, 12]);
+    assert.equal(roofPitchFactor(0), 1);
+    assert.equal(roofPitchFactor(-4), 1);
+    assert.ok(Math.abs(roofPitchFactor(6) - Math.hypot(12, 6) / 12) < 1e-9);
+    assert.ok(Math.abs(roofPitchFactor(12) - Math.SQRT2) < 1e-9);
+  });
+
+  test('roof section applies pitchFactor to slopedRoofArea, sheathing, clips, and optionally rafters', () => {
+    const flat = computeLooseSection({
+      id: 'rf', kind: 'roof',
+      inputs: { roofArea: 1000, rafterLF: 160, pitchRise: 0 },
+      waste: { sheathing: 0, rafter: 0, clips: 0 },
+    });
+    assert.equal(flat.pitchFactor, 1);
+    assert.equal(flat.slopedRoofArea, 1000);
+    assert.equal(flat.calcRows.find((r) => r.key === 'sheathing').qtyFinal, Math.ceil(1000 / 32));
+    assert.equal(flat.calcRows.find((r) => r.key === 'sheathing').hint, undefined);
+    assert.equal(flat.calcRows.find((r) => r.key === 'rafter').qtyFinal, 10);
+    // no optional rows when inputs are 0 and nothing picked
+    for (const k of ['hipValley', 'ceilingJoist', 'subfascia', 'fascia', 'soffit', 'overhang']) {
+      assert.ok(!flat.calcRows.some((r) => r.key === k), `${k} omitted when unused`);
+    }
+
+    const pitched = computeLooseSection({
+      id: 'rf', kind: 'roof',
+      inputs: { roofArea: 1000, rafterLF: 160, pitchRise: 6, pitchRafters: true },
+      waste: { sheathing: 0, rafter: 0, clips: 0 },
+    });
+    const pf = roofPitchFactor(6);
+    const expectedSloped = Math.round(1000 * pf * 100) / 100;
+    assert.equal(pitched.pitchFactor, pf);
+    assert.equal(pitched.slopedRoofArea, expectedSloped);
+    const sh = pitched.calcRows.find((r) => r.key === 'sheathing');
+    assert.equal(sh.qtyFinal, Math.ceil(expectedSloped / 32));
+    assert.match(sh.hint, /plan/);
+    assert.match(sh.hint, /sloped/);
+    const clips = pitched.calcRows.find((r) => r.key === 'clips');
+    assert.equal(clips.qtyFinal, Math.ceil((sh.qtyFinal * 3) / 250));
+    const rafter = pitched.calcRows.find((r) => r.key === 'rafter');
+    assert.equal(rafter.qtyFinal, Math.ceil((160 * pf) / 16));
+    assert.match(rafter.hint, /6:12/);
+
+    // pitchRafters false keeps rafterLF unscaled
+    const unscaledRafter = computeLooseSection({
+      id: 'rf', kind: 'roof',
+      inputs: { roofArea: 1000, rafterLF: 160, pitchRise: 6, pitchRafters: false },
+      waste: { rafter: 0 },
+    });
+    assert.equal(unscaledRafter.calcRows.find((r) => r.key === 'rafter').qtyFinal, 10);
+    assert.equal(unscaledRafter.calcRows.find((r) => r.key === 'rafter').hint, undefined);
+  });
+
+  test('optional roof framing rows appear when LF > 0 or item selected', () => {
+    const r = computeLooseSection({
+      id: 'rf', kind: 'roof',
+      inputs: { hipValleyLF: 40, ceilingJoistLF: 160, subfasciaLF: 80, fasciaLF: 80, soffitLF: 80 },
+      sel: {
+        hipValley: pick('LVL', '1-3/4x18"'),
+        overhang: pick('SPF#2', `2x4"-16'`), // selected with 0 LF still shows up
+      },
+      waste: { hipValley: 0, ceilingJoist: 0, subfascia: 0, fascia: 0, soffit: 10, overhang: 0 },
+    });
+    const byKey = Object.fromEntries(r.calcRows.map((x) => [x.key, x]));
+    assert.equal(byKey.hipValley.unit, 'lf');
+    assert.equal(byKey.hipValley.qtyFinal, 40);
+    assert.equal(byKey.ceilingJoist.qtyFinal, 10); // 160 / 16
+    assert.equal(byKey.subfascia.qtyFinal, 5);     // 80 / 16
+    assert.equal(byKey.fascia.qtyFinal, 5);        // 80 / 16
+    assert.equal(byKey.soffit.qtyFinal, 11);       // 80 / 8 = 10 + 10% = 11
+    assert.equal(byKey.overhang.qtyFinal, 0);
+  });
+
+  test('permanent truss bracing row computes from area or explicit LF', () => {
+    const fromArea = computeBracing({ inputs: { buildingAreaSqFt: 2000 } });
+    const rowA = fromArea.baseRows.find((r) => r.key === 'permanentTrusses');
+    assert.equal(rowA.qtyRaw, Math.ceil(300 / 16)); // 2000 * 0.15 = 300 LF / 16' = 19
+    assert.equal(rowA.wastePct, 10);
+    assert.equal(rowA.qtyFinal, Math.ceil(19 * 1.1));
+    assert.match(rowA.hint, /300 LF/);
+
+    const fromRoof = computeBracing({}, { roofAreaSqFt: 1000 });
+    const rowR = fromRoof.baseRows.find((r) => r.key === 'permanentTrusses');
+    assert.equal(rowR.qtyRaw, Math.ceil(150 / 16)); // 10 pcs
+
+    const fromTyped = computeBracing({ inputs: { buildingAreaSqFt: 2000, permanentBraceLF: 160 }, waste: { permanentTrusses: 0 } });
+    const rowT = fromTyped.baseRows.find((r) => r.key === 'permanentTrusses');
+    assert.equal(rowT.qtyRaw, 10);
+    assert.equal(rowT.qtyFinal, 10);
+    assert.match(rowT.hint, /160 LF typed/);
+
+    const empty = computeBracing({});
+    assert.equal(empty.baseRows.find((r) => r.key === 'permanentTrusses').qtyFinal, 0);
+  });
+});
+
+describe('connector fasteners and level hardware integration', () => {
+  test('computePanelNails counts connector fasteners from hardwarePieces', () => {
+    assert.equal(PANEL_NAIL_GROUPS.hardware, 'Structural connectors');
+    assert.equal(PANEL_NAIL_INPUTS.fastenersPerConnector, 12);
+
+    const r = computePanelNails({}, { hardwarePieces: 50 });
+    const row = r.baseRows.find((x) => x.key === 'connectorFasteners');
+    assert.equal(row.group, 'hardware');
+    assert.equal(row.count, 600);
+    assert.equal(row.qtyFinal, Math.ceil((600 / 500) * 1.15)); // 2 boxes
+    assert.match(row.hint, /50 connectors/);
+  });
+
+  test('computeLevel derives hardwarePieces from level.plan.hardwareTypes', () => {
+    const lvl = computeLevel({
+      id: 'L1',
+      exteriorSections: [],
+      interiorSections: [],
+      plan: {
+        ptPerFt: 12,
+        walls: [
+          { id: 'w1', x1: 0, y1: 0, x2: 120, y2: 0, kind: 'exterior', size: '2x6', posts: [{ atFt: 2 }, { atFt: 6 }] },
+        ],
+        beams: [{ id: 'b1' }, { id: 'b2' }],
+        hardwareTypes: [
+          { id: 'H1', name: 'Post base', rule: 'posts', perPost: 1 },   // 2
+          { id: 'H2', name: 'Beam hanger', rule: 'beams', perBeam: 2 }, // 4
+        ],
+      },
+    });
+    const row = lvl.panelNails.baseRows.find((x) => x.key === 'connectorFasteners');
+    assert.equal(lvl.panelNails.hardwarePieces, 6);
+    assert.equal(row.count, 6 * 12);
+    assert.equal(row.qtyFinal, 1);
+  });
+});
+
+describe('advanced shear walls', () => {
+  test('calcSheathing supports sides multiplier', () => {
+    assert.equal(calcSheathing({ lengthLF: 32, heightFt: 8 }).qtyRaw, 8);
+    assert.equal(calcSheathing({ lengthLF: 32, heightFt: 8, sides: 2 }).qtyRaw, 16);
+  });
+
+  test('double-sided shear wall doubles sheathing sheets, nails, and updates tag & stats', () => {
+    const s = computeWallSection({
+      lengthLF: 32, heightFt: 8, kind: 'shear', doubleSided: true, edgeNailIn: 4, waste: { sheathing: 0 },
+    }, 'interior');
+    const sh = s.baseRows.find((r) => r.key === 'sheathing');
+    assert.equal(sh.qtyFinal, 16);
+    assert.equal(sh.tag.text, '2× · 4/12');
+    assert.equal(s.nailing.sheathNails, 16 * 94);
+    assert.equal(s.stats.doubleSided, true);
+
+    // exterior wall ignores doubleSided
+    const ext = computeWallSection({
+      lengthLF: 32, heightFt: 8, doubleSided: true, waste: { sheathing: 0 },
+    }, 'exterior');
+    assert.equal(ext.baseRows.find((r) => r.key === 'sheathing').qtyFinal, 8);
+    assert.equal(ext.stats.doubleSided, false);
+  });
+
+  test('shear chordStuds add to studs, tag, plateStud nails, and stats', () => {
+    const s = computeWallSection({
+      lengthLF: 16, heightFt: 8, kind: 'shear', chordStuds: 4, waste: { studs: 0 },
+    }, 'interior');
+    const studs = s.baseRows.find((r) => r.key === 'studs');
+    assert.equal(studs.qtyFinal, 13 + 4);
+    assert.equal(studs.tag.text, '+4');
+    assert.equal(s.nailing.plateStudNails, (13 + 4) * 2 * 2);
+    assert.equal(s.stats.chordStuds, 4);
+
+    // combined with planJunctionStuds
+    const both = computeWallSection({
+      lengthLF: 16, heightFt: 8, kind: 'shear', planKey: 'interior|shear|2x6', planJunctionStuds: 3, chordStuds: 4, waste: { studs: 0 },
+    }, 'interior');
+    assert.equal(both.baseRows.find((r) => r.key === 'studs').qtyFinal, 13 + 7);
+    assert.equal(both.baseRows.find((r) => r.key === 'studs').tag.text, '+7');
+  });
+
+  test('new defaults exist for roof framing, permanent bracing, and connector fasteners', () => {
+    for (const k of ['hipValley', 'ceilingJoist', 'subfascia', 'fascia', 'soffit', 'overhang']) {
+      assert.ok(LOOSE_SECTION_DEFAULTS[k], `LOOSE_SECTION_DEFAULTS.${k}`);
+    }
+    assert.ok(BRACING_DEFAULTS.permanentTrusses);
+    assert.ok(PANEL_NAIL_DEFAULTS.connectorFasteners);
+  });
 });
