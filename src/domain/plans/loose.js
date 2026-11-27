@@ -27,6 +27,43 @@ export const BLOCKING_KINDS = [
 ];
 const BLOCKING_LABEL = Object.fromEntries(BLOCKING_KINDS.map((b) => [b.value, b.label]));
 
+export const FLOOR_SYSTEMS = [
+  { value: 'trusses', label: 'Floor trusses (supplier quote)' },
+  { value: 'ijoist', label: 'I-Joists (TJI / BCI)' },
+  { value: 'joist', label: 'Dimensional joists (2x8 / 2x10 / 2x12)' },
+  { value: 'none', label: 'None (concrete slab)' },
+];
+export const JOIST_SPACINGS = [12, 16, 19.2, 24];
+
+/**
+ * Floor framing takeoff for a level from its floor area and interior load-bearing
+ * walls. Floor trusses are never designed or calculated here (supplier quote on
+ * the Trusses page). I-Joists and dimensional joists compute LF (+10% for doubled
+ * joists at openings/parallel walls), transfer blocking over interior bearing/shear
+ * walls, joist hangers, and web stiffeners (I-Joists).
+ */
+export function floorFramingOf(plan, { floor } = {}) {
+  const system = plan?.floorSystem || 'trusses';
+  const spacingIn = n(plan?.joistSpacingIn) || 16;
+  const spanFt = Math.max(4, n(plan?.joistSpanFt) || 14);
+  if (system === 'none' || system === 'trusses' || !floor?.areaSqFt) {
+    return { system, spacingIn, spanFt, joistLF: 0, blockingLF: 0, hangers: 0, webStiffeners: 0 };
+  }
+  const joistLF = Math.round(floor.areaSqFt * (12 / spacingIn) * 1.1);
+  const k = n(plan?.ptPerFt);
+  let intLoadLF = 0;
+  for (const w of plan?.walls || []) {
+    const L = wallLengthFt(w, k);
+    for (const p of wallParts(w)) {
+      if (p.kind === 'bearing' || p.kind === 'shear') intLoadLF += L;
+    }
+  }
+  const blockingLF = Math.round(intLoadLF);
+  const hangers = joistLF > 0 ? Math.ceil((joistLF / spanFt) * 2) : 0;
+  const webStiffeners = system === 'ijoist' ? hangers : 0;
+  return { system, spacingIn, spanFt, joistLF, blockingLF, hangers, webStiffeners };
+}
+
 /**
  * Floor of a level from its exterior walls (raster, so small gaps and angled
  * walls are fine): area to the outside face of the walls, perimeter, and the
@@ -202,7 +239,7 @@ const row = (prev, base) => ({ ...(prev || { item: null, notes: '', inputs: {} }
 
 // level-template rows a plan row can take over (keeping the item picked), when
 // the user has not typed a quantity in them
-const TAKEOVER = { subfloor: 'Subfloor', glue: 'Glue', rim: 'Rimboard' };
+const TAKEOVER = { subfloor: 'Subfloor', glue: 'Glue', rim: 'Rimboard', ijoist: 'I-Joist', joist: 'Joist' };
 const hasQty = (r) => n(r.inputs?.area) > 0 || n(r.inputs?.lengthLF) > 0 || n(r.qty) > 0;
 const isLevel = (s) => s && (s.kind === 'level' || (!s.kind && /level/i.test(String(s.name || ''))));
 
@@ -243,7 +280,8 @@ export function withPlanLoose(est) {
     const rows = [];
     if (plan?.walls?.length && plan.linked) {
       const bandFt = plan.frtBand ? n(plan.frtBandFt) || 4 : 0;
-      const fl = floorOf(plan, { bandFt });
+      const floorSys = plan.floorSystem || 'trusses';
+      const fl = floorSys === 'none' ? null : floorOf(plan, { bandFt });
       if (fl) {
         const sub = (key, type, area, fam) => {
           const p0 = took(key);
@@ -259,6 +297,59 @@ export function withPlanLoose(est) {
         rows.push(row(g, { id: g?.id || `pl-${level.id}-glue`, type: 'Glue', planLoose: 'glue', wastePct: g?.wastePct ?? 5, defaultFamily: 'Construction Adhesive', defaultSize: '28oz-ea', defaultVendor: 'Gillies & Prittie Warehouse', plan: 'from the subfloor sheets' }));
         const rb = took('rim');
         rows.push(row(rb, { id: rb?.id || `pl-${level.id}-rim`, type: 'Rimboard', planLoose: 'rim', wastePct: rb?.wastePct ?? 5, inputs: { lengthLF: fl.perimeterLF }, defaultFamily: 'SPF#2', defaultSize: `2x4"-16'`, defaultVendor: 'Gillies & Prittie Warehouse', plan: `${fl.perimeterLF} LF perimeter` }));
+
+        // Floor framing members: I-Joists or dimensional joists (floor trusses are quoted by the supplier on Trusses)
+        const fr = floorFramingOf(plan, { floor: fl });
+        if ((fr.system === 'ijoist' || fr.system === 'joist') && fr.joistLF > 0) {
+          const isI = fr.system === 'ijoist';
+          const jKey = isI ? 'ijoist' : 'joist';
+          const jPrev = took(jKey);
+          rows.push(row(jPrev, {
+            id: jPrev?.id || `pl-${level.id}-${jKey}`,
+            type: isI ? 'I-Joist' : 'Joist',
+            planLoose: jKey,
+            wastePct: jPrev?.wastePct ?? 5,
+            inputs: { lengthLF: fr.joistLF },
+            defaultFamily: isI ? 'I-Joist' : 'SPF#2',
+            ...(isI ? {} : { defaultSize: `2x10"-16'` }),
+            plan: `${fl.areaSqFt} sq ft @ ${fr.spacingIn}" o.c. (+10% doubled at openings/walls)`,
+          }));
+          if (fr.blockingLF > 0) {
+            const bPrev = prevRows.get('floorBlocking');
+            rows.push(row(bPrev, {
+              id: bPrev?.id || `pl-${level.id}-floorBlocking`,
+              type: isI ? 'Blocking · transfer / squash' : 'Blocking · floor',
+              planLoose: 'floorBlocking',
+              wastePct: bPrev?.wastePct ?? 10,
+              inputs: { lengthLF: fr.blockingLF },
+              defaultFamily: 'SPF#2',
+              defaultSize: `2x10"-16'`,
+              plan: `${fr.blockingLF} LF over interior bearing & shear walls`,
+            }));
+          }
+          if (fr.hangers > 0) {
+            const hPrev = prevRows.get('joistHangers');
+            rows.push(row(hPrev, {
+              id: hPrev?.id || `pl-${level.id}-joistHangers`,
+              type: 'Hangers - Joist',
+              planLoose: 'joistHangers',
+              qty: fr.hangers,
+              wastePct: hPrev?.wastePct ?? 0,
+              plan: `est. ${fr.hangers} hangers (~${fr.spanFt}' avg span, 2 per joist)`,
+            }));
+          }
+          if (fr.webStiffeners > 0) {
+            const wPrev = prevRows.get('webStiffeners');
+            rows.push(row(wPrev, {
+              id: wPrev?.id || `pl-${level.id}-webStiffeners`,
+              type: 'Web stiffeners',
+              planLoose: 'webStiffeners',
+              qty: fr.webStiffeners,
+              wastePct: wPrev?.wastePct ?? 0,
+              plan: `est. ${fr.webStiffeners} at I-joist bearings (~${fr.spanFt}' avg span)`,
+            }));
+          }
+        }
       }
       const bl = blockingOf(plan);
       for (const b of BLOCKING_KINDS) {

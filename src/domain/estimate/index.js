@@ -822,25 +822,31 @@ export function computeLooseSection(section = {}, foundation = null) {
     const longStringer = st.ready && st.flights.some((f) => f.stringerFt > 12);
     const LVL_STRINGER = { family: 'LVL', size: '1-3/4x11-7/8"', vendor: 'BlueLinx' };
     if (st.ready) {
+      const mult = st.count || 1;
+      const multTag = mult > 1 ? ` × ${mult} stairs` : '';
       const wFt = n(st.inputs.widthIn) / 12;
       const fl = st.flights;
-      const stringerHint = `${st.stringers} stringers (${st.perFlight} per flight), ${fl.map((f) => `${f.stringerFt} ft`).join(' + ')} long${longStringer ? '; over 12 ft: LVL or LSL' : ''}`;
+      const stringerHint = `${st.stringers * mult} stringers (${st.perFlight} per flight${multTag}), ${fl.map((f) => `${f.stringerFt} ft`).join(' + ')} long${longStringer ? '; over 12 ft: LVL or LSL' : ''}`;
       const stringerRow = byLF('stringers')
-        ? lumberRow('stringers', 'Stringers', 1, fl.reduce((a, f) => a + st.perFlight * f.stringerFt, 0), 0, { hint: stringerHint })
-        : count('stringers', 'Stringers', fl.reduce((a, f) => a + st.perFlight * boards('stringers', 1, f.stringerFt), 0), 0, { hint: stringerHint });
+        ? lumberRow('stringers', 'Stringers', 1, fl.reduce((a, f) => a + st.perFlight * f.stringerFt, 0) * mult, 0, { hint: stringerHint })
+        : count('stringers', 'Stringers', fl.reduce((a, f) => a + st.perFlight * boards('stringers', 1, f.stringerFt), 0) * mult, 0, { hint: stringerHint });
       calcRows = [
         { ...stringerRow, ...(longStringer ? { defaults: LVL_STRINGER } : {}) },
-        lumberRow('treads', 'Treads', st.treads, wFt, 5, { hint: `${st.treads} treads of ${st.tread}" × ${n(st.inputs.widthIn)}" wide` }),
-        lumberRow('risers', 'Risers', st.risers, wFt, 5, { hint: `${st.risers} risers of ${inches(st.riserIn)}` }),
-        count('stringerTies', 'Stringer hangers', st.stringers, 0, { hint: `${st.stringers} stringers, one at the top of each` }),
-        ...(st.landing ? [
-          lumberRow('landingJoists', 'Landing joists', st.landing.joists, st.landing.joistFt, 5, { hint: `${st.landing.joists} joists of ${st.landing.joistFt} ft, ${n(st.inputs.joistSpacingIn) || 16}" o.c.` }),
-          runRow('landingRim', 'Landing rim', st.landing.rimLF, 5, 16, { hint: `${st.landing.rimLF} LF` }),
-          runRow('landingLedger', 'Landing ledger', st.landing.ledgerLF, 5, 16, { hint: `${st.landing.ledgerLF} LF` }),
-          count('landingHangers', 'Landing joist hangers', st.landing.hangers, 0, { hint: `${st.landing.joists} joists, both ends` }),
-          mk('landingSubfloor', 'Landing subfloor', calcSubfloor({ areaSqFt: st.landing.areaSqFt, wastePct: w('landingSubfloor', 10), item: getItem(sel.landingSubfloor) }), 10, { hint: `${st.landing.areaSqFt} sq ft` }),
+        lumberRow('treads', 'Treads', st.treads * mult, wFt, 5, { hint: `${st.treads * mult} treads of ${st.tread}" × ${n(st.inputs.widthIn)}" wide${multTag}` }),
+        lumberRow('risers', 'Risers', st.risers * mult, wFt, 5, { hint: `${st.risers * mult} risers of ${inches(st.riserIn)}${multTag}` }),
+        count('stringerTies', 'Stringer hangers', st.stringers * mult, 0, { hint: `${st.stringers * mult} stringers, one at the top of each${multTag}` }),
+        runRow('kickerLedger', 'Kicker & top ledger', st.kickerLedgerLF * mult, 5, 16, { hint: `bottom kicker + top ledger per flight (${Math.round(st.kickerLedgerLF * mult * 10) / 10} LF${multTag})` }),
+        ...(st.skirtLF > 0 ? [
+          runRow('skirtBoards', 'Skirt boards', st.skirtLF * mult, 5, 16, { hint: `${st.skirtSides} side${st.skirtSides === 1 ? '' : 's'} along stringers (${Math.round(st.skirtLF * mult * 10) / 10} LF${multTag})` }),
         ] : []),
-        runRow('railBlocking', 'Handrail blocking', st.railBlockingLF, 10, 8, { hint: `one row along ${n(st.inputs.railSides)} side${n(st.inputs.railSides) === 1 ? '' : 's'}, ${st.railBlockingLF} LF` }),
+        ...(st.landing ? [
+          lumberRow('landingJoists', 'Landing joists', st.landing.joists * mult, st.landing.joistFt, 5, { hint: `${st.landing.joists * mult} joists of ${st.landing.joistFt} ft, ${n(st.inputs.joistSpacingIn) || 16}" o.c.${multTag}` }),
+          runRow('landingRim', 'Landing rim', st.landing.rimLF * mult, 5, 16, { hint: `${Math.round(st.landing.rimLF * mult * 10) / 10} LF${multTag}` }),
+          runRow('landingLedger', 'Landing ledger', st.landing.ledgerLF * mult, 5, 16, { hint: `${Math.round(st.landing.ledgerLF * mult * 10) / 10} LF${multTag}` }),
+          count('landingHangers', 'Landing joist hangers', st.landing.hangers * mult, 0, { hint: `${st.landing.joists * mult} joists, both ends${multTag}` }),
+          mk('landingSubfloor', 'Landing subfloor', calcSubfloor({ areaSqFt: st.landing.areaSqFt * mult, wastePct: w('landingSubfloor', 10), item: getItem(sel.landingSubfloor) }), 10, { hint: `${Math.round(st.landing.areaSqFt * mult * 10) / 10} sq ft${multTag}` }),
+        ] : []),
+        runRow('railBlocking', 'Handrail blocking', st.railBlockingLF * mult, 10, 8, { hint: `one row along ${n(st.inputs.railSides)} side${n(st.inputs.railSides) === 1 ? '' : 's'}, ${Math.round(st.railBlockingLF * mult * 10) / 10} LF${multTag}` }),
       ];
     }
   }

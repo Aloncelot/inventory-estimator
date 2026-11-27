@@ -72,6 +72,19 @@ export default function LooseMaterialView({ active = true }) {
     return roofIdx === -1 ? [...list, sec] : [...list.slice(0, roofIdx), sec, ...list.slice(roofIdx)];
   });
 
+  // duplicate a staircase (keeps its geometry and picked materials as a starting point)
+  const duplicateStairs = (src) => updateList((list) => {
+    const count = list.filter((s) => sectionKind(s) === 'stairs').length;
+    const copy = {
+      ...JSON.parse(JSON.stringify(src)),
+      id: `loose-stairs-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      name: `Stairs ${count + 1}`,
+      collapsed: false,
+    };
+    const idx = list.findIndex((s) => s.id === src.id);
+    return idx < 0 ? [...list, copy] : [...list.slice(0, idx + 1), copy, ...list.slice(idx + 1)];
+  });
+
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return;
     updateList((list) => {
@@ -125,6 +138,7 @@ export default function LooseMaterialView({ active = true }) {
                 if (ok) updateList((list) => list.filter((s) => s.id !== section.id));
               }}
               onToggleHidden={() => toggleHidden(section.id)}
+              onDuplicate={sectionKind(section) === 'stairs' ? () => duplicateStairs(section) : undefined}
               foundationData={foundationSection}
             />
           ))}
@@ -135,6 +149,7 @@ export default function LooseMaterialView({ active = true }) {
         <span>Levels hold joists, beams, subfloor and strapping for each floor.</span>
         <div className="ew-inline">
           <AddRowButton onClick={addLevelSection}>Add level</AddRowButton>
+          <AddRowButton onClick={addStairs} title="Add another staircase block">Add stairs</AddRowButton>
           <AddRowButton onClick={addSection}>Add section</AddRowButton>
         </div>
       </div>

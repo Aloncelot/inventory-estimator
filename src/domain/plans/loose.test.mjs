@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { floorOf, sillOf, blockingOf, withPlanLoose } from './loose.js';
+import { floorOf, floorFramingOf, sillOf, blockingOf, withPlanLoose } from './loose.js';
 
 // a 20' × 10' box (centre lines) of 6" exterior walls at 12 pt/ft
 const box = (extra = {}) => ({
@@ -83,4 +83,39 @@ test('plan rows go into the level section, take over its empty template rows, an
   // an extra row: quantity from its calculation
   const c = computeLooseSection({ rows: [{ id: 'x', type: 'Extra', inputs: { formula: '12*16+4' }, wastePct: 0 }] });
   assert.equal(c.manualRows[0].qtyRaw, 196);
+});
+
+test('floor framing system: trusses (no calc), i-joists, dimensional joists, and none (slab)', async () => {
+  const { findFloorSystem } = await import('./structural.js');
+  // structural callout detection
+  const det = findFloorSystem([
+    { str: 'ROOF TRUSS (COMMON)' },
+    { str: '11-7/8" TJI 110 @ 16" OC' },
+    { str: '11-7/8" TJI 110 @ 12" OC' },
+  ]);
+  assert.equal(det.suggested, 'ijoist');
+  assert.equal(det.spacingIn, 16);
+  assert.equal(det.callouts.length, 2, 'roof truss ignored');
+
+  // I-Joists generate I-Joist + transfer blocking + hangers + web stiffeners
+  const planIJ = box({ floorSystem: 'ijoist', joistSpacingIn: 16, joistSpanFt: 12 });
+  const fl = floorOf(planIJ);
+  const fr = floorFramingOf(planIJ, { floor: fl });
+  assert.ok(fr.joistLF > 0);
+  assert.equal(fr.blockingLF, 10, 'interior bearing wall LF');
+  assert.ok(fr.hangers > 0);
+  assert.equal(fr.webStiffeners, fr.hangers);
+  const estIJ = withPlanLoose({ levels: [{ id: 'L2', name: 'Level 2', plan: planIJ }], looseList: [] });
+  const typesIJ = estIJ.looseList[0].rows.map((r) => r.type);
+  assert.deepEqual(typesIJ, ['Subfloor', 'Glue', 'Rimboard', 'I-Joist', 'Blocking · transfer / squash', 'Hangers - Joist', 'Web stiffeners']);
+
+  // Dimensional joists generate Joist + floor blocking + hangers (no web stiffeners)
+  const planJ = box({ floorSystem: 'joist', joistSpacingIn: 16, joistSpanFt: 12 });
+  const estJ = withPlanLoose({ levels: [{ id: 'L2', name: 'Level 2', plan: planJ }], looseList: [] });
+  assert.deepEqual(estJ.looseList[0].rows.map((r) => r.type), ['Subfloor', 'Glue', 'Rimboard', 'Joist', 'Blocking · floor', 'Hangers - Joist']);
+
+  // None (concrete slab): skips subfloor, glue, rimboard, joists
+  const planNone = box({ floorSystem: 'none' });
+  const estNone = withPlanLoose({ levels: [{ id: 'L1', name: 'Level 1', plan: planNone }], looseList: [] });
+  assert.equal(estNone.looseList.length, 0);
 });

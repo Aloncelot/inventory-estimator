@@ -93,3 +93,22 @@ test('labor: a U stair with its landing is about 3 crew hours', async () => {
   const crewHours = stairs.reduce((a, t) => a + t.workerHours, 0) / 5;
   assert.ok(crewHours > 2.7 && crewHours < 3.3, String(crewHours));
 });
+
+test('identical staircase multiplier, custom 1st flight risers, kicker/ledger and skirt boards', async () => {
+  const { computeLooseSection } = await import('./index.js');
+  const s = computeStairs({ floorToFloorIn: 109, widthIn: 36, type: 'l', count: 3, flight1Risers: 10, landingLenFt: 4, landingWidthFt: 3, skirtSides: 2 });
+  assert.deepEqual(s.flights.map((f) => f.risers), [10, 5]);
+  assert.equal(s.count, 3);
+  assert.ok(s.kickerLedgerLF > 0);
+  assert.ok(s.skirtLF > 0);
+  const c = computeLooseSection({
+    kind: 'stairs',
+    inputs: { floorToFloorIn: 109, widthIn: 36, type: 'l', count: 3, flight1Risers: 10, landingLenFt: 4, landingWidthFt: 3, skirtSides: 2 },
+    sel: {},
+  });
+  const row = (k) => c.calcRows.find((r) => r.key === k);
+  assert.equal(row('stringers').qtyRaw, 18, '6 stringers × 3 identical stairs');
+  assert.equal(row('stringerTies').qtyRaw, 18);
+  assert.ok(row('kickerLedger').qtyRaw > 0);
+  assert.ok(row('skirtBoards').qtyRaw > 0);
+});

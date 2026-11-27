@@ -279,6 +279,39 @@ function labelPosts(posts, texts, ptPerFt) {
 }
 
 /**
+ * Detect floor framing system callouts on the structural sheet:
+ * I-Joists (TJI, BCI, LPI, PRI), dimensional joists (2x8/2x10/2x12 @ o.c.),
+ * or floor trusses (open-web / floor truss, ignoring roof trusses).
+ */
+export function findFloorSystem(texts) {
+  const callouts = [];
+  const seen = new Set();
+  const counts = { ijoist: 0, joist: 0, trusses: 0 };
+  const spacings = [];
+  for (const t of texts || []) {
+    const s = String(t.str || '').trim();
+    if (!s || s.length < 5 || /\broof\s+truss/i.test(s)) continue;
+    let kind = null;
+    if (/\b(tji|bci|lpi|pri|i-?joists?)\b/i.test(s)) kind = 'ijoist';
+    else if (/\b(floor\s+truss|open[\s-]web(?:\s+floor)?\s+truss)/i.test(s)) kind = 'trusses';
+    else if (/\b2x(8|10|12)\b.*@\s*(12|16|19\.2|24)\s*["”']?\s*o\.?c\.?/i.test(s)) kind = 'joist';
+    if (!kind) continue;
+    counts[kind] += 1;
+    const sp = /@\s*(12|16|19\.2|24)\s*["”']?\s*o\.?c\.?/i.exec(s);
+    if (sp) spacings.push(Number(sp[1]));
+    const norm = s.replace(/\s+/g, ' ');
+    if (!seen.has(norm) && callouts.length < 6) {
+      seen.add(norm);
+      callouts.push(norm);
+    }
+  }
+  const ranked = Object.entries(counts).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
+  const suggested = ranked[0]?.[0] || null;
+  const spacingIn = spacings.length ? spacings[0] : null;
+  return { suggested, spacingIn, callouts };
+}
+
+/**
  * Everything the structural sheet shows, in the architectural sheet's points.
  * @param {object} structPage extractPage() of the structural sheet
  * @param {{ptPerFt:number}} opts structPtPerFt = its scale; align = alignSheets() result
@@ -291,6 +324,7 @@ export function readStructural(structPage, { ptPerFt, align, walls = [] }) {
   const shear = findShearTags(structPage.texts, k);
   const callouts = findCallouts(structPage.texts);
   const beams = findBeams(structPage, k);
+  const floorSystem = findFloorSystem(structPage.texts);
   const s = align?.s || 1, dx = align?.dx || 0, dy = align?.dy || 0;
   const map = (o) => ({ ...o, x: r2(s * o.x + dx), y: r2(s * o.y + dy) });
   return {
@@ -308,6 +342,7 @@ export function readStructural(structPage, { ptPerFt, align, walls = [] }) {
       const a = map({ x: w.x1, y: w.y1 }), b = map({ x: w.x2, y: w.y2 });
       return { x1: a.x, y1: a.y, x2: b.x, y2: b.y, thickIn: r2(n(w.thickIn)) };
     }),
+    floorSystem,
     labels,
   };
 }

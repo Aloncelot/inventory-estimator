@@ -5,7 +5,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EyeOff, RotateCcw, ScanLine, Plus } from 'lucide-react';
+import { EyeOff, RotateCcw, ScanLine, Plus, Copy } from 'lucide-react';
 import { tryEvaluate } from '@/domain/lib/calc';
 import ItemPicker from '@/components/ItemPicker';
 import EditableTitle from '@/components/ui/EditableTitle';
@@ -78,7 +78,7 @@ function ExtraLabel({ value, onCommit }) {
   );
 }
 
-export default function LooseMaterialSection({ section, calc: calcProp, onUpdate, onRemove, onToggleHidden, dragHandleProps, foundationData }) {
+export default function LooseMaterialSection({ section, calc: calcProp, onUpdate, onRemove, onDuplicate, onToggleHidden, dragHandleProps, foundationData }) {
   const { name, collapsed = false, inputs = {}, sel = {}, notes = {} } = section;
   const calc = calcProp || computeLooseSection(section, foundationData);
   const { kind, calcRows, manualRows, subtotal } = calc;
@@ -213,6 +213,7 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
     stairBlock = (
       <div className="stair-in">
         <div className="stair-in__row">
+          {sf('count', 'Qty (identical)', 48)}
           {sf('floorToFloorIn', 'Floor to floor (in)', 64, '0.125')}
           {sf('widthIn', 'Width (in)', 52)}
           <Fld label="Type" w={150}>
@@ -220,15 +221,18 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
               {STAIR_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
           </Fld>
+          {st.hasLanding ? sf('flight1Risers', '1st flight risers', 52) : null}
           {sf('maxRiserIn', 'Max riser (in)', 52, '0.125')}
           {sf('treadIn', 'Tread (in)', 52, '0.25')}
           {st.hasLanding ? <>{sf('landingLenFt', 'Landing length (ft)', 52, '0.25')}{sf('landingWidthFt', 'Landing width (ft)', 52, '0.25')}{sf('joistSpacingIn', 'Joists o.c. (in)', 48)}</> : null}
           {sf('railSides', 'Railed sides', 40)}
+          {sf('skirtSides', 'Skirt sides', 40)}
         </div>
         {st.ready ? (
           <p className="stair-in__sum">
-            {st.risers} risers of {inches(st.riserIn)} · {st.treads} treads of {inches(st.tread)}{st.hasLanding ? ' + landing' : ''} · run {st.runFt} ft
-            {' · '}{st.stringers} stringers ({st.flights.map((f) => `${f.stringerFt} ft`).join(', ')})
+            {st.count > 1 ? <strong>{st.count}× identical · </strong> : null}
+            {st.risers} risers of {inches(st.riserIn)} · {st.treads} treads of {inches(st.tread)}{st.hasLanding ? ` + landing (${st.flights.map((f) => f.risers).join(' + ')} risers)` : ''} · run {st.runFt} ft
+            {' · '}{st.stringers * st.count} stringers ({st.flights.map((f) => `${f.stringerFt} ft`).join(', ')})
           </p>
         ) : null}
         {st.warnings.map((w) => <p key={w} className="stair-in__warn">{w}</p>)}
@@ -249,6 +253,11 @@ export default function LooseMaterialSection({ section, calc: calcProp, onUpdate
       subtotal={subtotal}
       actions={(
         <>
+          {onDuplicate ? (
+            <button type="button" className="row-action-btn ro-hide" onClick={onDuplicate} title="Duplicate this stairs block (keeps geometry and materials)" aria-label="Duplicate stairs block">
+              <Copy size={14} />
+            </button>
+          ) : null}
           {onToggleHidden ? (
             <button type="button" className="row-action-btn" onClick={onToggleHidden} title="Hide section (excluded from totals)" aria-label="Hide section">
               <EyeOff size={14} />

@@ -11,7 +11,7 @@ const n = (v) => Number(v) || 0;
 const r2 = (v) => Math.round(v * 100) / 100;
 
 export const STAIR_TYPES = [['straight', 'Straight'], ['l', 'L with landing'], ['u', 'U with landing']];
-export const STAIR_DEFAULTS = { floorToFloorIn: 0, widthIn: 36, type: 'straight', maxRiserIn: 7.75, treadIn: 10, landingLenFt: 0, landingWidthFt: 0, joistSpacingIn: 16, railSides: 1 };
+export const STAIR_DEFAULTS = { floorToFloorIn: 0, widthIn: 36, type: 'straight', count: 1, flight1Risers: '', maxRiserIn: 7.75, treadIn: 10, landingLenFt: 0, landingWidthFt: 0, joistSpacingIn: 16, railSides: 1, skirtSides: 0 };
 export const IRC_MAX_RISER = 7.75;
 export const IRC_MIN_TREAD = 10;
 export const IRC_MIN_WIDTH = 36;
@@ -25,14 +25,17 @@ export function computeStairs(raw = {}) {
   const maxRiser = n(i.maxRiserIn) || IRC_MAX_RISER;
   const tread = n(i.treadIn) || IRC_MIN_TREAD;
   const width = n(i.widthIn) || 36;
+  const count = Math.max(1, Math.round(n(i.count) || 1));
   const hasLanding = i.type === 'l' || i.type === 'u';
   const warnings = [];
-  if (!f2f) return { ready: false, inputs: i, hasLanding, flights: [], risers: 0, treads: 0, stringers: 0, warnings: ['Type the floor-to-floor height.'] };
+  if (!f2f) return { ready: false, inputs: i, count, hasLanding, flights: [], risers: 0, treads: 0, stringers: 0, kickerLedgerLF: 0, skirtLF: 0, warnings: ['Type the floor-to-floor height.'] };
 
   const risers = Math.ceil(f2f / maxRiser - 1e-9);
   const riserIn = f2f / risers;
-  // with a landing the risers split in two flights; the landing works as one tread
-  const counts = hasLanding ? [Math.ceil(risers / 2), Math.floor(risers / 2)] : [risers];
+  // with a landing the risers split in two flights (custom 1st flight risers if typed, else half & half)
+  const customF1 = hasLanding && i.flight1Risers !== '' ? Math.round(n(i.flight1Risers)) : 0;
+  const f1 = customF1 > 0 && customF1 < risers ? customF1 : Math.ceil(risers / 2);
+  const counts = hasLanding ? [f1, risers - f1] : [risers];
   const flights = counts.map((r) => {
     const run = Math.max(0, r - 1) * tread;          // horizontal run of the flight, in
     const rise = r * riserIn;
@@ -69,9 +72,14 @@ export function computeStairs(raw = {}) {
   }
   // one row of blocking in the wall for the handrail, along each railed side
   const railBlockingLF = r2(runFt * Math.max(0, Math.round(n(i.railSides))));
+  // bottom kicker + top ledger at each flight
+  const kickerLedgerLF = r2((width / 12) * 2 * flights.length);
+  // optional skirt / housing boards along the stringers (0, 1, or 2 sides)
+  const skirtSides = Math.max(0, Math.min(2, Math.round(n(i.skirtSides))));
+  const skirtLF = skirtSides > 0 ? r2(flights.reduce((a, f) => a + f.stringerFt, 0) * skirtSides) : 0;
   return {
-    ready: true, inputs: i, hasLanding, risers, riserIn: r2(riserIn), tread, flights, stringers, perFlight, treads,
-    runFt, landing, railBlockingLF, warnings,
+    ready: true, inputs: i, count, hasLanding, risers, riserIn: r2(riserIn), tread, flights, stringers, perFlight, treads,
+    runFt, landing, railBlockingLF, kickerLedgerLF, skirtSides, skirtLF, warnings,
   };
 }
 
