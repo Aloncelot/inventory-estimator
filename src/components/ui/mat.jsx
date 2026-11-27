@@ -332,7 +332,7 @@ export function ViewImageLink({ images = [], className = '' }) {
 export const MatRow = memo(function MatRow({
   label, labelTitle, material, inputs, piece, tag, warn,
   qty, waste, onWasteCommit, final, unit, unitPrice, subtotal, priceDate, below,
-  note = emptyNote, onNoteChange,
+  note = emptyNote, onNoteChange, hideCommentPreview = false,
   onRemove, extraActions, handleProps, rowRef, rowStyle, isDragging,
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
@@ -381,7 +381,7 @@ export const MatRow = memo(function MatRow({
               className={`row-action-btn${hasNote ? ' is-on' : ''}`}
               onClick={() => setNoteOpen((o) => !o)}
               aria-expanded={noteOpen}
-              title={noteOpen ? 'Close notes' : hasNote ? 'Edit notes' : 'Add plan label / note'}
+              title={noteOpen ? 'Close notes' : n.comment ? n.comment : hasNote ? 'Edit notes' : 'Add plan label / note'}
             >
               <StickyNote size={14} />
             </button>
@@ -393,7 +393,7 @@ export const MatRow = memo(function MatRow({
         </div>
       </div>
       {below || null}
-      {!noteOpen && n.comment ? <div className="note-preview" title={n.comment}>{n.comment}</div> : null}
+      {!noteOpen && !hideCommentPreview && n.comment ? <div className="note-preview" title={n.comment}>{n.comment}</div> : null}
       {noteOpen && onNoteChange ? (
         <NoteEditor note={n} onChange={onNoteChange} onClose={() => setNoteOpen(false)} />
       ) : null}

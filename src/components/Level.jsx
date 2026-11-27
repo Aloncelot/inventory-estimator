@@ -63,8 +63,8 @@ export default function Level({ levelData, calc: calcProp, isGround, onLevelChan
 
       <Collapse open={open}>
         <div className="lvl-body">
-          <ExteriorWalls sectionsData={exteriorSections} calcs={calc.exterior} groundLevel={groundLevel} onSectionsChange={handleExteriorChange} title="Exterior walls" />
-          <InteriorWalls sectionsData={interiorSections} calcs={calc.interior} groundLevel={groundLevel} onSectionsChange={handleInteriorChange} title="Interior walls" />
+          <ExteriorWalls sectionsData={exteriorSections} calcs={calc.exterior} groundLevel={groundLevel} planPostTypes={levelData.plan?.postTypes} onSectionsChange={handleExteriorChange} title="Exterior walls" />
+          <InteriorWalls sectionsData={interiorSections} calcs={calc.interior} groundLevel={groundLevel} planPostTypes={levelData.plan?.postTypes} onSectionsChange={handleInteriorChange} title="Interior walls" />
 
           <div className="cat">
             <div className="cat-head">

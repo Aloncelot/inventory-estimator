@@ -423,10 +423,14 @@ export function withPlanPosts(sec, plan) {
     const c = count.get(t.id);
     if (!c) continue;
     const per = t.kind === 'solid' ? 1 : Math.max(1, Number(t.plies) || 3);
-    const prev = mine.get(t.id);
+    const { planNote: _pNote, planPostKind: _pKind, planPostWidthIn: _pW, ...prev0 } = mine.get(t.id) || {};
+    const prev = mine.get(t.id) ? prev0 : null;
     rows.push({
       ...(prev || { id: `plan-post-${t.id}`, type: 'Post', wastePct: 5, item: null }),
       planPost: t.id,
+      planPostKind: t.kind || 'builtup',
+      ...(t.kind === 'solid' && t.widthIn ? { planPostWidthIn: Number(t.widthIn) } : {}),
+      ...(t.notes ? { planNote: t.notes } : {}),
       inputs: { ...(prev?.inputs || {}), piecesPerPost: per, numPosts: c, pieces: c * per },
     });
   }

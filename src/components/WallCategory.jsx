@@ -11,7 +11,7 @@ import { AddRowButton, fmtMoney, SortableList, SortableBlock, reorderById } from
 import { ArrowDownWideNarrow } from 'lucide-react';
 import { sortSections } from '@/domain/plans/sync';
 
-export default function WallCategory({ variant = 'exterior', sectionsData, calcs = [], groundLevel = false, onSectionsChange, title }) {
+export default function WallCategory({ variant = 'exterior', sectionsData, calcs = [], groundLevel = false, planPostTypes, onSectionsChange, title }) {
   const { blankSection } = useProject();
   const sections = useMemo(() => (Array.isArray(sectionsData) ? sectionsData : []), [sectionsData]);
 
@@ -66,6 +66,7 @@ export default function WallCategory({ variant = 'exterior', sectionsData, calcs
                     sectionData={sec}
                     calc={calcById[sec.id]}
                     groundLevel={groundLevel}
+                    planPostTypes={planPostTypes}
                     title={sec.name}
                     dragHandleProps={sections.length > 1 ? handle : undefined}
                     onUpdateSection={(fn) => changeSection(sec.id, fn)}

@@ -35,7 +35,7 @@ const KIND_OPTIONS = [
   { value: 'knee', label: 'Knee' },
 ];
 
-export default function WallGroup({ variant = 'exterior', sectionData, calc: calcProp, groundLevel = false, onUpdateSection, title, onRemove, dragHandleProps }) {
+export default function WallGroup({ variant = 'exterior', sectionData, calc: calcProp, groundLevel = false, planPostTypes = [], onUpdateSection, title, onRemove, dragHandleProps }) {
   const {
     lengthLF = 0, heightFt = 12, studSpacingIn = 16, studMultiplier = 1,
     sel = {}, notes = {}, collapsed = false,
@@ -85,6 +85,41 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
       const to = list.findIndex((x) => x.id === over.id);
       return from < 0 || to < 0 ? p : { ...p, extras: arrayMove(list, from, to) };
     });
+  };
+
+  /** Auto-populated plan/structural comment for plan-linked Header and Post rows. */
+  const planAutoNote = (ex) => {
+    if (ex.type === 'Header' && ex.planType) {
+      const parts = [
+        ex.planType,
+        (ex.openings || []).map((o) => `${o.qty} ${o.type === 'door' ? 'door' : 'window'}${o.qty > 1 ? 's' : ''} ${o.widthIn}" × ${o.heightIn}"`).join(', '),
+        ex.header?.perOpening?.[0] ? `header ${Math.round(ex.header.perOpening[0].headerIn * 100) / 100}"` : '',
+        ex.openings?.[0] ? `kings ${ex.openings[0].kings} · jacks ${ex.openings[0].jacks} each side` : '',
+        ex.planNote ? `per plans: ${ex.planNote}` : '',
+      ].filter(Boolean);
+      return { plan: ex.planType, comment: parts.join(' · ') };
+    }
+    if (ex.type === 'Post' && ex.planPost) {
+      const pt = (planPostTypes || []).find((t) => t.id === ex.planPost);
+      const postSize = ex.planNote || pt?.notes || '';
+      const kind = ex.planPostKind || pt?.kind || 'builtup';
+      const widthIn = ex.planPostWidthIn || pt?.widthIn;
+      const nPosts = ex.inputs?.numPosts || 0;
+      const spec = kind === 'solid'
+        ? `solid${widthIn ? ` ${widthIn}"` : ''}`
+        : `(${ex.inputs?.piecesPerPost || pt?.plies || 1}) studs`;
+      const parts = [
+        ex.planPost,
+        postSize ? `per plans: ${postSize}` : '',
+        `${nPosts} post${nPosts === 1 ? '' : 's'}`,
+        spec,
+      ].filter(Boolean);
+      return {
+        plan: postSize ? `${ex.planPost} · ${postSize}` : ex.planPost,
+        comment: parts.join(' · '),
+      };
+    }
+    return null;
   };
 
   /* ── extra-row inputs (shown above the picker) ─────────────────────── */
@@ -220,43 +255,44 @@ export default function WallGroup({ variant = 'exterior', sectionData, calc: cal
         {extraRows.length > 0 || infill ? <MatSub>Extras</MatSub> : null}
         <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis]} onDragEnd={onDragEnd}>
           <SortableContext items={extraRows.map((x) => x.id)} strategy={verticalListSortingStrategy}>
-            {extraRows.map((ex) => (
-              <SortableMatRow
-                key={ex.id}
-                id={ex.id}
-                label={ex.type}
-                piece={ex.piece}
-                inputs={extraInputs(ex)}
-                material={<ItemPicker value={ex.item} onSelect={(item) => updateExtra(ex.id, { item })} defaults={wallExtraDefaults(ex.type)} />}
-                qty={ex.qtyRaw}
-                waste={ex.wastePct}
-                onWasteCommit={(v) => updateExtra(ex.id, { wastePct: v })}
-                final={ex.qtyFinal}
-                unit={ex.unit}
-                unitPrice={ex.unitPrice}
-                priceDate={ex.priceDate}
-                subtotal={ex.subtotal}
-                note={noteOf(notes, `extra:${ex.id}`)}
-                onNoteChange={(patch) => setNote(`extra:${ex.id}`, patch)}
-                onRemove={() => removeExtra(ex.id)}
-                warn={ex.warn}
-                below={ex.type === 'Header' && ex.planType ? (
-                  <div className="op-plan" title="Comes from the window & door types in Plan takeoff; change the type, its header or its openings there">
-                    <ScanLine size={12} />
-                    {ex.planType} · {(ex.openings || []).map((o) => `${o.qty} ${o.type === 'door' ? 'door' : 'window'}${o.qty > 1 ? 's' : ''} ${o.widthIn}" × ${o.heightIn}"`).join(', ')}
-                    {ex.header?.perOpening?.[0] ? ` · header ${Math.round(ex.header.perOpening[0].headerIn * 100) / 100}"` : ''}
-                    {ex.openings?.[0] ? ` · kings ${ex.openings[0].kings} · jacks ${ex.openings[0].jacks} each side` : ''}
-                    {ex.planNote ? <strong className="op-plan__note"> · per plans: {ex.planNote}</strong> : null}
-                  </div>
-                ) : ex.type === 'Header' && variant === 'exterior' ? (
-                  <OpeningsEditor
-                    openings={ex.openings || []}
-                    perOpening={ex.header?.perOpening}
-                    onChange={(fn) => updateExtra(ex.id, { openings: fn(ex.openings || []) })}
-                  />
-                ) : null}
-              />
-            ))}
+            {extraRows.map((ex) => {
+              const saved = noteOf(notes, `extra:${ex.id}`);
+              const auto = planAutoNote(ex);
+              const mergedNote = auto
+                ? { ...saved, plan: saved.plan || auto.plan, comment: saved.comment || auto.comment }
+                : saved;
+              const isAutoOnly = Boolean(auto && !saved.comment);
+              return (
+                <SortableMatRow
+                  key={ex.id}
+                  id={ex.id}
+                  label={ex.type}
+                  piece={ex.piece}
+                  inputs={extraInputs(ex)}
+                  material={<ItemPicker value={ex.item} onSelect={(item) => updateExtra(ex.id, { item })} defaults={wallExtraDefaults(ex.type)} />}
+                  qty={ex.qtyRaw}
+                  waste={ex.wastePct}
+                  onWasteCommit={(v) => updateExtra(ex.id, { wastePct: v })}
+                  final={ex.qtyFinal}
+                  unit={ex.unit}
+                  unitPrice={ex.unitPrice}
+                  priceDate={ex.priceDate}
+                  subtotal={ex.subtotal}
+                  note={mergedNote}
+                  hideCommentPreview={isAutoOnly}
+                  onNoteChange={(patch) => setNote(`extra:${ex.id}`, patch)}
+                  onRemove={() => removeExtra(ex.id)}
+                  warn={ex.warn}
+                  below={ex.type === 'Header' && !ex.planType && variant === 'exterior' ? (
+                    <OpeningsEditor
+                      openings={ex.openings || []}
+                      perOpening={ex.header?.perOpening}
+                      onChange={(fn) => updateExtra(ex.id, { openings: fn(ex.openings || []) })}
+                    />
+                  ) : null}
+                />
+              );
+            })}
           </SortableContext>
         </DndContext>
         {infill ? (
